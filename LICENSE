@@ -19,10 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-This licence covers this project's own source code only. The translation and
-speech models and the other components have their own licences, listed in
-THIRD_PARTY_NOTICES.md. The translation and speech models are for
-non-commercial use, so the complete apps may not be sold or used commercially.
