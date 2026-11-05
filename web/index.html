@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="khana-token" content="__KHANA_TOKEN__">
+<title>Khana Reader</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="bar">
+  <div class="bar-inner">
+    <div class="row">
+      <div class="brand">
+        <span class="logo">خوانا</span>
+        <span class="file" id="fileName"></span>
+        <span class="offline" title="بدون اینترنت؛ هیچ داده‌ای از این کامپیوتر خارج نمی‌شود">● آفلاین و خصوصی</span>
+      </div>
+      <label class="btn primary" for="fileInput">باز کردن فایل</label>
+      <input id="fileInput" type="file" hidden accept=".pdf,.doc,.docx,.pptx,.epub,.rtf,.odt,.txt,.md,.html,.htm,.fb2">
+    </div>
+    <div class="row" id="docTools">
+      <div class="seg" role="group" aria-label="نما">
+        <button id="viewText" class="on" type="button">متن</button>
+        <button id="viewPage" type="button">صفحه</button>
+      </div>
+      <div class="pager">
+        <button id="prev" type="button" aria-label="صفحه قبل">→</button>
+        <input id="pageInput" type="number" min="1" value="1" aria-label="شماره صفحه">
+        <span>از <span id="pageCount">۰</span></span>
+        <button id="next" type="button" aria-label="صفحه بعد">←</button>
+      </div>
+      <button id="trBtn" type="button" hidden title="ترجمه‌ی ماشینی و آفلاین (انگلیسی، هلندی، آلمانی، فرانسوی، اسپانیایی، ایتالیایی، پرتغالی، ترکی، لهستانی)">ترجمه به فارسی</button>
+      <button id="play" type="button" class="primary">▶ خواندن</button>
+      <button id="stop" type="button" disabled>■ توقف</button>
+      <div class="speedctl" role="group" aria-label="سرعت خواندن">
+        <button id="slower" type="button" aria-label="آهسته‌تر" title="آهسته‌تر (⌘[)">−</button>
+        <button id="speedChip" type="button" title="برگرداندن سرعت به ۱× (⌘0)"></button>
+        <button id="faster" type="button" aria-label="تندتر" title="تندتر (⌘])">+</button>
+      </div>
+      <span class="spacer"></span>
+      <button id="pdfBtn" type="button" hidden title="ترجمه‌ی فارسی سند را به صورت PDF ذخیره می‌کند (⇧⌘S)">ذخیره PDF ترجمه</button>
+      <button id="mp3Btn" type="button">ذخیره MP3</button>
+      <button id="settingsBtn" type="button" aria-label="تنظیمات">⚙︎ تنظیمات</button>
+    </div>
+    <div class="row" id="searchRow">
+      <div class="search">
+        <input id="q" type="search" placeholder="جستجو در این صفحه… (Enter: بعدی)" aria-label="جستجو">
+        <span class="count" id="count"></span>
+      </div>
+      <button id="copy" type="button" class="hide-sm">کپی متن صفحه</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="sheet">
+    <section class="welcome" id="welcome">
+      <h1>یک فایل را باز کنید</h1>
+      <p>فایل را روی این صفحه بکشید یا «باز کردن فایل» را بزنید. خوانا متن فارسی را مرتب نشان می‌دهد، با صدای بلند می‌خواند و می‌تواند آن را MP3 ذخیره کند.</p>
+      <div class="formats"><span>PDF</span><span>DOCX</span><span>DOC</span><span>EPUB</span><span>RTF</span><span>ODT</span><span>TXT</span></div>
+      <p class="hint">همه‌چیز روی همین کامپیوتر انجام می‌شود. اینترنت لازم نیست و فایل شما جایی فرستاده نمی‌شود.</p>
+      <p class="hint">کلیدها: <kbd>Space</kbd> خواندن/مکث · <kbd>← →</kbd> صفحه بعد/قبل · <kbd>⌘[</kbd> <kbd>⌘]</kbd> سرعت · <kbd>⌘0</kbd> سرعت عادی · <kbd>⌘,</kbd> تنظیمات</p>
+    </section>
+    <div class="note" id="note" hidden></div>
+    <div id="textView" class="text" hidden></div>
+    <div id="pageView" hidden><img id="pageImg" class="pageimg" alt="تصویر صفحه"></div>
+  </div>
+</main>
+
+<!-- Settings -->
+<div class="panel" id="settings" hidden>
+  <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+    <div class="panel-head"><h2 id="setTitle">تنظیمات</h2><button type="button" data-close>بستن</button></div>
+    <div class="field">
+      <label for="voice">صدا</label>
+      <div class="inline">
+        <select id="voice"></select>
+        <button type="button" id="preview">▶ امتحان</button>
+      </div>
+      <span class="hint">صداهای طبیعی حرکت‌ها (زیر و زبر) و کسره اضافه را درست می‌خوانند و عددها را به حروف می‌خوانند.</span>
+    </div>
+    <div class="field">
+      <span class="lbl">صدای من</span>
+      <div class="myvoice">
+        <span class="hint">خوانا می‌تواند با صدای خود شما بخواند. در جای آرام، جمله‌ی زیر را با صدای معمولی و شمرده بخوانید (۱۰ تا ۱۵ ثانیه). فقط ۵ ثانیه‌ی اول صحبت شما به کار می‌رود.</span>
+        <div class="say">امروز صبح زود از خانه بیرون آمدم. هوا کمی سرد بود، اما آفتاب می‌درخشید و کوچه‌ها آرام بودند. کتابی را که دوست داشتم برداشتم و به پارک رفتم.</div>
+        <span class="hint">فقط از صدای خودتان استفاده کنید: تقلید صدای دیگران بدون رضایت آن‌ها مجاز نیست.</span>
+        <div class="inline">
+          <button type="button" id="recBtn" class="primary">● ضبط صدای من</button>
+          <span class="rec" id="recTime" hidden></span>
+          <label class="btn" for="voiceFile">انتخاب فایل صدا</label>
+          <input id="voiceFile" type="file" hidden accept=".wav,.m4a,.mp3,.aif,.aiff,.caf,.aac,.flac,audio/*">
+          <button type="button" id="myDel" hidden>حذف صدای من</button>
+        </div>
+        <span class="hint" id="myStatus"></span>
+      </div>
+    </div>
+    <div class="field">
+      <label for="speed">سرعت خواندن: <span id="speedVal"></span></label>
+      <input id="speed" type="range" min="0.5" max="2" step="0.05">
+      <div class="scale"><span>آهسته ۰٫۵×</span><span>۱×</span><span>تند ۲×</span></div>
+      <div class="presets" role="group" aria-label="سرعت‌های آماده">
+        <button type="button" data-speed="0.75">۰٫۷۵×</button>
+        <button type="button" data-speed="1" class="primary" id="speedReset" title="⌘0">↺ سرعت عادی ۱×</button>
+        <button type="button" data-speed="1.25">۱٫۲۵×</button>
+        <button type="button" data-speed="1.5">۱٫۵×</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="fontSize">اندازه قلم: <span id="fontVal"></span></label>
+      <input id="fontSize" type="range" min="14" max="52" step="1">
+    </div>
+    <div class="field">
+      <span class="lbl">رنگ کلمه‌ای که خوانده می‌شود</span>
+      <span class="hint">رنگی را انتخاب کنید که برای چشم شما راحت‌تر دیده می‌شود.</span>
+      <div class="hlpick" role="radiogroup" aria-label="رنگ کلمه‌ی در حال خواندن">
+        <label><input type="radio" name="hl" value="yellow"><span class="sw sw-yellow">زرد</span></label>
+        <label><input type="radio" name="hl" value="green"><span class="sw sw-green">سبز</span></label>
+        <label><input type="radio" name="hl" value="cyan"><span class="sw sw-cyan">آبی</span></label>
+        <label><input type="radio" name="hl" value="black"><span class="sw sw-black">مشکی</span></label>
+        <label><input type="radio" name="hl" value="white"><span class="sw sw-white">سفید</span></label>
+      </div>
+    </div>
+    <div class="field">
+      <span class="lbl">متن</span>
+      <label class="check"><input id="naturalTone" type="checkbox"><span>خواندن طبیعی (لحن پرسش، پایان جمله و عنوان)</span></label>
+      <label class="check"><input id="autoPlay" type="checkbox"><span>بعد از باز کردن فایل، خواندن خودکار شروع شود</span></label>
+      <label class="check"><input id="autoNext" type="checkbox"><span>بعد از پایان صفحه، صفحه بعد را هم بخوان</span></label>
+      <label class="check"><input id="persianYeh" type="checkbox"><span>تبدیل «ي» و «ك» عربی به «ی» و «ک» فارسی</span></label>
+      <label class="check"><input id="reversed" type="checkbox"><span>متن وارونه است<br><span class="hint">برای بعضی PDFها که حروف از آخر به اول درمی‌آیند.</span></span></label>
+    </div>
+    <div class="field" id="lexField">
+      <span class="lbl">تلفظ کلمات</span>
+      <span class="hint">اگر کلمه‌ای اشتباه خوانده می‌شود، آن را بنویسید و کنارش تلفظ درست را با حرکت (زبر، زیر، پیش، ساکن) بنویسید. مثال: مهر ← مِهر، دولت ← دُوْلَت.</span>
+      <div class="inline">
+        <input id="lexWord" type="text" placeholder="کلمه" aria-label="کلمه" class="grow">
+        <input id="lexSay" type="text" placeholder="تلفظ با حرکت" aria-label="تلفظ" class="grow">
+      </div>
+      <div class="inline">
+        <button type="button" id="lexTest">▶ امتحان</button>
+        <button type="button" id="lexAdd" class="primary">افزودن</button>
+        <span class="hint">حرکت‌ها: ـَ ـِ ـُ ـْ ـّ</span>
+      </div>
+      <div class="lexlist" id="lexList"></div>
+    </div>
+    <div class="field">
+      <label for="bitrate">کیفیت MP3</label>
+      <select id="bitrate">
+        <option value="48">۴۸ kbps (فایل کوچک)</option>
+        <option value="64">۶۴ kbps (پیشنهادی برای گفتار)</option>
+        <option value="96">۹۶ kbps</option>
+        <option value="128">۱۲۸ kbps (بهترین)</option>
+      </select>
+    </div>
+    <p class="privacy">حریم خصوصی: خوانا فقط روی این کامپیوتر کار می‌کند و به اینترنت وصل نمی‌شود. فایل‌ها فقط در حافظه نگه داشته می‌شوند و با بستن برنامه پاک می‌شوند. نمونه‌ی صدای شما (۵ ثانیه) فقط روی همین کامپیوتر ذخیره می‌شود و با «حذف صدای من» پاک می‌شود.</p>
+  </div>
+</div>
+
+<!-- the password of an encrypted PDF: asked by the page, handed to pdf.js's frame, never sent to the app -->
+<div class="panel" id="pwPanel" hidden>
+  <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="pwTitle">
+    <div class="panel-head"><h2 id="pwTitle">رمز PDF</h2><button type="button" data-close>بستن</button></div>
+    <p class="hint" id="pwHint">این PDF با رمز محافظت شده است. رمز را وارد کنید.</p>
+    <div class="field"><input type="password" id="pwInput" autocomplete="off" autocapitalize="off" spellcheck="false" dir="ltr"></div>
+    <div class="inline">
+      <button type="button" class="primary" id="pwOk">باز کردن</button>
+      <button type="button" data-close>انصراف</button>
+    </div>
+  </div>
+</div>
+
+<!-- MP3 -->
+<div class="panel" id="mp3" hidden>
+  <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="mp3Title">
+    <div class="panel-head"><h2 id="mp3Title">ذخیره به صورت MP3</h2><button type="button" data-close>بستن</button></div>
+    <div class="field">
+      <span class="lbl">کدام بخش؟</span>
+      <div class="radio">
+        <label><input type="radio" name="scope" value="page" checked> فقط صفحه فعلی</label>
+        <label><input type="radio" name="scope" value="all"> کل سند</label>
+        <label><input type="radio" name="scope" value="range"> از صفحه
+          <input id="from" type="number" min="1" value="1" class="num"> تا
+          <input id="to" type="number" min="1" value="1" class="num"></label>
+      </div>
+    </div>
+    <p class="hint" id="mp3Voice"></p>
+    <div class="inline">
+      <button type="button" class="primary" id="mp3Start">ساختن MP3</button>
+      <button type="button" id="mp3Cancel" hidden>لغو</button>
+    </div>
+    <div id="mp3Status" hidden class="field">
+      <div class="progress"><div id="mp3Bar"></div></div>
+      <span class="hint" id="mp3Text"></span>
+      <button type="button" class="primary" id="mp3Reveal" hidden>نمایش در Finder</button>
+    </div>
+  </div>
+</div>
+
+<div class="drop" id="drop" hidden>فایل را اینجا رها کنید</div>
+<div class="toast" id="toast" hidden></div>
+<button type="button" class="primary fixbtn" id="fixWord" hidden></button>
+<audio id="audio" preload="auto"></audio>
+
+<script src="app.js"></script>
+</body>
+</html>

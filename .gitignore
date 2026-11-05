@@ -1,0 +1,40 @@
+# Folders are written with a leading / and no trailing / on purpose: a folder that is only a link to elsewhere is a file to git, and
+# a pattern ending in / would not match it. Secrets: never publish these. Anyone holding them could sign fake updates of the Android app.
+/android/keystore
+*.jks
+*.keystore
+password.txt
+.env*
+
+# Too large for a code repository; the apps carry them, and the credits say where they come from
+/models
+/vendor/lib
+/android/prebuilt
+/android/toolchain
+
+# Things that are built
+/target
+/android/build
+/dist
+*.app
+*.apk
+*.dmg
+*.dmgpart
+
+# Private working files (test results, backups, developer notes, the older app's comparison tools)
+/ref
+/backups
+/audiobook 2
+joins.tsv
+NOTES.md
+.claude/
+tools/compare*.py
+tools/gen_consts.py
+tools/py_raw.py
+tools/ref_*.py
+tools/word_diff.py
+*.pdf
+*.epub
+*.mp3
+
+.DS_Store

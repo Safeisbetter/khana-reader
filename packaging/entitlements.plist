@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- The real macOS App Sandbox: the app lives in its own container and may only read the files
+     you choose (Open, drag and drop), write MP3s into Downloads and use the microphone for
+     «صدای من». network.client is there only because Apple's WebKit refuses to start its own helper
+     processes without it ("Application does not have permission to communicate with network
+     resources"); the reader page itself is locked to the app (Content-Security-Policy connect-src
+     'self', every other address refused by the window), the program has no network code, and there
+     is no server entitlement (nothing can connect in). -->
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>
