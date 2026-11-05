@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Khana Reader for Android, set up as GrapheneOS's PDF Viewer is (targetSandboxVersion 2 and memtagMode async, as its manifest): no INTERNET permission (the app
+     cannot open any network connection, to the internet or to this phone: no local server, the
+     WebView's requests are answered inside the app), no storage permission (files are opened and
+     saved with the system's own screens), no backups. The microphone only for recording «صدای من»
+     (asked when first used; WebView also needs MODIFY_AUDIO_SETTINGS for it; the public download, built with
+     KHANA_PUBLIC=1, leaves both out); the wake lock and the foreground service only to keep a long MP3/PDF job running. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.khana.reader"
+    android:targetSandboxVersion="2"
+    android:versionCode="3"
+    android:versionName="0.3">
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="37" />
+
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <application
+        android:label="خوانا"
+        android:icon="@drawable/icon"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/no_backup"
+        android:largeHeap="true"
+        android:extractNativeLibs="true"
+        android:usesCleartextTraffic="false"
+        android:memtagMode="async"
+        android:supportsRtl="true"
+        android:enableOnBackInvokedCallback="true"
+        android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+
+        <!-- (no WebView usage reports to Google, no Safe Browsing look-ups) -->
+        <meta-data android:name="android.webkit.WebView.MetricsOptOut" android:value="true" />
+        <meta-data android:name="android.webkit.WebView.EnableSafeBrowsing" android:value="false" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale|layoutDirection">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".JobService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Making an MP3 audiobook or a translated PDF on the device, which can take many hours" />
+        </service>
+    </application>
+</manifest>

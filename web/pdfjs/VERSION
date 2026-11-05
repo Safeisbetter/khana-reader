@@ -1,0 +1,10 @@
+pdf.js 6.5.438 (Mozilla), from https://github.com/mozilla/pdf.js/releases/download/v6.5.438/pdfjs-6.5.438-dist.zip
+sha256 of the zip: fcbe9ba21d9911843e3502adc178a7f549a524a4055f887bedc942e5490c6ba1
+(6,540,268 bytes; the digest GitHub lists for the release asset is the same)
+Kept: build/pdf.mjs, build/pdf.worker.mjs, web/standard_fonts, web/cmaps, web/wasm/openjpeg_nowasm_fallback.js and
+web/wasm/jbig2_nowasm_fallback.js (the JavaScript decoders pdf.js uses when WebAssembly is off, as it is here) and their licenses.
+Left out: the viewer, the locales, the images, the ICC profile and the WebAssembly files (frame.mjs sets useWasm false), the
+scripting sandbox, the source maps. License: Apache 2.0 (PDFJS_LICENSE, as GrapheneOS PdfViewer ships it). GrapheneOS PdfViewer
+release 33 builds on pdfjs-dist 6.2.x.
+Changed here (Khana Reader), one place in build/pdf.worker.mjs, runBidiTransform: a right-to-left glyph standing for several letters has them reversed before the run is reversed, so they keep their order
+(«لا», «سر», «ما» came out «ال», «رس», «ام»). The same one-line change as in 5.3.93, which 6.5.438 did not fix.
