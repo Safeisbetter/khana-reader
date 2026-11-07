@@ -16,19 +16,30 @@
 //! handle is owned by one Rust value that frees it exactly once (Drop). `wipe` overwrites a book's text and pictures before their
 //! memory is given back.
 
+#[cfg(not(windows))]
+pub mod ct2;
+#[cfg(windows)]
+#[path = "ct2_stub.rs"]
 pub mod ct2;
 #[cfg(target_os = "android")]
 pub mod jni;
 #[cfg(target_os = "ios")]
 pub mod cabi;
+#[cfg(not(windows))]
+pub mod lame;
+#[cfg(windows)]
+#[path = "lame_stub.rs"]
 pub mod lame;
 pub mod onnx;
 #[cfg(target_os = "macos")]
 pub mod power;
+#[cfg(windows)]
+#[path = "power_win.rs"]
+pub mod power;
 pub mod typeset;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod vision;
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", windows)))]
 pub mod vosk;
 pub mod wipe;
 
@@ -41,9 +52,14 @@ fn buffer_text(buf: &[std::ffi::c_char]) -> String {
 
 /// Lowers the whole app's scheduling priority (as `nice 10`), so speech, OCR and translation never
 /// make the window or sound playback stutter.
+#[cfg(not(windows))]
 pub fn lower_priority() {
     // SAFETY: setpriority only reads its three integer arguments.
     unsafe {
         libc::setpriority(libc::PRIO_PROCESS, 0, 10);
     }
 }
+
+/// (Windows: the threads that make speech keep their normal priority.)
+#[cfg(windows)]
+pub fn lower_priority() {}

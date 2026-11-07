@@ -3,7 +3,16 @@ use ort::{GraphOptimizationLevel, Session};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-#[cfg(not(shell))]
+#[cfg(windows)]
+fn dylib() -> PathBuf {
+    let exe = std::env::current_exe().unwrap_or_default();
+    match exe.parent().map(|d| d.join("onnxruntime.dll")) {
+        Some(f) if f.is_file() => f,
+        _ => PathBuf::from("onnxruntime.dll"),
+    }
+}
+
+#[cfg(all(not(shell), not(windows)))]
 fn dylib() -> PathBuf {
     let exe = std::env::current_exe().unwrap_or_default();
     if let Some(c) = exe.parent().and_then(|p| p.parent()) {

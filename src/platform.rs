@@ -53,6 +53,53 @@ mod imp {
     }
 }
 
+#[cfg(windows)]
+mod imp {
+    use std::path::{Path, PathBuf};
+
+    pub fn data_dir() -> PathBuf {
+        let base = std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+        base.join(crate::app::APP_NAME)
+    }
+
+    pub fn save_dir() -> PathBuf {
+        std::env::var_os("USERPROFILE").map(|h| PathBuf::from(h).join("Downloads")).unwrap_or_else(|| PathBuf::from("."))
+    }
+
+    pub fn awake(reason: &std::ffi::CStr) -> Option<crate::ffi::power::Awake> {
+        crate::ffi::power::Awake::new(reason)
+    }
+
+    pub fn saved(_path: &Path, _kind: &str) {}
+
+    pub fn reveal(p: &Path) {
+        let _ = std::process::Command::new("explorer").arg(format!("/select,{}", p.display())).spawn();
+    }
+
+    pub fn to_wav24k(src: &Path, dst: &Path) -> bool {
+        let Ok((a, rate)) = crate::audio::read_wav(src) else { return false };
+        let rate = rate as usize;
+        if rate == 0 {
+            return false;
+        }
+        let g = gcd(rate, 24000);
+        let a = if rate == 24000 { a } else { crate::audio::resample_poly(&a, 24000 / g, rate / g) };
+        std::fs::write(dst, crate::audio::wav_bytes(&a, 24000)).is_ok()
+    }
+
+    fn gcd(a: usize, b: usize) -> usize {
+        if b == 0 { a } else { gcd(b, a % b) }
+    }
+
+    pub fn to_m4a(_src: &Path, _dst: &Path) -> bool {
+        false
+    }
+
+    pub fn farsi_pdf(_blocks: &[crate::ffi::typeset::Block], _font: &[u8], _path: &Path) -> Result<(), String> {
+        Err("ساختن PDF ترجمه در ویندوز هنوز ممکن نیست.".into())
+    }
+}
+
 #[cfg(any(target_os = "android", target_os = "ios"))]
 mod imp {
     use super::*;
