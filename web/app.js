@@ -1030,6 +1030,12 @@ $("edReset").onclick = async () => {
 
 /* ---------------- a text typed or pasted: read aloud and saved as sound ---------------- */
 $("m4aLabel").hidden = /Android|iPhone|iPad/i.test(navigator.userAgent);   // (the phones have no M4A maker)
+// (Windows: no MP3 and no M4A maker yet: WAV)
+if (/Windows/i.test(navigator.userAgent)) {
+  $("m4aLabel").hidden = true; $("mp3Label").hidden = true;
+  document.querySelector("input[name=afmt][value=wav]").checked = true;
+  $("mp3Btn").textContent = "ذخیره صدا (WAV)";
+}
 async function openTyped() {
   const t = $("typeText").value.trim();
   if (!t) { toast("اول متنی بنویسید."); return false; }

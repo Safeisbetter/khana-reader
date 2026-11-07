@@ -1,0 +1,97 @@
+# The Windows app (experimental, not tried on a real PC). Built on GitHub's own Windows computers:
+# the program with cargo, ONNX Runtime 1.19.2 (Microsoft's published build) beside it, the page (web/) and the models (taken from the
+# light Android download of the release, which holds the same files). A check of the core runs before the package is made.
+# Run by hand (Actions -> Windows -> Run workflow) or on a push to the branch windows-experimental.
+name: Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Also publish the package as the experimental release"
+        type: boolean
+        default: false
+  push:
+    branches: [windows-experimental]
+
+permissions:
+  contents: write
+
+env:
+  ORT_VERSION: "1.19.2"
+  MODELS_RELEASE: "v1.1"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ONNX Runtime for Windows
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://github.com/microsoft/onnxruntime/releases/download/v$env:ORT_VERSION/onnxruntime-win-x64-$env:ORT_VERSION.zip" -OutFile ort.zip
+          Expand-Archive ort.zip -DestinationPath ort
+          Get-ChildItem -Recurse ort -Filter onnxruntime*.dll | Select-Object FullName
+
+      - name: Models (from the light Android download of the release)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download $env:MODELS_RELEASE --repo $env:GITHUB_REPOSITORY -p "KhanaReader-Android-lite.apk" -D apk
+          Move-Item apk/KhanaReader-Android-lite.apk apk/lite.zip
+          Expand-Archive apk/lite.zip -DestinationPath apk/x
+          New-Item -ItemType Directory -Force pack/models | Out-Null
+          foreach ($d in "parsigo", "ocr") { Copy-Item "apk/x/assets/app/models/$d" "pack/models/$d" -Recurse }
+          Copy-Item "apk/x/assets/app/models/cmudict.dict" "pack/models/"
+          Copy-Item "apk/x/assets/app/models/LICENSE" "pack/models/" -ErrorAction SilentlyContinue
+          Get-ChildItem pack/models | Select-Object Name
+
+      - name: Build
+        run: cargo build --release --bin khana --example ci_check
+
+      - name: Check of the core (voice, text, WAV, picture)
+        shell: pwsh
+        env:
+          KHANA_MODELS: ${{ github.workspace }}/pack/models
+        run: |
+          $dll = (Get-ChildItem -Recurse ort -Filter onnxruntime.dll | Select-Object -First 1).FullName
+          Copy-Item $dll target/release/examples/
+          .\target\release\examples\ci_check.exe
+          if ($LASTEXITCODE -ne 0) { throw "the check failed" }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $out = "KhanaReader-Windows"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item target/release/khana.exe "$out/KhanaReader.exe"
+          Get-ChildItem -Recurse ort -Filter onnxruntime*.dll | ForEach-Object { Copy-Item $_.FullName $out }
+          Copy-Item web "$out/web" -Recurse
+          Copy-Item pack/models "$out/models" -Recurse
+          Copy-Item LICENSE, THIRD_PARTY_NOTICES.md $out
+          Copy-Item windows/README-Windows.txt $out
+          Compress-Archive -Path $out -DestinationPath KhanaReader-Windows-experimental.zip -CompressionLevel Fastest
+          Get-Item KhanaReader-Windows-experimental.zip | Select-Object Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KhanaReader-Windows-experimental
+          path: KhanaReader-Windows-experimental.zip
+          retention-days: 14
+          compression-level: 0
+
+      - name: Experimental release
+        if: ${{ inputs.release }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v1.1-windows-experimental"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --prerelease --title "Windows (experimental, not tried on a real PC)" --notes-file windows/RELEASE-NOTES.md --target $env:GITHUB_SHA KhanaReader-Windows-experimental.zip
+          } else {
+            gh release upload $tag KhanaReader-Windows-experimental.zip --clobber
+          }

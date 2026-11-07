@@ -26,8 +26,8 @@ unicode-normalization = "0.1.26"
 zip = { version = "9.1.3", default-features = false, features = ["deflate"] }
 
 # the Mac window and its services (the Android app's window is its own Java shell: android/)
-# (Vosk, the speech recognizer that checks the voice, is not in the iPhone app)
-[target.'cfg(not(target_os = "ios"))'.dependencies]
+# (Vosk, the speech recognizer that checks the voice, is not in the iPhone and Windows apps)
+[target.'cfg(not(any(target_os = "ios", target_os = "windows")))'.dependencies]
 vosk = "0.3.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -40,3 +40,9 @@ wry = "0.57.1"
 
 [build-dependencies]
 cc = "1.10.0"
+
+# the Windows window: the same tao / wry / muda as the Mac's, on Edge's web view (WebView2)
+[target.'cfg(target_os = "windows")'.dependencies]
+muda = "0.21.2"
+tao = "0.37.2"
+wry = "0.57.1"

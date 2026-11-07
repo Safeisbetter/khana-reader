@@ -480,8 +480,10 @@ fn run_pdf_job(job: Arc<Job>, doc: Arc<Document>, first: usize, last: usize, opt
 }
 
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", windows)))]
 const FRAME_SRC: &str = "khana:";
+#[cfg(windows)]
+const FRAME_SRC: &str = "http://khana.localhost";
 #[cfg(target_os = "android")]
 const FRAME_SRC: &str = "https://khana.invalid";
 

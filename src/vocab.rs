@@ -14,6 +14,12 @@ pub fn set_models_dir(p: PathBuf) {
 #[cfg(not(shell))]
 pub fn web_dir() -> PathBuf {
     let exe = std::env::current_exe().unwrap_or_default();
+    if let Some(d) = exe.parent() {
+        let w = d.join("web");
+        if w.is_dir() {
+            return w;
+        }
+    }
     if let Some(c) = exe.parent().and_then(|p| p.parent()) {
         let w = c.join("Resources/web");
         if w.is_dir() {
@@ -34,6 +40,12 @@ pub fn models_dir() -> &'static PathBuf {
             return PathBuf::from(p);
         }
         let exe = std::env::current_exe().unwrap_or_default();
+        if let Some(d) = exe.parent() {
+            let m = d.join("models");
+            if m.is_dir() {
+                return m;
+            }
+        }
         if let Some(c) = exe.parent().and_then(|p| p.parent()) {
             let r = c.join("Resources/models");
             if r.is_dir() {

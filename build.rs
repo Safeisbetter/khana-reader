@@ -7,6 +7,10 @@ fn main() {
     let root = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let android = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android");
     let ios = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios");
+    // Windows: no native layer (no translator, no MP3 maker yet): ONNX Runtime's onnxruntime.dll is loaded at run time
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        return;
+    }
     // `shell`: a phone, whose Java or Swift shell gives the folders, the models and the ONNX Runtime library at start
     println!("cargo:rustc-check-cfg=cfg(shell)");
     if android || ios {
