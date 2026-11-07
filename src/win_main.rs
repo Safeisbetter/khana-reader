@@ -63,7 +63,7 @@ pub fn run() {
         .with_min_inner_size(tao::dpi::LogicalSize::new(420.0, 560.0))
         .build(&event_loop)
         .expect("window");
-    let _ = m.init_for_hwnd(window.hwnd() as isize);
+    khana::ffi::winmenu::attach(&m, window.hwnd() as isize);
 
     let a = app.clone();
     let handler = move |_id: wry::WebViewId, req: Request<Vec<u8>>, responder: wry::RequestAsyncResponder| {
