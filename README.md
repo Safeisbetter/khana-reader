@@ -1,11 +1,11 @@
 # Khana Reader (خوانا)
 
 Reads books aloud in Farsi and translates foreign books into Farsi, entirely on your own device. Free, with no account, no ads
-and no tracking.
+and no tracking. For **Mac, Android and Windows** (Windows is experimental).
 
 <div dir="rtl">
 
-خوانا کتاب‌ها را به فارسی با صدای بلند می‌خواند و کتاب‌های خارجی را به فارسی ترجمه می‌کند؛ همه‌چیز فقط روی دستگاه خود شما انجام می‌شود. رایگان است و حساب کاربری، تبلیغ یا ردیابی ندارد.
+خوانا کتاب‌ها را به فارسی با صدای بلند می‌خواند و کتاب‌های خارجی را به فارسی ترجمه می‌کند؛ همه‌چیز فقط روی دستگاه خود شما انجام می‌شود. رایگان است و حساب کاربری، تبلیغ یا ردیابی ندارد. برای **مک، اندروید و ویندوز** (نسخه‌ی ویندوز آزمایشی است).
 
 </div>
 
