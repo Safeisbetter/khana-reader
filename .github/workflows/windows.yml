@@ -75,6 +75,24 @@ jobs:
           Compress-Archive -Path $out -DestinationPath KhanaReader-Windows-experimental.zip -CompressionLevel Fastest
           Get-Item KhanaReader-Windows-experimental.zip | Select-Object Name, Length
 
+      - name: Window smoke test (does the window open and load the page?)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $dl = "$env:USERPROFILE\Downloads"
+          New-Item -ItemType Directory -Force $dl | Out-Null
+          Set-Content "$dl\selftest.txt" "x"
+          $env:KHANA_SELFTEST = "selftest.txt"
+          $p = Start-Process -FilePath ".\KhanaReader-Windows\KhanaReader.exe" -PassThru -RedirectStandardError err.txt -RedirectStandardOutput out.txt
+          $ok = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            Start-Sleep 2
+            if ((Test-Path err.txt) -and (Select-String -Path err.txt -Pattern "SELFTEST loaded" -Quiet)) { $ok = $true; break }
+          }
+          Get-Content err.txt -ErrorAction SilentlyContinue | Select-Object -First 20
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          if (-not $ok) { throw "the window did not load the page" }
+
       - uses: actions/upload-artifact@v4
         with:
           name: KhanaReader-Windows-experimental
