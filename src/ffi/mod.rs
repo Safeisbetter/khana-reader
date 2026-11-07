@@ -16,9 +16,9 @@
 //! handle is owned by one Rust value that frees it exactly once (Drop). `wipe` overwrites a book's text and pictures before their
 //! memory is given back.
 
-#[cfg(not(windows))]
+#[cfg(any(not(windows), ct2_native))]
 pub mod ct2;
-#[cfg(windows)]
+#[cfg(all(windows, not(ct2_native)))]
 #[path = "ct2_stub.rs"]
 pub mod ct2;
 #[cfg(target_os = "android")]

@@ -1,29 +1,35 @@
-# The Windows app (experimental, not tried on a real PC). Built on GitHub's own Windows computers:
-# the program with cargo, ONNX Runtime 1.19.2 (Microsoft's published build) beside it, the page (web/) and the models (taken from the
-# light Android download of the release, which holds the same files). A check of the core runs before the package is made.
-# Run by hand (Actions -> Windows -> Run workflow) or on a push to the branch windows-experimental.
+# The Windows app (experimental, not tried on a real PC). Built on GitHub's own Windows computers, in two editions:
+#   light: no translator (about 0.5 GB); full: with the translator (CTranslate2, built here, and the 600M translation model; about 1.1 GB).
+# Both hold the program, ONNX Runtime 1.19.2 (Microsoft's published build) beside it, the page (web/) and the models (taken from the Android
+# downloads of the release, which hold the same files). A check of the core and of the window runs before a package is made.
+# Run by hand (Actions -> Windows -> Run workflow) or on a push to the branch windows-full.
 name: Windows
 
 on:
   workflow_dispatch:
     inputs:
       release:
-        description: "Also publish the package as the experimental release"
+        description: "Also publish the packages as the experimental release"
         type: boolean
         default: false
   push:
-    branches: [windows-experimental]
+    branches: [windows-full]
 
 permissions:
   contents: write
 
 env:
   ORT_VERSION: "1.19.2"
-  MODELS_RELEASE: "v1.1"
+  CT2_VERSION: "4.5.0"
+  MODELS_RELEASE: "v1.1.2"
 
 jobs:
   build:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [light, full]
     steps:
       - uses: actions/checkout@v4
 
@@ -32,32 +38,61 @@ jobs:
         run: |
           Invoke-WebRequest "https://github.com/microsoft/onnxruntime/releases/download/v$env:ORT_VERSION/onnxruntime-win-x64-$env:ORT_VERSION.zip" -OutFile ort.zip
           Expand-Archive ort.zip -DestinationPath ort
-          Get-ChildItem -Recurse ort -Filter onnxruntime*.dll | Select-Object FullName
 
-      - name: Models (from the light Android download of the release)
+      - name: Models (from the Android download of the release)
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download $env:MODELS_RELEASE --repo $env:GITHUB_REPOSITORY -p "KhanaReader-Android-lite.apk" -D apk
-          Move-Item apk/KhanaReader-Android-lite.apk apk/lite.zip
-          Expand-Archive apk/lite.zip -DestinationPath apk/x
+          $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader-Android.apk" } else { "KhanaReader-Android-lite.apk" }
+          gh release download $env:MODELS_RELEASE --repo $env:GITHUB_REPOSITORY -p $apk -D apk
+          Move-Item "apk/$apk" apk/models.zip
+          Expand-Archive apk/models.zip -DestinationPath apk/x
           New-Item -ItemType Directory -Force pack/models | Out-Null
           foreach ($d in "parsigo", "ocr") { Copy-Item "apk/x/assets/app/models/$d" "pack/models/$d" -Recurse }
           Copy-Item "apk/x/assets/app/models/cmudict.dict" "pack/models/"
           Copy-Item "apk/x/assets/app/models/LICENSE" "pack/models/" -ErrorAction SilentlyContinue
+          if ("${{ matrix.edition }}" -eq "full") {
+            New-Item -ItemType Directory -Force pack/models/translate | Out-Null
+            Copy-Item "apk/x/assets/app/models/translate/nllb-200-600M" "pack/models/translate/nllb-200-600M" -Recurse
+          }
+          Remove-Item apk -Recurse -Force
           Get-ChildItem pack/models | Select-Object Name
 
-      - name: Build
-        run: cargo build --release --bin khana --example ci_check
+      - name: CTranslate2 (cache)
+        if: matrix.edition == 'full'
+        id: ct2cache
+        uses: actions/cache@v4
+        with:
+          path: ct2build
+          key: ct2-${{ env.CT2_VERSION }}-ruy-1
 
-      - name: Check of the core (voice, text, WAV, picture)
+      - name: CTranslate2 for Windows
+        if: matrix.edition == 'full' && steps.ct2cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch v$env:CT2_VERSION --recurse-submodules --shallow-submodules https://github.com/OpenNMT/CTranslate2.git ct2src
+          cmake -S ct2src -B ct2build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DWITH_MKL=OFF -DWITH_RUY=ON -DOPENMP_RUNTIME=COMP -DBUILD_CLI=OFF -DBUILD_TESTS=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake --build ct2build --config Release --parallel 4
+          Get-ChildItem -Recurse ct2build -Include ctranslate2.dll, ctranslate2.lib | Select-Object FullName
+
+      - name: Build
+        shell: pwsh
+        run: |
+          if ("${{ matrix.edition }}" -eq "full") { $env:KHANA_CT2_DIR = "${{ github.workspace }}\ct2build\Release" }
+          cargo build --release --bin khana --example ci_check
+
+      - name: Check of the core (voice, text, WAV, picture, translation)
         shell: pwsh
         env:
           KHANA_MODELS: ${{ github.workspace }}/pack/models
         run: |
           $dll = (Get-ChildItem -Recurse ort -Filter onnxruntime.dll | Select-Object -First 1).FullName
           Copy-Item $dll target/release/examples/
+          if ("${{ matrix.edition }}" -eq "full") {
+            Copy-Item ct2build/Release/ctranslate2.dll target/release/examples/
+            $env:KHANA_EXPECT_TRANSLATE = "1"
+          }
           .\target\release\examples\ci_check.exe
           if ($LASTEXITCODE -ne 0) { throw "the check failed" }
 
@@ -68,12 +103,16 @@ jobs:
           New-Item -ItemType Directory -Force $out | Out-Null
           Copy-Item target/release/khana.exe "$out/KhanaReader.exe"
           Get-ChildItem -Recurse ort -Filter onnxruntime*.dll | ForEach-Object { Copy-Item $_.FullName $out }
+          if ("${{ matrix.edition }}" -eq "full") { Copy-Item ct2build/Release/ctranslate2.dll $out }
+          # (Microsoft's runtime libraries, so that a PC without them can still run the program)
+          foreach ($n in "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "vcomp140.dll") { if (Test-Path "C:\Windows\System32\$n") { Copy-Item "C:\Windows\System32\$n" $out } }
           Copy-Item web "$out/web" -Recurse
           Copy-Item pack/models "$out/models" -Recurse
           Copy-Item LICENSE, THIRD_PARTY_NOTICES.md $out
           Copy-Item windows/README-Windows.txt $out
-          Compress-Archive -Path $out -DestinationPath KhanaReader-Windows-experimental.zip -CompressionLevel Fastest
-          Get-Item KhanaReader-Windows-experimental.zip | Select-Object Name, Length
+          $zip = "KhanaReader-Windows-${{ matrix.edition }}-experimental.zip"
+          Compress-Archive -Path $out -DestinationPath $zip -CompressionLevel Fastest
+          Get-Item $zip | Select-Object Name, Length
 
       - name: Window smoke test (does the window open and load the page?)
         continue-on-error: true
@@ -89,27 +128,35 @@ jobs:
             Start-Sleep 2
             if ((Test-Path err.txt) -and (Select-String -Path err.txt -Pattern "SELFTEST loaded" -Quiet)) { $ok = $true; break }
           }
-          Get-Content err.txt -ErrorAction SilentlyContinue | Select-Object -First 20
+          Get-Content err.txt -ErrorAction SilentlyContinue | Select-Object -First 8
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           if (-not $ok) { throw "the window did not load the page" }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: KhanaReader-Windows-experimental
-          path: KhanaReader-Windows-experimental.zip
+          name: KhanaReader-Windows-${{ matrix.edition }}-experimental
+          path: KhanaReader-Windows-${{ matrix.edition }}-experimental.zip
           retention-days: 14
           compression-level: 0
 
+  release:
+    needs: build
+    if: ${{ inputs.release }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: zips
+          merge-multiple: true
       - name: Experimental release
-        if: ${{ inputs.release }}
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v1.1-windows-experimental"
-          gh release view $tag 2>$null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --prerelease --title "Windows (experimental, not tried on a real PC)" --notes-file windows/RELEASE-NOTES.md --target $env:GITHUB_SHA KhanaReader-Windows-experimental.zip
-          } else {
-            gh release upload $tag KhanaReader-Windows-experimental.zip --clobber
-          }
+          tag="v1.1-windows-experimental"
+          ls -la zips
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" zips/*.zip --clobber
+          else
+            gh release create "$tag" --prerelease --title "Windows (experimental, not tried on a real PC)" --notes-file windows/RELEASE-NOTES.md --target "$GITHUB_SHA" zips/*.zip
+          fi

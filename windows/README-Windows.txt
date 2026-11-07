@@ -7,9 +7,9 @@ Khana Reader (خوانا) for Windows - EXPERIMENTAL, not yet tried on a real PC
    install it from Microsoft ("WebView2 Runtime", Evergreen Standalone Installer).
 
 What works (checked by an automatic test on GitHub, not by a person): reading Farsi text aloud, typing or pasting a text, saving the
-reading as WAV, reading pictures, correcting the text.
-What is not in this version: translation of foreign books, MP3 (use WAV), the translated PDF, opening Word/RTF/ODT files (PDF, EPUB, FB2,
-DOCX, PPTX and TXT open).
+reading as WAV, reading pictures, correcting the text. The FULL edition (KhanaReader-Windows-full-experimental.zip) also translates books
+from other languages into Farsi; the LIGHT edition has no translator.
+What is not in these versions: MP3 (use WAV), the translated PDF, opening Word/RTF/ODT files (PDF, EPUB, FB2, DOCX, PPTX and TXT open).
 
 If something goes wrong, please open an issue on GitHub and say what you did and what you saw. Please do not attach books you would not
 like to make public.

@@ -8,7 +8,24 @@ fn main() {
     let android = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android");
     let ios = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios");
     // Windows: no native layer (no translator, no MP3 maker yet): ONNX Runtime's onnxruntime.dll is loaded at run time
+    println!("cargo:rustc-check-cfg=cfg(ct2_native)");
+    println!("cargo:rerun-if-env-changed=KHANA_CT2_DIR");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        // the full Windows app: CTranslate2 (built as ctranslate2.dll by the GitHub build) and its small C layer; without KHANA_CT2_DIR the
+        // light app, which has no translator
+        if let Ok(dir) = std::env::var("KHANA_CT2_DIR") {
+            cc::Build::new()
+                .cpp(true)
+                .std("c++17")
+                .file("native/ct2_shim.cpp")
+                .include(root.join("vendor/ct2include"))
+                .define("_CRT_SECURE_NO_WARNINGS", None)
+                .warnings(false)
+                .compile("ct2_shim");
+            println!("cargo:rustc-link-search=native={dir}");
+            println!("cargo:rustc-link-lib=ctranslate2");
+            println!("cargo:rustc-cfg=ct2_native");
+        }
         return;
     }
     // `shell`: a phone, whose Java or Swift shell gives the folders, the models and the ONNX Runtime library at start

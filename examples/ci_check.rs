@@ -66,6 +66,29 @@ fn main() {
     let r = call("POST", "/api/ocr_image", "", &img);
     step("picture", r.status == 200, format!("status {} {}", r.status, String::from_utf8_lossy(&r.body).chars().take(80).collect::<String>()));
 
+    // translation (the full Windows app): with KHANA_EXPECT_TRANSLATE set, an English text must be translated into Farsi
+    if std::env::var("KHANA_EXPECT_TRANSLATE").is_ok() {
+        let r = call("POST", "/api/open", "name=check-en.txt", b"The book lies on the table. We read it every day, and we talk about it with our friends.");
+        let d: Value = serde_json::from_slice(&r.body).unwrap_or_default();
+        let id = d["id"].as_str().unwrap_or("").to_string();
+        step("translator", d["canTranslate"] == true, format!("language {}, canTranslate {}", d["lang"], d["canTranslate"]));
+        if d["canTranslate"] == true {
+            let t = std::time::Instant::now();
+            let mut text = String::new();
+            for _ in 0..600 {
+                let r = call("GET", "/api/page", &format!("doc={id}&n=1&rev=false&yeh=true&tr=true&partial=1"), &[]);
+                let p: Value = serde_json::from_slice(&r.body).unwrap_or_default();
+                text = p["paragraphs"].as_array().map(|a| a.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>().join(" ")).unwrap_or_default();
+                if p["done"] == true {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+            let farsi = text.chars().filter(|c| ('\u{600}'..='\u{6FF}').contains(c)).count();
+            step("translation", farsi >= 10, format!("{} Farsi letters in {:.1} s: {}", farsi, t.elapsed().as_secs_f64(), text.chars().take(100).collect::<String>()));
+        }
+    }
+
     if failed > 0 {
         std::process::exit(1);
     }
