@@ -36,10 +36,14 @@ Needs an arm64 phone with Android 8 or newer and a recent Android System WebView
 
 ### Windows (experimental)
 
-An experimental Windows 10/11 (64-bit) version is on a separate **[pre-release](../../releases/tag/v1.1-windows-experimental)**:
-download `KhanaReader-Windows-experimental.zip` (about 0.5 GB), unzip it, and double-click `KhanaReader.exe`. It needs Microsoft's
-Edge WebView2 (Windows 11 and an updated Windows 10 have it). **Nobody has tried it on a real PC yet**: GitHub's own Windows computers
-built it, opened its window and made the voice speak. It has no translation, no MP3 (WAV instead) and no translated PDF yet.
+An experimental Windows 10/11 (64-bit) version is on a separate **[pre-release](../../releases/tag/v1.1-windows-experimental)**, in two editions:
+
+- **`KhanaReader-Windows-light-experimental.zip`** (about 0.5 GB): **without translation.**
+- **`KhanaReader-Windows-full-experimental.zip`** (about 1.1 GB): **with translation** of foreign books into Farsi (the smaller 600M model, as on Android).
+
+Unzip the whole folder and double-click `KhanaReader.exe`. It needs Microsoft's Edge WebView2 (Windows 11 and an updated Windows 10 have it).
+**Nobody has tried it on a real PC yet**: GitHub's own Windows computers built it, opened its window, made the voice speak and (in the full
+edition) translated a text. It has no MP3 (WAV instead) and no translated PDF yet.
 
 > **Please note:** the Android app has not yet been tried on a real phone. If something goes wrong, please open an
 > [issue](../../issues). Please don't attach books you would not like to make public.
@@ -57,7 +61,8 @@ built it, opened its window and made the voice speak. It has no translation, no 
 | اندروید (سبک) | `KhanaReader-Android-lite.apk` (حدود ۰٫۷ گیگابایت) | بدون ترجمه؛ کتاب فارسی، عکس و متن تایپ‌شده را می‌خواند. اگر اینترنت کند است این را بگیرید. |
 | اندروید (کامل) | `KhanaReader-Android.apk` (حدود ۱٫۳ گیگابایت) | با ترجمه‌ی کتاب‌های خارجی به فارسی. |
 | مک | `KhanaReader-Mac.dmg` **و** `KhanaReader-Mac.002.dmgpart` | هر دو فایل را در یک پوشه بگذارید، بعد `.dmg` را باز کنید. |
-| ویندوز (آزمایشی) | `KhanaReader-Windows-experimental.zip` در [پیش‌انتشار ویندوز](../../releases/tag/v1.1-windows-experimental) | هنوز روی رایانه‌ی واقعی آزمایش نشده است. |
+| ویندوز (آزمایشی، سبک) | `KhanaReader-Windows-light-experimental.zip` (حدود ۰٫۵ گیگابایت) در [پیش‌انتشار ویندوز](../../releases/tag/v1.1-windows-experimental) | بدون ترجمه. هنوز روی رایانه‌ی واقعی آزمایش نشده است. |
+| ویندوز (آزمایشی، کامل) | `KhanaReader-Windows-full-experimental.zip` (حدود ۱٫۱ گیگابایت) در همان پیش‌انتشار | با ترجمه‌ی کتاب‌های خارجی. هنوز روی رایانه‌ی واقعی آزمایش نشده است. |
 
 اندروید: گوشی ۶۴ بیتی (arm64) با اندروید ۸ یا بالاتر و «Android System WebView» نسخه‌ی ۱۳۳ یا جدیدتر لازم است. هنگام نصب، اندروید اجازه‌ی «نصب از این منبع» را می‌خواهد.
 
