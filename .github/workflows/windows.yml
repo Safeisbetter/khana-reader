@@ -72,7 +72,7 @@ jobs:
         shell: pwsh
         run: |
           git clone --depth 1 --branch v$env:CT2_VERSION --recurse-submodules --shallow-submodules https://github.com/OpenNMT/CTranslate2.git ct2src
-          cmake -S ct2src -B ct2build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DWITH_MKL=OFF -DWITH_RUY=ON -DOPENMP_RUNTIME=COMP -DBUILD_CLI=OFF -DBUILD_TESTS=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake -S ct2src -B ct2build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DWITH_MKL=OFF -DWITH_RUY=ON -DOPENMP_RUNTIME=COMP -DBUILD_CLI=OFF -DBUILD_TESTS=OFF "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
           cmake --build ct2build --config Release --parallel 4
           Get-ChildItem -Recurse ct2build -Include ctranslate2.dll, ctranslate2.lib | Select-Object FullName
 
