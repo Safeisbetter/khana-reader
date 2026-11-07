@@ -84,6 +84,7 @@ pub struct Document {
     engines: Arc<Engines>,
     pub pdfjs: bool,
     given: Mutex<HashMap<usize, (Vec<u8>, usize, usize)>>,
+    pub edits: Mutex<crate::edits::Edits>,
 }
 
 pub fn ext_of(name: &str) -> String {
@@ -153,6 +154,7 @@ impl Document {
             engines,
             pdfjs,
             given: Mutex::new(HashMap::new()),
+            edits: Mutex::new(crate::edits::Edits::load(&crate::edits::file_for(name, n_pages))),
         });
         let mut first: Vec<usize> = doc.st.lock().unwrap().scanned.iter().copied().collect();
         first.sort();
@@ -214,6 +216,10 @@ impl Document {
         let ext = ext_of(base);
         let stem = &base[..base.len() - ext.len()];
         split_ws(&sub(r"[-_]+", " ", stem)).join(" ")
+    }
+
+    pub fn title_is_said(&self) -> bool {
+        name_is_sayable(&self.title(), self.lang())
     }
 
     pub fn spoken_title(self: &Arc<Self>, opts: Opts) -> String {
@@ -321,10 +327,15 @@ impl Document {
             });
             Vec::new()
         });
-        (paras.iter().map(|p| repair_default(p)).filter(|t| !t.is_empty()).collect(), done)
+        (self.edits.lock().unwrap().apply(paras.iter().map(|p| repair_default(p)).filter(|t| !t.is_empty()).collect()), done)
     }
 
     pub fn page_text(self: &Arc<Self>, n: usize, opts: Opts) -> Vec<String> {
+        let base = self.page_text_base(n, opts);
+        self.edits.lock().unwrap().apply(base)
+    }
+
+    pub fn page_text_base(self: &Arc<Self>, n: usize, opts: Opts) -> Vec<String> {
         if opts.translate && self.can_translate() {
             let raw = self.translated_page(n);
             return raw.iter().map(|p| repair_default(p)).filter(|t| !t.is_empty()).collect();
@@ -343,6 +354,7 @@ impl Document {
         }
         if self.lang() == "fa" {
             paras.retain(|p| rtl(p) || !search(CITATION_LINE, p));
+            paras.retain(|p| !latin_only_paragraph(p));
             paras.retain(|p| rtl(p) || !(split_ws(p).len() >= 25 || search(r"^\s*(?:Title|Abstract|Keywords|Key words)\s*:", p)));
         }
         let mut notes = std::mem::take(&mut self.st.lock().unwrap().notes_after);
@@ -598,3 +610,12 @@ pub fn open_document(name: &str, data: &[u8], engines: Arc<Engines>) -> Result<A
     }
     Err("این نوع فایل پشتیبانی نمی\u{200c}شود. PDF، Word (doc/docx)، PowerPoint (pptx)، EPUB، FB2، RTF، ODT یا TXT باز کنید.".into())
 }
+
+pub fn open_pages(name: &str, pages: Vec<Vec<String>>, engines: Arc<Engines>) -> Arc<Document> {
+    Document::new(name, pages, Vec::new(), Vec::new(), engines, None)
+}
+
+pub fn name_is_sayable(title: &str, lang: &str) -> bool {
+    lang != "fa" || title.chars().any(|c| ('\u{600}'..='\u{6FF}').contains(&c))
+}
+

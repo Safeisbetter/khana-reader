@@ -3,7 +3,7 @@ use ort::{GraphOptimizationLevel, Session};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(shell))]
 fn dylib() -> PathBuf {
     let exe = std::env::current_exe().unwrap_or_default();
     if let Some(c) = exe.parent().and_then(|p| p.parent()) {
@@ -15,7 +15,7 @@ fn dylib() -> PathBuf {
     PathBuf::from(".").join("vendor/lib/libonnxruntime.dylib")
 }
 
-#[cfg(target_os = "android")]
+#[cfg(shell)]
 fn dylib() -> PathBuf {
     crate::platform::ort_library()
 }

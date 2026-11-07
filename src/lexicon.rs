@@ -81,6 +81,16 @@ fn lookup<'a>(m: &'a [(&str, &str)], k: &str) -> Option<&'a str> {
 const RUST_LEXICON: &[(&str, &str)] = &[
 ];
 
+fn ezafe_after_ain(w: &str) -> String {
+    sub(r"^(.+?[uoAi])(?:ye1?|e)\?e(1?)$", r"\1?e\2", w)
+}
+
+
+fn mikon_fixed(w: &str) -> String {
+    sub(r"^(ne)?mikan(am|i|ad|im|id|and)$", r"\1mikon\2", w)
+}
+
+
 fn has_vowel(p: &str) -> bool {
     p.chars().any(|c| "aeoiuA".contains(c))
 }
@@ -216,8 +226,13 @@ impl LexiconG2P {
                     cut = split_ws(&self.phonemise_marked(&format!("{} او", rstrip(seg)), keep_ezafe)?).iter().map(|s| s.to_string()).collect();
                     nxt = cut.last().cloned().into_iter().collect();
                 }
-                if cut.len() >= nxt.len() + n_seg {
-                    parts.push(cut[..cut.len() - nxt.len()].join(" "));
+                if span.contains('\u{200c}') && cut.len() > nxt.len() + n_seg {
+                    cut = split_ws(&self.phonemise_marked(&format!("{} او", rstrip(seg)), keep_ezafe)?).iter().map(|s| s.to_string()).collect();
+                    nxt = cut.last().cloned().into_iter().collect();
+                }
+                let k = nxt.len();
+                if cut.len() >= k + n_seg {
+                    parts.push(cut[..cut.len() - k].join(" "));
                 } else {
                     parts.push(self.phonemise_marked(seg, keep_ezafe)?);
                 }
@@ -324,7 +339,10 @@ impl LexiconG2P {
             ph = phw.join(" ");
         }
         ph = split_ws(&ph).iter().map(|w| lookup(PHONEME_FIX, w).unwrap_or(w).to_string()).collect::<Vec<_>>().join(" ");
+        ph = split_ws(&ph).iter().map(|w| mikon_fixed(w)).collect::<Vec<_>>().join(" ");
         ph = split_ws(&ph).iter().map(|w| sub(r"^(.+?)e?ye1?\?e?ye(1?)$", r"\1e?e\2", w)).collect::<Vec<_>>().join(" ");
+        ph = split_ws(&ph).iter().map(|w| sub(r"^(.+e)\?(aS|at|am)$", r"\1\2", &sub(r"^(.+e)\?i$", r"\1yi", w))).collect::<Vec<_>>().join(" ");
+        ph = split_ws(&ph).iter().map(|w| ezafe_after_ain(w)).collect::<Vec<_>>().join(" ");
         ph = sub(r"(?<=[^\s?])allAh(?=e?1?\b)", "ollAh", &ph);
         if !text.replace('\u{200c}', "").contains("سه") {
             ph = ph.replace("sh", "S");

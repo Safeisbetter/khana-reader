@@ -19,13 +19,16 @@
 pub mod ct2;
 #[cfg(target_os = "android")]
 pub mod jni;
+#[cfg(target_os = "ios")]
+pub mod cabi;
 pub mod lame;
 pub mod onnx;
 #[cfg(target_os = "macos")]
 pub mod power;
 pub mod typeset;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod vision;
+#[cfg(not(target_os = "ios"))]
 pub mod vosk;
 pub mod wipe;
 

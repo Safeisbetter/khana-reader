@@ -35,7 +35,7 @@ final class Exporter {
         }
 
         String mime() {
-            return kind.equals("mp3") ? "audio/mpeg" : "application/pdf";
+            return kind.equals("mp3") ? "audio/mpeg" : kind.equals("wav") ? "audio/wav" : "application/pdf";
         }
     }
 
@@ -59,7 +59,7 @@ final class Exporter {
         for (File f : fs) {
             String n = f.getName();
             if (byPath.containsKey(f.getPath())) continue;
-            if (n.endsWith(".mp3") || n.endsWith(".pdf")) add(new Saved(f, n.endsWith(".mp3") ? "mp3" : "pdf"));
+            if (n.endsWith(".mp3") || n.endsWith(".wav") || n.endsWith(".pdf")) add(new Saved(f, n.endsWith(".mp3") ? "mp3" : n.endsWith(".wav") ? "wav" : "pdf"));
         }
     }
 
@@ -75,7 +75,7 @@ final class Exporter {
             if (tab < 0) continue;
             String kind = line.substring(0, tab);
             File f = new File(line.substring(tab + 1));
-            if (kind.equals("mp3") || kind.equals("pdf")) {
+            if (kind.equals("mp3") || kind.equals("wav") || kind.equals("pdf")) {
                 add(new Saved(f, kind));
             } else if (kind.equals("reveal")) {
                 Saved s = byPath.get(f.getPath());
@@ -142,7 +142,7 @@ final class Exporter {
     private static void write(Context ctx, Saved s, Uri u) throws Exception {
         try (OutputStream out = ctx.getContentResolver().openOutputStream(u, "wt")) {
             if (out == null) throw new IllegalStateException("the place cannot be written");
-            if (s.kind.equals("mp3")) {
+            if (s.kind.equals("mp3") || s.kind.equals("wav")) {
                 try (InputStream in = new FileInputStream(s.file)) {
                     byte[] buf = new byte[1 << 16];
                     for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);

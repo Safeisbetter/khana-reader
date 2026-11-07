@@ -24,7 +24,7 @@ pub struct VoiceInfo {
 }
 
 pub const VOICES: &[VoiceInfo] = &[
-    VoiceInfo { id: "khabari", wav: "male_news.wav", name: "آقا، خبری", gender: "مرد", group: "natural", extra: false, tempo: 0.92 },
+    VoiceInfo { id: "khabari", wav: "male_news.wav", name: "آقا، خبری", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
 ];
 
 pub fn data_dir() -> PathBuf {
@@ -66,7 +66,7 @@ fn all_voices() -> Vec<(String, String, String, String)> {
 fn default_settings() -> Map<String, Value> {
     let first = voices().first().map(|v| v.id).unwrap_or("");
     let v = json!({"voice": first, "speed": 1.0, "fontSize": 21, "reversed": false, "persianYeh": true, "autoNext": true,
-                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "translate": true, "naturalTone": true});
+                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "translate": true, "naturalTone": true, "theme": "auto"});
     v.as_object().unwrap().clone()
 }
 
@@ -164,7 +164,7 @@ impl Speech {
         let recent = self.last_play.lock().unwrap().map_or(false, |t| t.elapsed() < Duration::from_secs(30));
         let workers = if recent { 3 } else { 5 };
         let mut a = eng.synthesize_text(&text, &id, &wav, workers, cancel)?;
-        if (speed - 1.0).abs() >= 0.03 && !a.is_empty() {
+        if (speed - 1.0).abs() >= 0.008 && !a.is_empty() {
             a = crate::stretch::stretch(&a, speed, tts::RATE);
         }
         Ok((audio::fade_edges(a, tts::RATE, 8), tts::RATE))
@@ -173,6 +173,16 @@ impl Speech {
 
 
 fn make_my_voice(data: &[u8], ext: &str) -> Result<f64, String> {
+    let (keep, rate) = voice_sample(data, ext)?;
+    std::fs::create_dir_all(data_dir()).map_err(|e| e.to_string())?;
+    std::fs::write(my_voice(), audio::wav_bytes(&keep, rate as u32)).map_err(|e| e.to_string())?;
+    if let Ok(e) = speech().engine() {
+        e.forget_pace("mine");
+    }
+    Ok((keep.len() as f64 / rate as f64 * 10.0).round() / 10.0)
+}
+
+pub fn voice_sample(data: &[u8], ext: &str) -> Result<(Vec<f32>, usize), String> {
     let tmp = std::env::temp_dir().join(format!("khana-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
     let src = tmp.join(format!("input{ext}"));
@@ -225,12 +235,7 @@ fn make_my_voice(data: &[u8], ext: &str) -> Result<f64, String> {
         keep[i] *= up[i];
         keep[len - n + i] *= down[i];
     }
-    std::fs::create_dir_all(data_dir()).map_err(|e| e.to_string())?;
-    std::fs::write(my_voice(), audio::wav_bytes(&keep, rate as u32)).map_err(|e| e.to_string())?;
-    if let Ok(e) = speech().engine() {
-        e.forget_pace("mine");
-    }
-    Ok((keep.len() as f64 / rate as f64 * 10.0).round() / 10.0)
+    Ok((keep, rate))
 }
 
 
@@ -317,10 +322,12 @@ struct Mp3Req {
     speed: f64,
     bitrate: u32,
     opts: Opts,
+    format: String,
 }
 
 fn run_job(job: Arc<Job>, r: Mp3Req) {
-    let path = std::env::temp_dir().join(format!("khana-{}.mp3", job.id));
+    let wav = r.format == "wav" || r.format == "m4a";
+    let path = std::env::temp_dir().join(format!("khana-{}.{}", job.id, if wav { "wav" } else { "mp3" }));
     *job.path.lock().unwrap() = Some(path.clone());
     let _awake = crate::platform::awake(c"Khana Reader is saving an MP3");
     let res = (|| -> Result<(), String> {
@@ -328,7 +335,7 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
         for n in r.first..=r.last {
             paras.extend(r.doc.page_text(n, r.opts));
         }
-        if r.first == 1 && !paras.is_empty() {
+        if r.first == 1 && !paras.is_empty() && r.doc.title_is_said() {
             paras.insert(0, format!("{}.", r.doc.spoken_title(r.opts)));
         }
         if r.last >= r.doc.n_pages && !paras.is_empty() {
@@ -347,8 +354,13 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
             groups.push(cur);
         }
         let mut out = std::fs::File::create(&path).map_err(|e| e.to_string())?;
-        use std::io::Write;
+        use std::io::{Seek, SeekFrom, Write};
         let mut enc: Option<crate::mp3::Mp3> = None;
+        let mut wav_bytes_written: u32 = 0;
+        let mut wav_rate: u32 = 0;
+        if wav {
+            out.write_all(&[0u8; 44]).map_err(|e| e.to_string())?;
+        }
         let cancel = || job.cancelled.load(Ordering::SeqCst);
         for group in groups {
             if cancel() {
@@ -359,21 +371,60 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
             if cancel() {
                 return Err("cancelled".into());
             }
-            if enc.is_none() {
+            if !wav && enc.is_none() {
                 enc = Some(crate::mp3::Mp3::new(rate as u32, r.bitrate)?);
             }
             let mut pcm = a.clone();
             pcm.extend(std::iter::repeat(0f32).take((rate as f64 * 0.45) as usize));
-            out.write_all(&enc.as_mut().unwrap().encode(&audio::to_pcm16(&pcm))).map_err(|e| e.to_string())?;
+            if wav {
+                wav_rate = rate as u32;
+                let bytes: Vec<u8> = audio::to_pcm16(&pcm).iter().flat_map(|x| x.to_le_bytes()).collect();
+                wav_bytes_written += bytes.len() as u32;
+                out.write_all(&bytes).map_err(|e| e.to_string())?;
+            } else {
+                out.write_all(&enc.as_mut().unwrap().encode(&audio::to_pcm16(&pcm))).map_err(|e| e.to_string())?;
+            }
             *job.seconds.lock().unwrap() += pcm.len() as f64 / rate as f64;
             *job.done_chars.lock().unwrap() += group.iter().map(|x| len(x)).sum::<usize>();
         }
-        let Some(mut e) = enc else { return Err("در این صفحه\u{200c}ها متنی برای خواندن نیست.".into()) };
-        out.write_all(&e.flush()).map_err(|e| e.to_string())?;
+        if wav {
+            if wav_bytes_written == 0 {
+                return Err("در این صفحه\u{200c}ها متنی برای خواندن نیست.".into());
+            }
+            let mut h = Vec::with_capacity(44);
+            h.extend_from_slice(b"RIFF");
+            h.extend_from_slice(&(36 + wav_bytes_written).to_le_bytes());
+            h.extend_from_slice(b"WAVEfmt ");
+            h.extend_from_slice(&16u32.to_le_bytes());
+            h.extend_from_slice(&1u16.to_le_bytes());
+            h.extend_from_slice(&1u16.to_le_bytes());
+            h.extend_from_slice(&wav_rate.to_le_bytes());
+            h.extend_from_slice(&(wav_rate * 2).to_le_bytes());
+            h.extend_from_slice(&2u16.to_le_bytes());
+            h.extend_from_slice(&16u16.to_le_bytes());
+            h.extend_from_slice(b"data");
+            h.extend_from_slice(&wav_bytes_written.to_le_bytes());
+            out.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+            out.write_all(&h).map_err(|e| e.to_string())?;
+        } else {
+            let Some(mut e) = enc else { return Err("در این صفحه\u{200c}ها متنی برای خواندن نیست.".into()) };
+            out.write_all(&e.flush()).map_err(|e| e.to_string())?;
+        }
         drop(out);
+        let mut from = path.clone();
+        if r.format == "m4a" {
+            let m4a = path.with_extension("m4a");
+            if !crate::platform::to_m4a(&path, &m4a) {
+                return Err("ساختن M4A در این دستگاه ممکن نیست. MP3 یا WAV انتخاب کنید.".into());
+            }
+            let _ = std::fs::remove_file(&path);
+            *job.path.lock().unwrap() = Some(m4a.clone());
+            from = m4a;
+        }
         let saved = unique_path(save_dir().join(&job.filename));
-        std::fs::copy(&path, &saved).map_err(|e| e.to_string())?;
-        crate::platform::saved(&saved, "mp3");
+        std::fs::copy(&from, &saved).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(&from);
+        crate::platform::saved(&saved, if r.format == "wav" { "wav" } else { "mp3" });
         *job.saved.lock().unwrap() = Some(saved);
         Ok(())
     })();
@@ -550,6 +601,8 @@ impl App {
             let html = std::fs::read_to_string(web.join("index.html")).unwrap_or_default().replace("__KHANA_TOKEN__", &self.token);
             #[cfg(target_os = "android")]
             let html = html.replace("<script src=\"app.js\"></script>", "<script src=\"app.js\"></script>\n<script src=\"android.js\"></script>");
+            #[cfg(target_os = "ios")]
+            let html = html.replace("<script src=\"app.js\"></script>", "<script src=\"app.js\"></script>\n<script src=\"ios.js\"></script>");
             return Reply {
                 status: 200,
                 ctype: "text/html; charset=utf-8",
@@ -582,7 +635,7 @@ impl App {
             }
             return Reply { status: 200, ctype, body, headers };
         }
-        if method == "GET" && (path == "/app.js" || path == "/app.css" || (cfg!(target_os = "android") && path == "/android.js")) {
+        if method == "GET" && (path == "/app.js" || path == "/app.css" || (cfg!(target_os = "android") && path == "/android.js") || (cfg!(target_os = "ios") && path == "/ios.js")) {
             let ctype = if path.ends_with(".js") { "text/javascript; charset=utf-8" } else { "text/css; charset=utf-8" };
             return Reply { status: 200, ctype, body: std::fs::read(web.join(&path[1..])).unwrap_or_default(), headers: Vec::new() };
         }
@@ -658,6 +711,31 @@ impl App {
                 *self.docs.lock().unwrap() = Some(d.clone());
                 Ok(reply_json(&doc_info(&d)))
             }
+            "ocr_image_post" => {
+                let u32_at = |at: usize| body.get(at..at + 4).map_or(0, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize);
+                let (w, h) = (u32_at(0), u32_at(4));
+                if w == 0 || h == 0 || w > 20000 || h > 20000 || w.checked_mul(h) != Some(body.len().saturating_sub(8)) {
+                    return Err(bad("تصویر درست نیست."));
+                }
+                let Some(ocr) = self.engines.ocr.as_ref() else { return Err(bad("تشخیص متن در این دستگاه نیست.")) };
+                let paras = ocr(&body[8..], w, h);
+                Ok(reply_json(&json!({"paragraphs": paras})))
+            }
+            "open_pages_post" => {
+                let name = q.get("name").cloned().unwrap_or_else(|| "document".into());
+                let v: Value = serde_json::from_slice(body).map_err(|_| bad("متن خوانده نشد."))?;
+                let pages: Vec<Vec<String>> = v.get("pages").and_then(|p| p.as_array()).map(|a| {
+                    a.iter().take(2000).map(|pg| pg.as_array().map(|x| x.iter().filter_map(|t| t.as_str()).map(|t| t.chars().take(20_000).collect::<String>()).collect()).unwrap_or_default()).collect()
+                }).unwrap_or_default();
+                if pages.is_empty() {
+                    return Err(bad("متنی پیدا نشد."));
+                }
+                *self.docs.lock().unwrap() = None;
+                let d = crate::doc::open_pages(&name, pages, self.engines.clone());
+                crate::vocab::set_source_lang(d.lang());
+                *self.docs.lock().unwrap() = Some(d.clone());
+                Ok(reply_json(&doc_info(&d)))
+            }
             "open_layout_post" => {
                 let name = q.get("name").cloned().unwrap_or_else(|| "document".into());
                 if body.len() > 400 * 1024 * 1024 {
@@ -713,6 +791,42 @@ impl App {
                 }
                 Ok(reply_json(&json!({"n": n, "paragraphs": d.page_text(n, opts), "done": true})))
             }
+            "edit_post" => {
+                let d = self.doc(q)?;
+                let req = body_json()?;
+                let get = |k: &str| req.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let n = req.get("n").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                if n < 1 || n > d.n_pages {
+                    return Err(bad("شماره صفحه درست نیست."));
+                }
+                let kind = get("kind");
+                let mut ed = d.edits.lock().unwrap().clone();
+                match kind.as_str() {
+                    "paragraph" => {
+                        let base = d.page_text_base(n, self.opts(q));
+                        if !ed.edit_paragraph(&base, &get("shown"), &get("text")) {
+                            return Err(bad("این بند پیدا نشد. صفحه را دوباره باز کنید."));
+                        }
+                    }
+                    "word" => {
+                        if get("from").trim().is_empty() {
+                            return Err(bad("کلمه‌ای که باید عوض شود را بنویسید."));
+                        }
+                        ed.set_word(&get("from"), &get("to"));
+                    }
+                    "reset" => ed = crate::edits::Edits::default(),
+                    _ => return Err(bad("درخواست ناشناخته.")),
+                }
+                ed.save(&crate::edits::file_for(&d.name, d.n_pages)).map_err(ApiError::Internal)?;
+                let count = ed.paras.len() + ed.words.len();
+                *d.edits.lock().unwrap() = ed;
+                Ok(reply_json(&json!({"edits": count})))
+            }
+            "edits_get" => {
+                let d = self.doc(q)?;
+                let ed = d.edits.lock().unwrap();
+                Ok(reply_json(&json!({"edits": ed.paras.len() + ed.words.len(), "words": ed.words.iter().map(|(a, b)| json!([a, b])).collect::<Vec<_>>()})))
+            }
             "title_get" => {
                 let d = self.doc(q)?;
                 Ok(reply_json(&json!({"title": d.spoken_title(self.opts(q))})))
@@ -754,9 +868,10 @@ impl App {
                 let opts = Opts { reversed: flag("reversed"), persian_yeh: flag("persianYeh"), translate: flag("translate") };
                 let stem = std::path::Path::new(&d.name).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
                 let rng = if first == last { format!("{first}") } else { format!("{first}-{last}") };
-                let job = self.add_job(Job::new(format!("{stem} - p{rng}.mp3")));
+                let format = match req.get("format").and_then(|v| v.as_str()) { Some("wav") => "wav", Some("m4a") => "m4a", _ => "mp3" }.to_string();
+                let job = self.add_job(Job::new(format!("{stem} - p{rng}.{format}")));
                 let info = job.info();
-                let r = Mp3Req { doc: d, first, last, voice, speed, bitrate, opts };
+                let r = Mp3Req { doc: d, first, last, voice, speed, bitrate, opts, format };
                 std::thread::spawn(move || run_job(job, r));
                 Ok(reply_json(&info))
             }

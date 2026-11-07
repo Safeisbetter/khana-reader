@@ -190,15 +190,18 @@ fn number_with_e(w: &str) -> Option<&str> {
 
 pub fn number_rhythm(ph: &str) -> String {
     let mut w: Vec<String> = split_ws(ph).iter().map(|s| s.to_string()).collect();
-    for x in w.iter_mut() {
-        if let Some(base) = x.strip_suffix("e1") {
+    for i in 0..w.len() {
+        if let Some(base) = w[i].strip_suffix("e1") {
             if number_word(base) {
-                *x = base.to_string();
+                w[i] = base.to_string();
                 continue;
             }
         }
-        if let Some(base) = number_with_e(x) {
-            *x = base.to_string();
+        let after_number = i >= 2 && w[i - 1] == "?o" && number_word(&w[i - 2]);
+        if let Some(base) = number_with_e(&w[i]) {
+            if base != "CAr" || after_number {
+                w[i] = base.to_string();
+            }
         }
     }
     for i in 1..w.len() {

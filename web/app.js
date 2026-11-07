@@ -24,10 +24,12 @@ const S = { settings: {}, voices: [], doc: null, page: 1, view: "text", paras: [
 function applySettings() {
   const s = S.settings;
   document.documentElement.style.setProperty("--fs", s.fontSize + "px");
-  $("speed").value = s.speed; $("speedVal").textContent = fa(Number(s.speed).toFixed(2)) + "×";
-  $("speedChip").textContent = fa(Number(s.speed).toFixed(2)) + "×";
+  $("speed").value = s.speed; $("speedVal").textContent = pct(s.speed);
+  $("speedChip").textContent = pct(s.speed);
   $("speedChip").classList.toggle("changed", Number(s.speed) !== 1);
-  $("speedChip").setAttribute("aria-label", "سرعت " + fa(Number(s.speed).toFixed(2)) + "×؛ برای سرعت عادی بزنید");
+  $("speedChip").setAttribute("aria-label", "سرعت " + pct(s.speed) + "؛ برای سرعت عادی بزنید");
+  document.documentElement.dataset.theme = ["light", "dark"].includes(s.theme) ? s.theme : "auto";
+  document.querySelectorAll("input[name=theme]").forEach(r => r.checked = r.value === (["light", "dark"].includes(s.theme) ? s.theme : "auto"));
   document.querySelectorAll("[data-speed]").forEach(b => b.classList.toggle("on", Number(b.dataset.speed) === Number(s.speed) && b.id !== "speedReset"));
   $("fontSize").value = s.fontSize; $("fontVal").textContent = fa(s.fontSize);
   $("voice").value = s.voice;
@@ -40,7 +42,7 @@ function applySettings() {
   $("reversed").checked = !!s.reversed;
   $("bitrate").value = String(s.bitrate);
   const v = S.voices.find(x => x.id === s.voice);
-  if (saveKind !== "pdf") $("mp3Voice").textContent = "صدا: " + (v ? `${v.name} (${v.gender})` : "-") + " · سرعت " + fa(Number(s.speed).toFixed(2)) + "× · " + fa(s.bitrate) + " kbps (از تنظیمات)";
+  if (saveKind !== "pdf") $("mp3Voice").textContent = "صدا: " + (v ? v.name : "-") + " · سرعت " + pct(s.speed) + " · " + fa(s.bitrate) + " kbps (از تنظیمات)";
 }
 let saveT;
 function setSetting(k, v, reloadText) {
@@ -65,12 +67,14 @@ function restartReading() {
 }
 $("voice").onchange = e => { setSetting("voice", e.target.value); ttsCache.clear(); restartReading(); };
 // reading speed: 0.5× to 2×; the slider, the −/+ buttons, the presets and the Speed menu all come here
-const SPEED_MIN = 0.5, SPEED_MAX = 2, SPEED_STEP = 0.1;
+// (shown in percent: ۱۰۰٪ is normal; the −/+ buttons go one percent at a time, the menu's keys five)
+const pct = v => fa(Math.round(Number(v) * 100)) + "٪";
+const SPEED_MIN = 0.5, SPEED_MAX = 2, SPEED_STEP = 0.01, SPEED_KEY_STEP = 0.05;
 function setSpeed(v, quiet) {
   v = Math.round(Math.min(SPEED_MAX, Math.max(SPEED_MIN, Number(v) || 1)) * 100) / 100;
-  if (v === Number(S.settings.speed)) { if (!quiet) toast("سرعت " + fa(v.toFixed(2)) + "×"); return; }
+  if (v === Number(S.settings.speed)) { if (!quiet) toast("سرعت " + pct(v)); return; }
   setSetting("speed", v); ttsCache.clear(); restartReading();
-  if (!quiet) toast(v === 1 ? "سرعت عادی (۱×)" : "سرعت " + fa(v.toFixed(2)) + "×");
+  if (!quiet) toast(v === 1 ? "سرعت عادی (۱۰۰٪)" : "سرعت " + pct(v));
 }
 const resetSpeed = () => setSpeed(1);
 $("speed").oninput = e => setSpeed(+e.target.value, true);
@@ -82,8 +86,8 @@ function setFontSize(v) { setSetting("fontSize", Math.min(52, Math.max(14, Math.
 // commands from the app's menu bar (src/main.rs)
 window.khanaMenu = cmd => {
   if (cmd === "speed-reset") resetSpeed();
-  else if (cmd === "speed-up") setSpeed(Number(S.settings.speed) + SPEED_STEP);
-  else if (cmd === "speed-down") setSpeed(Number(S.settings.speed) - SPEED_STEP);
+  else if (cmd === "speed-up") setSpeed(Number(S.settings.speed) + SPEED_KEY_STEP);
+  else if (cmd === "speed-down") setSpeed(Number(S.settings.speed) - SPEED_KEY_STEP);
   else if (cmd === "font-up") setFontSize(Number(S.settings.fontSize) + 2);
   else if (cmd === "font-down") setFontSize(Number(S.settings.fontSize) - 2);
   else if (cmd === "settings") openPanel("settings");
@@ -99,6 +103,7 @@ $("autoNext").onchange = e => setSetting("autoNext", e.target.checked);
 $("naturalTone").onchange = e => setSetting("naturalTone", e.target.checked);
 $("autoPlay").onchange = e => setSetting("autoPlay", e.target.checked);
 document.querySelectorAll("input[name=hl]").forEach(r => r.onchange = () => setSetting("highlight", r.value));
+document.querySelectorAll("input[name=theme]").forEach(r => r.onchange = () => setSetting("theme", r.value));
 $("persianYeh").onchange = e => setSetting("persianYeh", e.target.checked, true);
 $("reversed").onchange = e => setSetting("reversed", e.target.checked, true);
 $("bitrate").onchange = e => setSetting("bitrate", +e.target.value);
@@ -113,7 +118,7 @@ function fillVoices(voices) {
   S.voices = voices;
   const groups = [["mine", "صدای من"], ["natural", "صدای طبیعی"]];
   $("voice").innerHTML = groups.map(([g, label]) => {
-    const opts = voices.filter(v => v.group === g).map(v => `<option value="${v.id}">${esc(v.name)} (${v.gender})</option>`).join("");
+    const opts = voices.filter(v => v.group === g).map(v => `<option value="${v.id}">${esc(v.name)}</option>`).join("");
     return opts ? `<optgroup label="${label}">${opts}</optgroup>` : "";
   }).join("");
   if (!voices.some(v => v.id === S.settings.voice) && voices[0]) S.settings.voice = voices[0].id;
@@ -250,13 +255,39 @@ addEventListener("keydown", e => { if (e.key === "Escape") { stopRecording(false
 $("settingsBtn").onclick = () => openPanel("settings");
 
 /* ---------------- opening ---------------- */
-async function openFile(file) {
+// pictures (a photo of a page, a screenshot): read with the app's text recognition, one page per picture
+const isImage = f => /\.(png|jpe?g|webp|gif|bmp|heic|tiff?)$/i.test(f.name) || /^image\//.test(f.type || "");
+async function openImages(files) {
+  const pages = [];
+  for (let i = 0; i < files.length; i++) {
+    note(`در حال خواندن تصویر ${fa(i + 1)} از ${fa(files.length)}…`);
+    let bmp;
+    try { bmp = await createImageBitmap(files[i]); } catch (e) { throw new Error("این تصویر باز نشد: " + files[i].name); }
+    // (about the size of a page scanned at 250 dpi: large pictures are made smaller, small ones larger)
+    const long = Math.max(bmp.width, bmp.height), k = long > 3200 ? 3200 / long : long < 1600 ? Math.min(2, 2200 / long) : 1;
+    const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    const cx = cv.getContext("2d", { willReadFrequently: true });
+    cx.fillStyle = "#fff"; cx.fillRect(0, 0, w, h); cx.drawImage(bmp, 0, 0, w, h);
+    const px = cx.getImageData(0, 0, w, h).data, body = new Uint8Array(8 + w * h), dv = new DataView(body.buffer);
+    dv.setUint32(0, w, true); dv.setUint32(4, h, true);
+    for (let j = 0, o = 8; j < px.length; j += 4, o++) body[o] = (px[j] * 77 + px[j + 1] * 150 + px[j + 2] * 29) >> 8;
+    const r = await (await api("/api/ocr_image", { method: "POST", body: body.buffer })).json();
+    if (r.error) throw new Error(r.error);
+    pages.push(r.paragraphs || []);
+  }
+  if (!pages.some(p => p.length)) throw new Error("در این تصویر متنی پیدا نشد.");
+  const name = files.length === 1 ? files[0].name : files[0].name.replace(/\.[^.]+$/, "") + " (+" + (files.length - 1) + ").png";
+  return await (await api("/api/open_pages?name=" + encodeURIComponent(name), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pages }) })).json();
+}
+async function openFile(file, images) {
   if (!file) return;
   stopReading();
   note(`در حال باز کردن «${esc(file.name)}»…`);
   try {
     // (a PDF is read by pdf.js in its sandboxed frame; other files by the app)
     const d = /\.pdf$/i.test(file.name) ? await openWithPdfjs(file)
+      : isImage(file) ? await openImages(images || [file])
       : await (await api("/api/open?name=" + encodeURIComponent(file.name), { method: "POST", body: await file.arrayBuffer() })).json();
     S.doc = d; S.page = 1;
     S.view = "text";
@@ -264,7 +295,9 @@ async function openFile(file) {
     $("welcome").hidden = true;
     $("from").max = $("to").max = d.pages; $("to").value = d.pages;
     const langName = { en: "انگلیسی", nl: "هلندی", de: "آلمانی", fr: "فرانسوی", es: "اسپانیایی", it: "ایتالیایی", pt: "پرتغالی", tr: "ترکی", pl: "لهستانی" }[d.lang] || "خارجی";
-    if (!d.hasText) note("این سند متنی ندارد؛ احتمالاً اسکن یا تصویر است. می‌توانید صفحه‌ها را در نمای «صفحه» ببینید، اما خواندن با صدا ممکن نیست.", true);
+    // (the light download has no translator: a book in another language is said so, not read with the Farsi voice)
+    if (d.hasText && d.lang !== "fa" && !d.canTranslate && d.lang !== "unknown") note(`این سند به زبان ${langName} است. این نسخه ترجمه ندارد و فقط متن فارسی را درست می‌خواند؛ برای کتاب‌های خارجی نسخه‌ی کامل را نصب کنید.`, true);
+    else if (!d.hasText) note("این سند متنی ندارد؛ احتمالاً اسکن یا تصویر است. می‌توانید صفحه‌ها را در نمای «صفحه» ببینید، اما خواندن با صدا ممکن نیست.", true);
     else if (d.scanned) note(`${fa(d.pages)} صفحه. این سند اسکن است؛ متن هر صفحه با «تشخیص متن» روی همین کامپیوتر خوانده می‌شود و ممکن است چند غلط داشته باشد.` + (d.canTranslate ? ` متن ${langName} است و به فارسی ترجمه می‌شود.` : ""));
     else if (d.canTranslate) note(`${fa(d.pages)} صفحه، به زبان ${langName}. متن به فارسی ترجمه می‌شود و همان خوانده می‌شود (ترجمه‌ی ماشینی، روی همین کامپیوتر). متن اصلی را با دکمه‌ی «ترجمه به فارسی» یا نمای «صفحه» ببینید. برای خواندن از هر جای متن، روی همان جمله کلیک کنید.`);
     else note(`${fa(d.pages)} صفحه. برای خواندن از هر جای متن، روی همان جمله کلیک کنید.`);
@@ -382,12 +415,22 @@ function givePicture(n) {
 }
 
 function note(html, warn) { const n = $("note"); n.innerHTML = html; n.hidden = false; n.classList.toggle("warn", !!warn); }
-$("fileInput").onchange = e => { ensureAudio(); openFile(e.target.files[0]); e.target.value = ""; };
+$("fileInput").onchange = e => {
+  ensureAudio();
+  const fs = [...e.target.files];
+  // (several pictures together are the pages of one document)
+  if (fs.length > 1 && fs.every(isImage)) openFile(fs[0], fs); else openFile(fs[0]);
+  e.target.value = "";
+};
 let dragDepth = 0;
 addEventListener("dragenter", e => { if ([...e.dataTransfer.types].includes("Files")) { dragDepth++; $("drop").hidden = false; } });
 addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("drop").hidden = true; } });
 addEventListener("dragover", e => e.preventDefault());
-addEventListener("drop", e => { e.preventDefault(); dragDepth = 0; $("drop").hidden = true; ensureAudio(); openFile(e.dataTransfer.files[0]); });
+addEventListener("drop", e => {
+  e.preventDefault(); dragDepth = 0; $("drop").hidden = true; ensureAudio();
+  const fs = [...e.dataTransfer.files];
+  if (fs.length > 1 && fs.every(isImage)) openFile(fs[0], fs); else openFile(fs[0]);
+});
 
 /* ---------------- pages ---------------- */
 const pageCache = new Map();  // "page|rev|yeh|tr" -> Promise<paragraphs>
@@ -683,7 +726,9 @@ async function readFrom(i, fromOff = 0) {
   requestAnimationFrame(() => tick(run));
   try {
     // from the start of the book: its name first (p -1: a piece with no text on screen)
-    if (i === 0 && fromOff === 0 && S.doc.title && await atBookStart(S.page)) {
+    // Farsi voice spelled the English letters out and began with a strange sound)
+    const nameable = S.doc.lang !== "fa" || /[؀-ۿ]/.test(S.doc.title || "");
+    if (i === 0 && fromOff === 0 && S.doc.title && nameable && await atBookStart(S.page)) {
       // (a translated book's name is said in Farsi)
       const title = translating() ? (await jget(`/api/title?doc=${S.doc.id}&rev=${!!S.settings.reversed}&yeh=${!!S.settings.persianYeh}&tr=true`)).title : S.doc.title;
       if (reader.run !== run) return;
@@ -830,6 +875,7 @@ $("play").onclick = () => {
 $("stop").onclick = stopReading;
 $("textView").addEventListener("click", e => {
   const p = e.target.closest("p[data-i]");
+  if (S.editing) { if (p && !e.target.closest(".paraeditor")) openParaEditor(p); return; }
   if (!p || e.detail > 1) return;
   ensureAudio();
   // from the sentence clicked (the word's offset; between words, the paragraph's start)
@@ -850,8 +896,9 @@ function openSave(kind) {
     document.querySelector(`input[name=scope][value=${kind === "pdf" ? "all" : "page"}]`).checked = true;
   }
   const pdf = saveKind === "pdf";
-  $("mp3Title").textContent = pdf ? "ذخیره‌ی ترجمه‌ی فارسی به صورت PDF" : "ذخیره به صورت MP3";
-  $("mp3Start").textContent = pdf ? "ساختن PDF" : "ساختن MP3";
+  $("mp3Title").textContent = pdf ? "ذخیره‌ی ترجمه‌ی فارسی به صورت PDF" : "ذخیره به صورت فایل صدا";
+  $("fmtField").hidden = pdf;
+  $("mp3Start").textContent = pdf ? "ساختن PDF" : "ساختن فایل صدا";
   applySettings();
   if (pdf) $("mp3Voice").textContent = "هر صفحه روی همین کامپیوتر به فارسی ترجمه می‌شود (برای هر صفحه چند ثانیه تا یک دقیقه) و فایل PDF در پوشه Downloads ذخیره می‌شود.";
   openPanel("mp3");
@@ -875,6 +922,7 @@ $("mp3Start").onclick = async () => {
     }
     job = saveKind === "pdf" ? await jpost("/api/pdf", { doc: S.doc.id, first, last })
       : await jpost("/api/mp3", { doc: S.doc.id, first, last, voice: S.settings.voice, speed: S.settings.speed,
+      format: document.querySelector("input[name=afmt]:checked").value,
       bitrate: S.settings.bitrate, reversed: S.settings.reversed, persianYeh: S.settings.persianYeh, translate: translating() });
     $("mp3Status").hidden = false; $("mp3Reveal").hidden = true;
     $("mp3Start").disabled = true; $("mp3Cancel").hidden = false;
@@ -916,3 +964,89 @@ let resizeT; addEventListener("resize", () => { clearTimeout(resizeT); resizeT =
     applySettings(); renderLexicon(); syncChrome(); setPlayButton();
   } catch (e) { note("برنامه درست اجرا نشد: " + esc(e.message), true); }
 })();
+
+
+/* ---------------- editing the text: a paragraph changed or taken out, a word changed everywhere ---------------- */
+// The corrections are kept on this computer, per book, and reach the reading, the MP3 and the PDF.
+const editQuery = () => `doc=${S.doc.id}&rev=${!!S.settings.reversed}&yeh=${!!S.settings.persianYeh}&tr=${translating()}`;
+async function sendEdit(body) {
+  const r = await jpost(`/api/edit?${editQuery()}`, { n: S.page, ...body });
+  if (r.error) { toast(r.error); return false; }
+  pageCache.clear();
+  stopReading();
+  await loadPage(S.page);
+  $("edInfo").textContent = r.edits ? `${fa(r.edits)} ویرایش در این کتاب` : "";
+  return true;
+}
+function openParaEditor(p) {
+  document.querySelectorAll(".paraeditor").forEach(x => x.remove());
+  const i = +p.dataset.i, shown = S.paras[i];
+  if (shown === undefined) return;
+  const box = document.createElement("div");
+  box.className = "paraeditor";
+  box.innerHTML = '<textarea dir="auto" aria-label="متن این بند"></textarea><div class="btns">' +
+    '<button type="button" class="primary" data-act="save">ذخیره</button>' +
+    '<button type="button" data-act="del">حذف این بند</button>' +
+    '<button type="button" data-act="cancel">انصراف</button></div>' +
+    '<span class="editnote">برای بند جدید، متن را با Enter به چند خط تقسیم کنید.</span>';
+  const ta = box.querySelector("textarea");
+  ta.value = shown;
+  p.after(box);
+  ta.focus();
+  box.onclick = async e => {
+    const act = e.target.dataset && e.target.dataset.act;
+    if (!act) return;
+    if (act === "cancel") return box.remove();
+    if (act === "del" && !confirm("این بند حذف شود؟")) return;
+    await sendEdit({ kind: "paragraph", shown, text: act === "del" ? "" : ta.value });
+  };
+}
+$("editBtn").onclick = () => {
+  S.editing = !S.editing;
+  $("editBar").hidden = !S.editing;
+  $("textView").classList.toggle("editing", S.editing);
+  $("editBtn").classList.toggle("primary", S.editing);
+  document.querySelectorAll(".paraeditor").forEach(x => x.remove());
+  if (S.editing) {
+    stopReading();
+    if (S.view !== "text") { S.view = "text"; syncChrome(); }
+    if (S.doc) jget(`/api/edits?doc=${S.doc.id}`).then(r => { $("edInfo").textContent = r.edits ? `${fa(r.edits)} ویرایش در این کتاب` : ""; }).catch(() => {});
+  }
+};
+// a word selected in the text goes into the "wrong word" box
+document.addEventListener("selectionchange", () => {
+  if (!S.editing) return;
+  const t = getSelection().toString().trim();
+  if (t && t.length <= 40 && $("textView").contains(getSelection().anchorNode) && !$("textView").querySelector(".paraeditor textarea:focus")) $("edFrom").value = t;
+});
+$("edWord").onclick = async () => {
+  if (!$("edFrom").value.trim()) return toast("کلمه‌ی غلط را بنویسید یا آن را در متن انتخاب کنید.");
+  if (await sendEdit({ kind: "word", from: $("edFrom").value, to: $("edTo").value })) { $("edFrom").value = ""; $("edTo").value = ""; toast("در کل کتاب عوض شد."); }
+};
+$("edReset").onclick = async () => {
+  if (confirm("همه‌ی ویرایش‌های این کتاب پاک شود؟") && await sendEdit({ kind: "reset" })) toast("ویرایش‌ها پاک شد.");
+};
+
+
+/* ---------------- a text typed or pasted: read aloud and saved as sound ---------------- */
+$("m4aLabel").hidden = /Android|iPhone|iPad/i.test(navigator.userAgent);   // (the phones have no M4A maker)
+async function openTyped() {
+  const t = $("typeText").value.trim();
+  if (!t) { toast("اول متنی بنویسید."); return false; }
+  stopReading();
+  const d = await (await api("/api/open?name=" + encodeURIComponent("متن من.txt"), { method: "POST", body: new TextEncoder().encode(t).buffer })).json();
+  if (d.error) { toast(d.error); return false; }
+  S.doc = d; S.page = 1; S.view = "text";
+  $("fileName").textContent = d.name;
+  $("welcome").hidden = true;
+  $("from").max = $("to").max = d.pages; $("to").value = d.pages;
+  note(`متن شما آماده است. با «خواندن» می‌خوانیم؛ با «ذخیره MP3» فایل صدا می‌سازیم؛ با «ویرایش متن» آن را عوض می‌کنید.`);
+  $("typePanel").hidden = true;
+  await loadPage(1);
+  return true;
+}
+const showType = () => { $("typePanel").hidden = false; $("typeText").focus(); };
+$("typeBtn").onclick = showType;
+$("typeBtn2").onclick = showType;
+$("typeRead").onclick = async () => { ensureAudio(); if (await openTyped() && S.paras.length) readFrom(0); };
+$("typeSave").onclick = async () => { if (await openTyped()) openSave("mp3"); };

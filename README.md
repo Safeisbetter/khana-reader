@@ -27,15 +27,23 @@ because translating uses about 7 GB.
 
 Needs an arm64 phone with Android 8 or newer and a recent Android System WebView (version 133 or newer).
 
-1. Download `KhanaReader-Android.apk` (about 1.3 GB) on your phone.
-2. Open it and allow installing from this source when Android asks.
+1. Choose one file and download it on your phone:
+   - **`KhanaReader-Android-lite.apk`** (about 0.7 GB): the light version, **without translation**. It reads Farsi books, pictures
+     and typed text aloud. Choose it if your connection is slow; a book in another language is not translated in this version.
+   - **`KhanaReader-Android.apk`** (about 1.3 GB): the full version, which also translates books from other languages into Farsi.
+2. Open it and allow installing from this source when Android asks. The two versions are signed with the same key: the full version
+   can be installed over the light one, and the other way round.
 
 > **Please note:** the Android app has not yet been tried on a real phone. If something goes wrong, please open an
 > [issue](../../issues). Please don't attach books you would not like to make public.
 
 ## What it does
 
-- **Reads aloud** in Farsi with a natural-sounding voice, and saves the reading as an **MP3**.
+- **Reads aloud** in Farsi with a natural-sounding voice, and saves the reading as an **MP3** or a **WAV** (on the Mac also **M4A**).
+- **Reads a text you type or paste:** the «✎ نوشتن متن» button opens an empty page; the text is read aloud and saved as sound like a book.
+- **Opens pictures** (a photo of a page, a screenshot: JPG, PNG, WebP…) and reads their text with OCR; several pictures make one document.
+- **Lets you correct the text:** «✎ ویرایش متن» changes or deletes a paragraph, or changes a word everywhere in the book; the corrections
+  are kept on your device only and reach the reading, the MP3 and the PDF.
 - **Opens** PDF, EPUB, FB2, PowerPoint (`.pptx`), Word (`.docx`) and plain text (`.txt`, `.md`) files. On the Mac it also opens older
   Word files, RTF, ODT and HTML, through macOS's own converter.
 - **Translates** from English, Dutch, German, French, Spanish, Italian, Portuguese, Turkish and Polish into Farsi, reads the
@@ -43,7 +51,7 @@ Needs an arm64 phone with Android 8 or newer and a recent Android System WebView
 - **Reads scanned pages** with OCR (text recognition).
 - **Leaves out what is not the book** as far as it can tell: page numbers, running heads, footnotes and notes sections, indexes,
   imprint pages, and the like.
-- **Easy to use while reading:** click any sentence to start reading from there; change the speed and the text size; search; see the page as it is printed.
+- **Easy to use while reading:** click any sentence to start reading from there; change the speed (in steps of 1%) and the text size; search; see the page as it is printed; light, dark or automatic theme.
 - **Opens password-protected PDFs:** it asks for the password in a small dialog. The password goes only to the PDF reader inside the
   app, never to the rest of the app, to a file, or anywhere else.
 - **Can read in your own voice** («صدای من»), from a recording or an audio file of you. Please use only your own voice: copying
@@ -91,6 +99,9 @@ interface; the compiler refuses `unsafe` anywhere else.
   the book on storage: an MP3 or PDF you ask for is made in the app's private storage until you save it where you choose, and on
   the Mac a Word or RTF file is copied for a moment to a temporary file for Apple's converter and deleted at once. Copies inside
   the web view's page and Android's Java layer are out of the app's reach, and Android keeps other apps out of this app's memory.
+- The only thing kept about a book is what you write yourself with "Edit text" (a paragraph you changed or removed, a word you
+  changed): a small file per book in the app's private folder, which you can clear at any time with "Undo all edits". Nothing
+  else about the book is written to storage.
 - On the Mac, the app runs in Apple's App Sandbox. It holds Apple's "outgoing network" permission only because Apple's WebKit
   needs it to start its own helper processes (the app does not open without it); the program has no network code and its page
   refuses every outside address.

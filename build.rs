@@ -6,6 +6,32 @@
 fn main() {
     let root = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let android = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android");
+    let ios = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios");
+    // `shell`: a phone, whose Java or Swift shell gives the folders, the models and the ONNX Runtime library at start
+    println!("cargo:rustc-check-cfg=cfg(shell)");
+    if android || ios {
+        println!("cargo:rustc-cfg=shell");
+    }
+    if ios {
+        // The iPhone: the small native layers are built here; CTranslate2 and ONNX Runtime are linked by the shell's build
+        // (ios/build.sh), so nothing is asked for here that does not exist yet.
+        cc::Build::new().file("native/typeset.c").opt_level(2).compile("typeset");
+        cc::Build::new().file("native/vision.m").flag("-fobjc-arc").warnings(false).opt_level(2).compile("vision_shim");
+        cc::Build::new()
+            .cpp(true)
+            .std("c++17")
+            .file("native/ct2_shim.cpp")
+            .include(root.join("vendor/ct2include"))
+            .warnings(false)
+            .opt_level(2)
+            .compile("ct2_shim");
+        lame(&root, false);
+        for f in ["CoreText", "Vision", "Foundation", "CoreGraphics"] {
+            println!("cargo:rustc-link-lib=framework={f}");
+        }
+        println!("cargo:rerun-if-changed=native");
+        return;
+    }
     if android {
         let ct2 = root.join("android/build/ct2");
         cc::Build::new()

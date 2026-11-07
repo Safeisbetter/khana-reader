@@ -8,11 +8,16 @@
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --paper: #10141B; --surface: #181E28; --ink: #E7EBF2; --muted: #97A1B2; --line: #2A3342;
     --lapis: #7FA6EE; --lapis-ink: #0D1626; --turq: #4CC2BC; --mark: #7A6418; --mark-ink: #FFF6D8;
     --reading: #1F2C44; --danger: #F2827A; --shade: rgba(0, 0, 0, .55); color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --paper: #10141B; --surface: #181E28; --ink: #E7EBF2; --muted: #97A1B2; --line: #2A3342;
+  --lapis: #7FA6EE; --lapis-ink: #0D1626; --turq: #4CC2BC; --mark: #7A6418; --mark-ink: #FFF6D8;
+  --reading: #1F2C44; --danger: #F2827A; --shade: rgba(0, 0, 0, .55); color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
@@ -63,7 +68,7 @@ main { padding: 20px 16px 64px; }
 .note.warn { border-color: var(--danger); color: var(--danger); }
 .text {
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: clamp(18px, 5vw, 46px);
-  font-size: var(--fs, 21px); line-height: 2.05; text-align: justify; overflow-wrap: anywhere;
+  font-size: var(--fs, 21px); line-height: 2.05; text-align: start; text-wrap: pretty; overflow-wrap: anywhere;
 }
 .text p { margin: 0 0 .5em; padding: .05em .35em; border-radius: 6px; unicode-bidi: plaintext; cursor: pointer; transition: background .2s; }
 .text p:hover { background: color-mix(in srgb, var(--reading) 55%, transparent); }
@@ -145,3 +150,14 @@ input[type=text] { font: inherit; padding: 5px 8px; border: 1px solid var(--line
 .grow { flex: 1; min-width: 0; }
 input.num { width: 4.5em; }
 #pageImg.stale { opacity: .3; transition: opacity .15s; }
+
+/* editing the text */
+#editBar { align-items: center; gap: 8px; flex-wrap: wrap; }
+#editBar input { min-width: 150px; flex: 1 1 150px; }
+.editnote { color: var(--muted); font-size: 13px; }
+.text.editing p[data-i] { outline: 1px dashed var(--line); cursor: text; }
+.paraeditor { display: grid; gap: 8px; margin: 8px 0; padding: 10px; border: 2px solid var(--lapis); border-radius: 10px; background: var(--surface); }
+.paraeditor textarea { width: 100%; min-height: 110px; font: inherit; line-height: 1.9; padding: 8px; box-sizing: border-box; }
+.paraeditor .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+#typeText { width: 100%; min-height: 220px; font: inherit; font-size: var(--fs, 21px); line-height: 1.9; padding: 10px; box-sizing: border-box; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; }

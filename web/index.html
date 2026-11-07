@@ -17,7 +17,8 @@
         <span class="offline" title="بدون اینترنت؛ هیچ داده‌ای از این کامپیوتر خارج نمی‌شود">● آفلاین و خصوصی</span>
       </div>
       <label class="btn primary" for="fileInput">باز کردن فایل</label>
-      <input id="fileInput" type="file" hidden accept=".pdf,.doc,.docx,.pptx,.epub,.rtf,.odt,.txt,.md,.html,.htm,.fb2">
+      <button type="button" id="typeBtn" title="متن را بنویسید یا بچسبانید تا خوانده شود و به صورت فایل صدا ذخیره شود">✎ نوشتن متن</button>
+      <input id="fileInput" type="file" hidden multiple accept=".pdf,.doc,.docx,.pptx,.epub,.rtf,.odt,.txt,.md,.html,.htm,.fb2,.png,.jpg,.jpeg,.webp,.gif,.bmp,.heic,image/*">
     </div>
     <div class="row" id="docTools">
       <div class="seg" role="group" aria-label="نما">
@@ -35,7 +36,7 @@
       <button id="stop" type="button" disabled>■ توقف</button>
       <div class="speedctl" role="group" aria-label="سرعت خواندن">
         <button id="slower" type="button" aria-label="آهسته‌تر" title="آهسته‌تر (⌘[)">−</button>
-        <button id="speedChip" type="button" title="برگرداندن سرعت به ۱× (⌘0)"></button>
+        <button id="speedChip" type="button" title="برگرداندن سرعت به ۱۰۰٪ (⌘0)"></button>
         <button id="faster" type="button" aria-label="تندتر" title="تندتر (⌘])">+</button>
       </div>
       <span class="spacer"></span>
@@ -49,6 +50,15 @@
         <span class="count" id="count"></span>
       </div>
       <button id="copy" type="button" class="hide-sm">کپی متن صفحه</button>
+      <button id="editBtn" type="button" title="تغییر یا حذف یک بند یا کلمه‌ی متن؛ برای خواندن، ذخیره‌ی MP3 و PDF هم اثر می‌کند">✎ ویرایش متن</button>
+    </div>
+    <div class="row" id="editBar" hidden>
+      <span class="editnote">روی یک بند کلیک کنید تا آن را عوض یا حذف کنید.</span>
+      <input id="edFrom" type="text" placeholder="کلمه‌ی غلط (در کل کتاب)" aria-label="کلمه‌ی غلط">
+      <input id="edTo" type="text" placeholder="کلمه‌ی درست (خالی: حذف)" aria-label="کلمه‌ی درست">
+      <button id="edWord" type="button" class="primary">عوض کردن در کل کتاب</button>
+      <button id="edReset" type="button" title="همه‌ی ویرایش‌های این کتاب را پاک می‌کند">بازگرداندن همه‌ی ویرایش‌ها</button>
+      <span id="edInfo" class="editnote"></span>
     </div>
   </div>
 </header>
@@ -58,7 +68,8 @@
     <section class="welcome" id="welcome">
       <h1>یک فایل را باز کنید</h1>
       <p>فایل را روی این صفحه بکشید یا «باز کردن فایل» را بزنید. خوانا متن فارسی را مرتب نشان می‌دهد، با صدای بلند می‌خواند و می‌تواند آن را MP3 ذخیره کند.</p>
-      <div class="formats"><span>PDF</span><span>DOCX</span><span>DOC</span><span>EPUB</span><span>RTF</span><span>ODT</span><span>TXT</span></div>
+      <div class="formats"><span>PDF</span><span>DOCX</span><span>DOC</span><span>EPUB</span><span>RTF</span><span>ODT</span><span>TXT</span><span>تصویر (JPG، PNG…)</span></div>
+      <p><button type="button" class="primary" id="typeBtn2">✎ یا یک متن بنویسید</button></p>
       <p class="hint">همه‌چیز روی همین کامپیوتر انجام می‌شود. اینترنت لازم نیست و فایل شما جایی فرستاده نمی‌شود.</p>
       <p class="hint">کلیدها: <kbd>Space</kbd> خواندن/مکث · <kbd>← →</kbd> صفحه بعد/قبل · <kbd>⌘[</kbd> <kbd>⌘]</kbd> سرعت · <kbd>⌘0</kbd> سرعت عادی · <kbd>⌘,</kbd> تنظیمات</p>
     </section>
@@ -98,18 +109,27 @@
     </div>
     <div class="field">
       <label for="speed">سرعت خواندن: <span id="speedVal"></span></label>
-      <input id="speed" type="range" min="0.5" max="2" step="0.05">
-      <div class="scale"><span>آهسته ۰٫۵×</span><span>۱×</span><span>تند ۲×</span></div>
+      <input id="speed" type="range" min="0.5" max="2" step="0.01">
+      <div class="scale"><span>آهسته ۵۰٪</span><span>۱۰۰٪</span><span>تند ۲۰۰٪</span></div>
       <div class="presets" role="group" aria-label="سرعت‌های آماده">
-        <button type="button" data-speed="0.75">۰٫۷۵×</button>
-        <button type="button" data-speed="1" class="primary" id="speedReset" title="⌘0">↺ سرعت عادی ۱×</button>
-        <button type="button" data-speed="1.25">۱٫۲۵×</button>
-        <button type="button" data-speed="1.5">۱٫۵×</button>
+        <button type="button" data-speed="0.75">۷۵٪</button>
+        <button type="button" data-speed="1" class="primary" id="speedReset" title="⌘0">↺ سرعت عادی ۱۰۰٪</button>
+        <button type="button" data-speed="1.25">۱۲۵٪</button>
+        <button type="button" data-speed="1.5">۱۵۰٪</button>
       </div>
     </div>
     <div class="field">
       <label for="fontSize">اندازه قلم: <span id="fontVal"></span></label>
       <input id="fontSize" type="range" min="14" max="52" step="1">
+    </div>
+    <div class="field">
+      <span class="lbl">پوسته</span>
+      <span class="hint">«خودکار»: مثل حالت تاریک یا روشن دستگاه.</span>
+      <div class="hlpick" role="radiogroup" aria-label="پوسته">
+        <label><input type="radio" name="theme" value="auto"><span>خودکار</span></label>
+        <label><input type="radio" name="theme" value="light"><span>روشن</span></label>
+        <label><input type="radio" name="theme" value="dark"><span>تاریک</span></label>
+      </div>
     </div>
     <div class="field">
       <span class="lbl">رنگ کلمه‌ای که خوانده می‌شود</span>
@@ -170,10 +190,24 @@
   </div>
 </div>
 
+<!-- a text typed or pasted here, read aloud and saved as sound -->
+<div class="panel" id="typePanel" hidden>
+  <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="typeTitle">
+    <div class="panel-head"><h2 id="typeTitle">نوشتن متن</h2><button type="button" data-close>بستن</button></div>
+    <p class="hint">متن را اینجا بنویسید یا بچسبانید. با «خواندن» می‌خوانیم؛ با «ذخیره صدا» به صورت MP3 یا فایل صدای دیگر ذخیره می‌شود.</p>
+    <div class="field"><textarea id="typeText" dir="auto" rows="12" placeholder="متن شما…" aria-label="متن"></textarea></div>
+    <div class="inline">
+      <button type="button" class="primary" id="typeRead">▶ خواندن</button>
+      <button type="button" id="typeSave">ذخیره صدا…</button>
+      <button type="button" data-close>انصراف</button>
+    </div>
+  </div>
+</div>
+
 <!-- MP3 -->
 <div class="panel" id="mp3" hidden>
   <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="mp3Title">
-    <div class="panel-head"><h2 id="mp3Title">ذخیره به صورت MP3</h2><button type="button" data-close>بستن</button></div>
+    <div class="panel-head"><h2 id="mp3Title">ذخیره به صورت فایل صدا</h2><button type="button" data-close>بستن</button></div>
     <div class="field">
       <span class="lbl">کدام بخش؟</span>
       <div class="radio">
@@ -184,9 +218,17 @@
           <input id="to" type="number" min="1" value="1" class="num"></label>
       </div>
     </div>
+    <div class="field" id="fmtField">
+      <span class="lbl">قالب فایل صدا</span>
+      <div class="radio">
+        <label><input type="radio" name="afmt" value="mp3" checked> MP3 (کم‌حجم)</label>
+        <label><input type="radio" name="afmt" value="wav"> WAV (بدون فشرده‌سازی)</label>
+        <label id="m4aLabel"><input type="radio" name="afmt" value="m4a"> M4A (AAC)</label>
+      </div>
+    </div>
     <p class="hint" id="mp3Voice"></p>
     <div class="inline">
-      <button type="button" class="primary" id="mp3Start">ساختن MP3</button>
+      <button type="button" class="primary" id="mp3Start">ساختن فایل صدا</button>
       <button type="button" id="mp3Cancel" hidden>لغو</button>
     </div>
     <div id="mp3Status" hidden class="field">

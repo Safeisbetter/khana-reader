@@ -1,6 +1,6 @@
 
 pub fn stretch(input: &[f32], speed: f64, rate: usize) -> Vec<f32> {
-    if (speed - 1.0).abs() < 0.03 || input.len() < rate / 10 {
+    if (speed - 1.0).abs() < 0.008 || input.len() < rate / 10 {
         return input.to_vec();
     }
     let min_p = rate / 400;
