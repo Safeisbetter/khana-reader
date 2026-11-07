@@ -44,7 +44,6 @@ fn menu() -> muda::Menu {
 
 enum UserEvent {
     Menu(MenuEvent),
-    PageGone,
 }
 
 pub fn run() {
@@ -93,7 +92,6 @@ pub fn run() {
         });
     };
     let selftest = if std::env::var("KHANA_SELFTEST").is_ok() { include_str!("selftest.js") } else { "" };
-    let gone = event_loop.create_proxy();
     let mut web_context = WebContext::new(Some(khana::app::data_dir().join("webview")));
     let webview = WebViewBuilder::new_with_web_context(&mut web_context)
         .with_initialization_script(selftest)
@@ -109,9 +107,6 @@ pub fn run() {
             _ => wry::PermissionResponse::Deny,
         })
         .with_devtools(cfg!(debug_assertions))
-        .with_on_web_content_process_terminate_handler(move || {
-            let _ = gone.send_event(UserEvent::PageGone);
-        })
         .build(&window)
         .expect("webview");
 
@@ -123,10 +118,6 @@ pub fn run() {
                 if MENU_COMMANDS.contains(&id) {
                     let _ = webview.evaluate_script(&format!("window.khanaMenu && window.khanaMenu({id:?})"));
                 }
-            }
-            Event::UserEvent(UserEvent::PageGone) => {
-                eprintln!("the page's process ended; loading the page again");
-                let _ = webview.load_url(START_URL);
             }
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
                 app.shutdown();
