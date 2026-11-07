@@ -41,6 +41,8 @@ pub mod typeset;
 pub mod vision;
 #[cfg(not(any(target_os = "ios", windows)))]
 pub mod vosk;
+#[cfg(windows)]
+pub mod winmenu;
 pub mod wipe;
 
 /// Text from a fixed C buffer the native side filled in (stops at the first NUL, or the buffer's
