@@ -36,18 +36,27 @@ pub fn replace_word(text: &str, from: &str, to: &str) -> String {
     }
 }
 
-pub fn key_of(name: &str, n_pages: usize) -> String {
+pub fn fingerprint(pages: &[Vec<String>]) -> String {
+    pages.iter().flatten().filter(|p| !p.trim().is_empty()).flat_map(|p| p.chars()).take(1000).collect()
+}
+
+pub fn key_of(name: &str, n_pages: usize, fingerprint: &str) -> String {
     let mut h: u64 = 0xcbf29ce484222325;
-    for b in name.bytes().chain(n_pages.to_string().bytes()) {
+    for b in name.bytes().chain(n_pages.to_string().bytes()).chain(fingerprint.bytes()) {
         h ^= b as u64;
         h = h.wrapping_mul(0x100000001b3);
     }
     format!("{h:016x}")
 }
 
-pub fn file_for(name: &str, n_pages: usize) -> PathBuf {
-    crate::app::data_dir().join("edits").join(format!("{}.json", key_of(name, n_pages)))
+pub fn file_for(name: &str, n_pages: usize, fingerprint: &str) -> PathBuf {
+    crate::app::data_dir().join("edits").join(format!("{}.json", key_of(name, n_pages, fingerprint)))
 }
+
+pub const MAX_PARAGRAPH_CHARS: usize = 100_000;
+pub const MAX_WORD_CHARS: usize = 200;
+pub const MAX_EDITS: usize = 5_000;
+const MAX_FILE_BYTES: u64 = 20 * 1024 * 1024;
 
 impl Edits {
     pub fn is_empty(&self) -> bool {
@@ -55,6 +64,9 @@ impl Edits {
     }
 
     pub fn load(path: &Path) -> Edits {
+        if std::fs::metadata(path).map_or(false, |m| m.len() > MAX_FILE_BYTES) {
+            return Edits::default();
+        }
         let v: Value = match std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()) {
             Some(v) => v,
             None => return Edits::default(),
@@ -107,6 +119,9 @@ impl Edits {
     }
 
     pub fn edit_paragraph(&mut self, base: &[String], shown: &str, new: &str) -> bool {
+        if new.chars().count() > MAX_PARAGRAPH_CHARS || self.paras.len() >= MAX_EDITS {
+            return false;
+        }
         let lines: Vec<String> = new.split('\n').map(|l| l.split_whitespace().collect::<Vec<_>>().join(" ")).filter(|l| !l.is_empty()).collect();
         if let Some(e) = self.paras.iter_mut().find(|(_, to)| to.iter().any(|l| l == shown)) {
             let at = e.1.iter().position(|l| l == shown).unwrap();
@@ -126,7 +141,7 @@ impl Edits {
 
     pub fn set_word(&mut self, from: &str, to: &str) {
         let from = from.trim();
-        if from.is_empty() {
+        if from.is_empty() || from.chars().count() > MAX_WORD_CHARS || to.chars().count() > MAX_WORD_CHARS || self.words.len() >= MAX_EDITS {
             return;
         }
         self.words.retain(|(a, _)| a != from);
