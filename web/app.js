@@ -901,7 +901,7 @@ function openSave(kind) {
   }
   const pdf = saveKind === "pdf";
   $("mp3Title").textContent = pdf ? "ذخیره‌ی ترجمه‌ی فارسی به صورت PDF" : "ذخیره به صورت فایل صدا";
-  $("fmtField").hidden = pdf;
+  $("fmtField").hidden = pdf; $("fastField").hidden = pdf;
   $("mp3Start").textContent = pdf ? "ساختن PDF" : "ساختن فایل صدا";
   applySettings();
   if (pdf) $("mp3Voice").textContent = "هر صفحه روی همین کامپیوتر به فارسی ترجمه می‌شود (برای هر صفحه چند ثانیه تا یک دقیقه) و فایل PDF در پوشه Downloads ذخیره می‌شود.";
@@ -926,7 +926,7 @@ $("mp3Start").onclick = async () => {
     }
     job = saveKind === "pdf" ? await jpost("/api/pdf", { doc: S.doc.id, first, last })
       : await jpost("/api/mp3", { doc: S.doc.id, first, last, voice: S.settings.voice, speed: S.settings.speed,
-      format: document.querySelector("input[name=afmt]:checked").value,
+      format: document.querySelector("input[name=afmt]:checked").value, fast: $("fastExport").checked,
       bitrate: S.settings.bitrate, reversed: S.settings.reversed, persianYeh: S.settings.persianYeh, translate: translating() });
     $("mp3Status").hidden = false; $("mp3Reveal").hidden = true;
     $("mp3Start").disabled = true; $("mp3Cancel").hidden = false;
@@ -1033,6 +1033,7 @@ $("edReset").onclick = async () => {
 
 
 /* ---------------- a text typed or pasted: read aloud and saved as sound ---------------- */
+$("fastExport").checked = /Android|iPhone|iPad/i.test(navigator.userAgent);   // (on by default on the phones, which are slower)
 $("m4aLabel").hidden = /Android|iPhone|iPad/i.test(navigator.userAgent);   // (the phones have no M4A maker)
 // (Windows: no MP3 and no M4A maker yet: WAV)
 if (/Windows/i.test(navigator.userAgent)) {

@@ -323,9 +323,20 @@ struct Mp3Req {
     bitrate: u32,
     opts: Opts,
     format: String,
+    fast: bool,
+}
+
+struct ListenAgain;
+
+impl Drop for ListenAgain {
+    fn drop(&mut self) {
+        tts::LISTEN.store(true, Ordering::Relaxed);
+    }
 }
 
 fn run_job(job: Arc<Job>, r: Mp3Req) {
+    let _listen = ListenAgain;
+    tts::LISTEN.store(!r.fast, Ordering::Relaxed);
     let wav = r.format == "wav" || r.format == "m4a";
     let path = std::env::temp_dir().join(format!("khana-{}.{}", job.id, if wav { "wav" } else { "mp3" }));
     *job.path.lock().unwrap() = Some(path.clone());
@@ -877,7 +888,8 @@ impl App {
                 let format = match req.get("format").and_then(|v| v.as_str()) { Some("wav") => "wav", Some("m4a") => "m4a", _ => "mp3" }.to_string();
                 let job = self.add_job(Job::new(format!("{stem} - p{rng}.{format}")));
                 let info = job.info();
-                let r = Mp3Req { doc: d, first, last, voice, speed, bitrate, opts, format };
+                let fast = req.get("fast").and_then(|v| v.as_bool()).unwrap_or(false);
+                let r = Mp3Req { doc: d, first, last, voice, speed, bitrate, opts, format, fast };
                 std::thread::spawn(move || run_job(job, r));
                 Ok(reply_json(&info))
             }

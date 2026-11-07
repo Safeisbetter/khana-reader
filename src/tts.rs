@@ -20,6 +20,8 @@ const PACE_HIGH: f64 = 1.6;
 const PACE_TRIES: usize = 5;
 pub const PARAGRAPH_GAP: f64 = 0.9;
 
+pub static LISTEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
 
 #[derive(Clone)]
 pub enum Arr {
@@ -567,7 +569,7 @@ impl Engine {
                 (Some(p), Some(u)) => (p / u).log2().abs() < 0.5,
                 _ => true,
             };
-            let (heard, missing) = if loud_ok { asr::heard_score(chunk, &speech, RATE) } else { (None, Vec::new()) };
+            let (heard, missing) = if loud_ok && LISTEN.load(std::sync::atomic::Ordering::Relaxed) { asr::heard_score(chunk, &speech, RATE) } else { (None, Vec::new()) };
             let words_ok = asr::heard_ok(heard, &missing);
             let b = |x: bool| if x { 1.0 } else { 0.0 };
             let key = [b(loud_ok), b(same_voice), b(words_ok), b(dur_ok), b(pace_ok), -(missing.len() as f64), heard.unwrap_or(1.0),
