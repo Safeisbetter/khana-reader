@@ -85,6 +85,7 @@ pub struct Document {
     pub pdfjs: bool,
     given: Mutex<HashMap<usize, (Vec<u8>, usize, usize)>>,
     pub edits: Mutex<crate::edits::Edits>,
+    pub edits_file: std::path::PathBuf,
 }
 
 pub fn ext_of(name: &str) -> String {
@@ -138,6 +139,7 @@ impl Document {
         drop_addresses(&mut pages);
         let n_pages = pages.len();
         let words = DocWords::count(&pages);
+        let edits_file = crate::edits::file_for(name, n_pages, &crate::edits::fingerprint(&pages));
         let doc = Arc::new(Document {
             id: new_id(),
             name: name.to_string(),
@@ -154,7 +156,8 @@ impl Document {
             engines,
             pdfjs,
             given: Mutex::new(HashMap::new()),
-            edits: Mutex::new(crate::edits::Edits::load(&crate::edits::file_for(name, n_pages))),
+            edits: Mutex::new(crate::edits::Edits::load(&edits_file)),
+            edits_file,
         });
         let mut first: Vec<usize> = doc.st.lock().unwrap().scanned.iter().copied().collect();
         first.sort();

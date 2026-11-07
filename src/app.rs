@@ -716,7 +716,7 @@ impl App {
             "ocr_image_post" => {
                 let u32_at = |at: usize| body.get(at..at + 4).map_or(0, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize);
                 let (w, h) = (u32_at(0), u32_at(4));
-                if w == 0 || h == 0 || w > 20000 || h > 20000 || w.checked_mul(h) != Some(body.len().saturating_sub(8)) {
+                if w == 0 || h == 0 || w > 20000 || h > 20000 || w * h > 16_000_000 || w.checked_mul(h) != Some(body.len().saturating_sub(8)) {
                     return Err(bad("تصویر درست نیست."));
                 }
                 let Some(ocr) = self.engines.ocr.as_ref() else { return Err(bad("تشخیص متن در این دستگاه نیست.")) };
@@ -729,8 +729,9 @@ impl App {
                 let pages: Vec<Vec<String>> = v.get("pages").and_then(|p| p.as_array()).map(|a| {
                     a.iter().take(2000).map(|pg| pg.as_array().map(|x| x.iter().filter_map(|t| t.as_str()).map(|t| t.chars().take(20_000).collect::<String>()).collect()).unwrap_or_default()).collect()
                 }).unwrap_or_default();
-                if pages.is_empty() {
-                    return Err(bad("متنی پیدا نشد."));
+                let total: usize = pages.iter().flatten().map(|p| p.len()).sum();
+                if pages.is_empty() || total > 60_000_000 || pages.iter().any(|p| p.len() > 5_000) {
+                    return Err(bad("متنی پیدا نشد، یا خیلی بزرگ است."));
                 }
                 *self.docs.lock().unwrap() = None;
                 let d = crate::doc::open_pages(&name, pages, self.engines.clone());
@@ -801,6 +802,9 @@ impl App {
                 if n < 1 || n > d.n_pages {
                     return Err(bad("شماره صفحه درست نیست."));
                 }
+                if get("text").chars().count() > crate::edits::MAX_PARAGRAPH_CHARS || get("shown").chars().count() > crate::edits::MAX_PARAGRAPH_CHARS {
+                    return Err(bad("متن خیلی بزرگ است."));
+                }
                 let kind = get("kind");
                 let mut ed = d.edits.lock().unwrap().clone();
                 match kind.as_str() {
@@ -819,7 +823,7 @@ impl App {
                     "reset" => ed = crate::edits::Edits::default(),
                     _ => return Err(bad("درخواست ناشناخته.")),
                 }
-                ed.save(&crate::edits::file_for(&d.name, d.n_pages)).map_err(ApiError::Internal)?;
+                ed.save(&d.edits_file).map_err(ApiError::Internal)?;
                 let count = ed.paras.len() + ed.words.len();
                 *d.edits.lock().unwrap() = ed;
                 Ok(reply_json(&json!({"edits": count})))

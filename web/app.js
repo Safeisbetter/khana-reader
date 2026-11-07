@@ -258,11 +258,15 @@ $("settingsBtn").onclick = () => openPanel("settings");
 // pictures (a photo of a page, a screenshot): read with the app's text recognition, one page per picture
 const isImage = f => /\.(png|jpe?g|webp|gif|bmp|heic|tiff?)$/i.test(f.name) || /^image\//.test(f.type || "");
 async function openImages(files) {
+  // (limits: the pictures are decoded in the page; a huge one is refused before anything is drawn)
+  if (files.length > 50) throw new Error("حداکثر ۵۰ تصویر را می‌توان با هم باز کرد.");
+  if (files.some(f => f.size > 80 * 1024 * 1024)) throw new Error("یکی از تصویرها خیلی بزرگ است (بیشتر از ۸۰ مگابایت).");
   const pages = [];
   for (let i = 0; i < files.length; i++) {
     note(`در حال خواندن تصویر ${fa(i + 1)} از ${fa(files.length)}…`);
     let bmp;
     try { bmp = await createImageBitmap(files[i]); } catch (e) { throw new Error("این تصویر باز نشد: " + files[i].name); }
+    if (bmp.width * bmp.height > 60e6) { bmp.close(); throw new Error("تصویر خیلی بزرگ است: " + files[i].name); }
     // (about the size of a page scanned at 250 dpi: large pictures are made smaller, small ones larger)
     const long = Math.max(bmp.width, bmp.height), k = long > 3200 ? 3200 / long : long < 1600 ? Math.min(2, 2200 / long) : 1;
     const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
