@@ -34,6 +34,13 @@ Needs an arm64 phone with Android 8 or newer and a recent Android System WebView
 2. Open it and allow installing from this source when Android asks. The two versions are signed with the same key: the full version
    can be installed over the light one, and the other way round.
 
+### Windows (experimental)
+
+An experimental Windows 10/11 (64-bit) version is on a separate **[pre-release](../../releases/tag/v1.1-windows-experimental)**:
+download `KhanaReader-Windows-experimental.zip` (about 0.5 GB), unzip it, and double-click `KhanaReader.exe`. It needs Microsoft's
+Edge WebView2 (Windows 11 and an updated Windows 10 have it). **Nobody has tried it on a real PC yet**: GitHub's own Windows computers
+built it, opened its window and made the voice speak. It has no translation, no MP3 (WAV instead) and no translated PDF yet.
+
 > **Please note:** the Android app has not yet been tried on a real phone. If something goes wrong, please open an
 > [issue](../../issues). Please don't attach books you would not like to make public.
 
