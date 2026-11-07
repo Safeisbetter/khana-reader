@@ -58,6 +58,8 @@ rm -rf "$A/app/models/translate/nllb-200-3.3B"
 # (KHANA_PUBLIC=1: the public download, without the voices whose source is unknown)
 if [ -n "${KHANA_PUBLIC:-}" ]; then rm -rf "$A/app/models/voices"; fi
 rm -rf "$A/app/models/translate/nllb-200-1.3B"  # (the Mac's larger model: too heavy for a phone, 3.4 GB at its peak)
+# (KHANA_LITE=1: the light download, without the translator: about half the size; foreign-language books are not translated)
+if [ -n "${KHANA_LITE:-}" ]; then rm -rf "$A/app/models/translate"; fi
 rm -rf "$A/app/models/asr/vosk-model-small-fa-0.5/test"
 [ -f "$OUT/fonts/Vazirmatn.ttf" ] || { mkdir -p "$OUT/fonts"; swift "$HERE/tools/woff2_to_ttf.swift" "$ROOT/web/Vazirmatn.woff2" "$OUT/fonts/Vazirmatn.ttf"; }
 cp "$OUT/fonts/Vazirmatn.ttf" "$A/fonts/"
@@ -89,6 +91,7 @@ cp "$OUT/dex/classes.dex" "$OUT/extra/"
 
 # 6. signed with the app's own key (made once, kept in android/keystore: back it up; an update must
 # be signed with the same key)
+APK=KhanaReader.apk; [ -n "${KHANA_LITE:-}" ] && APK=KhanaReader-lite.apk
 K="$HERE/keystore"
 if [ ! -f "$K/khana.jks" ]; then
   mkdir -p "$K"
@@ -98,7 +101,7 @@ if [ ! -f "$K/khana.jks" ]; then
   keytool -genkeypair -keystore "$K/khana.jks" -storepass:file "$K/password.txt" -keypass:file "$K/password.txt" \
     -alias khana -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=Khana Reader" >/dev/null
 fi
-"$BT/apksigner" sign --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --ks "$K/khana.jks" --ks-pass "file:$K/password.txt" --ks-key-alias khana --out "$OUT/KhanaReader.apk" "$OUT/aligned.apk"
-"$BT/apksigner" verify -v --print-certs "$OUT/KhanaReader.apk" | grep -E "Verified using v[23] |Signer #1 certificate SHA-256"
+"$BT/apksigner" sign --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --ks "$K/khana.jks" --ks-pass "file:$K/password.txt" --ks-key-alias khana --out "$OUT/$APK" "$OUT/aligned.apk"
+"$BT/apksigner" verify -v --print-certs "$OUT/$APK" | grep -E "Verified using v[23] |Signer #1 certificate SHA-256"
 rm -f "$OUT/unsigned.apk" "$OUT/aligned.apk"
-ls -la "$OUT/KhanaReader.apk"
+ls -la "$OUT/$APK"

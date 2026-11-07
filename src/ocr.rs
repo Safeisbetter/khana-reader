@@ -17,7 +17,7 @@ pub struct Line {
     pub bot: f64,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub fn vision_lines(gray: &[u8], w: usize, h: usize) -> Vec<Line> {
     let Some(s) = crate::ffi::vision::recognize(gray, w, h) else { return Vec::new() };
     let mut out = Vec::new();
@@ -605,7 +605,7 @@ pub fn ocr_gray(gray: &[u8], w: usize, h: usize) -> Vec<String> {
     ocr_gray_traced(gray, w, h, &mut Trace::default())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub fn ocr_gray_traced(gray: &[u8], w: usize, h: usize, tr: &mut Trace) -> Vec<String> {
     ocr_found_lines(gray, w, h, tr)
 }
@@ -642,7 +642,7 @@ fn read_box(gray: &[u8], w: usize, h: usize, l: &Line) -> String {
     fa_read_line(&crop, ye - ys, cw)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub fn ocr_gray_traced(gray: &[u8], w: usize, h: usize, tr: &mut Trace) -> Vec<String> {
     let mut lines = vision_lines(&gray, w, h);
     for l in lines.iter_mut() {

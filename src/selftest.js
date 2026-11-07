@@ -32,7 +32,7 @@ addEventListener("load", () => setTimeout(async () => {
       return;
     }
     const tOpen = Date.now();
-    await openFile(new File([b], "selftest.pdf"));
+    await openFile(new File([b], window.KHANA_SELFTEST_NAME || "selftest.pdf"));
     // a long translated page is shown from its first paragraphs on, and grows while it is read
     if (S.doc.canTranslate) {
       while (!S.paras.length && Date.now() - tOpen < 180000) await new Promise(r => setTimeout(r, 200));

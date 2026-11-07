@@ -60,6 +60,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     private static Server server;
     /** the bar and, under it, the page (or a message) */
     private LinearLayout outer;
+    private Toolbar bar;
     private FrameLayout root;
     private WebView web;
     private WebMessagePort pagePort;
@@ -67,22 +68,42 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     private PermissionRequest micRequest;
     private Exporter.Saved saving;
 
+    // the page's own dark colours (web/app.css, --paper)
+    private static final int DARK_PAPER = Color.rgb(16, 20, 27);
+
+    /** The device is in dark mode (the page follows by itself: prefers-color-scheme). */
+    private boolean night() {
+        return (getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration c) {
+        super.onConfigurationChanged(c);
+        // (the activity is not recreated for a change of mode: the colours around the page change here)
+        boolean n = night();
+        if (outer != null) outer.setBackgroundColor(n ? DARK_PAPER : Color.WHITE);
+        if (root != null) root.setBackgroundColor(n ? DARK_PAPER : Color.WHITE);
+        if (web != null) web.setBackgroundColor(n ? DARK_PAPER : Color.WHITE);
+        if (bar != null) bar.setBackgroundColor(n ? Color.rgb(20, 62, 52) : Color.rgb(31, 111, 92));
+    }
+
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
-        outer.setBackgroundColor(Color.WHITE);
+        outer.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
         // the app's bar (its menu: the Mac menu's commands) is the window's own Toolbar, so that both it
         // and the page are kept clear of the system bars here (edge to edge: Android 15 and newer)
-        Toolbar bar = new Toolbar(this);
+        bar = new Toolbar(this);
         bar.setTitle("خوانا");
-        bar.setBackgroundColor(Color.rgb(31, 111, 92));
+        bar.setBackgroundColor(night() ? Color.rgb(20, 62, 52) : Color.rgb(31, 111, 92));
         bar.setTitleTextColor(Color.WHITE);
         outer.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         setActionBar(bar);
         root = new FrameLayout(this);
-        root.setBackgroundColor(Color.WHITE);
+        root.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
         outer.addView(root, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         outer.setOnApplyWindowInsetsListener((v, in) -> {
             if (Build.VERSION.SDK_INT >= 30) {
@@ -172,7 +193,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         if (web != null) return;
         CookieManager.getInstance().setAcceptCookie(false);
         web = new WebView(this);
-        web.setBackgroundColor(Color.WHITE);
+        web.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setBlockNetworkLoads(true);
@@ -259,6 +280,8 @@ public final class MainActivity extends Activity implements Exporter.Asker {
             Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
             String[] accept = params.getAcceptTypes();
             if (accept != null && String.join(",", accept).contains("audio/")) i.setType("audio/*");
+            // (several pictures at once are the pages of one document)
+            else i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
             try {
                 startActivityForResult(i, PICK_FILE);
             } catch (Exception e) {
@@ -303,7 +326,15 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     protected void onActivityResult(int request, int result, Intent data) {
         Uri u = result == RESULT_OK && data != null ? data.getData() : null;
         if (request == PICK_FILE && picking != null) {
-            picking.onReceiveValue(u == null ? null : new Uri[]{u});
+            Uri[] chosen = null;
+            if (result == RESULT_OK && data != null && data.getClipData() != null) {
+                android.content.ClipData cd = data.getClipData();
+                chosen = new Uri[cd.getItemCount()];
+                for (int k = 0; k < chosen.length; k++) chosen[k] = cd.getItemAt(k).getUri();
+            } else if (u != null) {
+                chosen = new Uri[]{u};
+            }
+            picking.onReceiveValue(chosen);
             picking = null;
         } else if (request == SAVE && saving != null) {
             Exporter.Saved s = saving;

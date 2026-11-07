@@ -4,6 +4,7 @@
 pub mod consts;
 pub mod difflib;
 pub mod doc;
+pub mod edits;
 pub mod ebook;
 pub mod phon;
 pub mod pyre;
@@ -25,7 +26,7 @@ pub mod app;
 #[cfg(target_os = "macos")]
 pub mod mac;
 pub mod platform;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub mod android;
 pub mod engines;
 #[allow(unsafe_code)]

@@ -11,7 +11,7 @@ pub fn set_models_dir(p: PathBuf) {
     let _ = MODELS.set(p);
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(shell))]
 pub fn web_dir() -> PathBuf {
     let exe = std::env::current_exe().unwrap_or_default();
     if let Some(c) = exe.parent().and_then(|p| p.parent()) {
@@ -23,7 +23,7 @@ pub fn web_dir() -> PathBuf {
     PathBuf::from(".").join("web")
 }
 
-#[cfg(target_os = "android")]
+#[cfg(shell)]
 pub fn web_dir() -> PathBuf {
     crate::platform::web_dir()
 }
@@ -40,9 +40,9 @@ pub fn models_dir() -> &'static PathBuf {
                 return r;
             }
         }
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(shell))]
         return PathBuf::from(".").join("models");
-        #[cfg(target_os = "android")]
+        #[cfg(shell)]
         PathBuf::from("models")
     })
 }
@@ -56,7 +56,7 @@ pub fn translate_dir() -> PathBuf {
     if let Ok(name) = std::env::var("KHANA_TRANSLATE_MODEL") {
         return dir.join(name);
     }
-    if cfg!(not(target_os = "android")) {
+    if cfg!(not(shell)) {
         for name in ["nllb-200-3.3B", "nllb-200-1.3B"] {
             if dir.join(name).join("model.bin").is_file() {
                 return dir.join(name);

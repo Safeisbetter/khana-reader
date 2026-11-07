@@ -5,11 +5,13 @@ use crate::phon::pronounce_word;
 use crate::pyre::*;
 use crate::vocab::{asr_dir, english_ph};
 use std::collections::HashMap;
+#[cfg(not(target_os = "ios"))]
 use crate::ffi::vosk::SharedModel;
 use std::sync::OnceLock;
 
 pub const HEARD_MIN: f64 = 0.75;
 
+#[cfg(not(target_os = "ios"))]
 fn model() -> Option<&'static vosk::Model> {
     static M: OnceLock<Option<SharedModel>> = OnceLock::new();
     M.get_or_init(|| {
@@ -24,6 +26,11 @@ fn model() -> Option<&'static vosk::Model> {
     .map(|m| &m.0)
 }
 
+#[cfg(target_os = "ios")]
+fn model() -> Option<&'static ()> {
+    None
+}
+
 pub fn ready() -> bool {
     model().is_some()
 }
@@ -32,6 +39,12 @@ fn skeleton_fa(text: &str) -> String {
     split_ws(text).iter().map(|w| sub(r"[aeoiuAy?\-]", "", &pronounce_word(w))).collect()
 }
 
+#[cfg(target_os = "ios")]
+pub fn transcribe16(_pcm: &[i16]) -> String {
+    String::new()
+}
+
+#[cfg(not(target_os = "ios"))]
 pub fn transcribe16(pcm: &[i16]) -> String {
     let Some(m) = model() else { return String::new() };
     let Some(mut rec) = vosk::Recognizer::new(m, 16000.0) else { return String::new() };

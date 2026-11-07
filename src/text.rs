@@ -44,6 +44,9 @@ pub fn repair(line: &str, reversed_text: bool, persian_yeh: bool) -> String {
             t = translate_map(&t, BRACKETS);
         }
     }
+    if rtl(&t) {
+        t = sub(r"(?<=[»”])[\d۰-۹٠-٩]{1,2}(?=\s+[ء-ی])", "", &t);
+    }
     t = sub(r"\(\(+", " «", &t);
     t = sub(r"\(\s*»", "»", &t);
     t = sub(r"([(\[«])\s+", r"\1", &t);
@@ -74,6 +77,7 @@ pub fn repair(line: &str, reversed_text: bool, persian_yeh: bool) -> String {
         }
     });
     t = sub_re(rx(MI_PREFIX), &t, 0, |c| format!("{}\u{200c}", &c[1]));
+    t = sub_re(rx(MI_GLUED), &t, 0, |c| format!("{}\u{200c}", &c[1]));
     t = sub(
         &format!(r"(?<![{FA_LETTER}\u200c])([{FA_LETTER}]{{2,}}(?:ده|ته))(است|اند|ایم|اید)(?![{FA_LETTER}])"),
         "\\1\u{200c}\\2",
@@ -950,8 +954,41 @@ pub fn detect_language(pages: &[Vec<String>]) -> &'static str {
 }
 
 
+pub fn latin_only_paragraph(p: &str) -> bool {
+    !rtl(p) && search(r"[A-Za-zÀ-ÿ]{3,}", p)
+}
+
+pub fn drop_fa_citations(text: &str) -> String {
+    if !text.contains('(') {
+        return text.to_string();
+    }
+    sub(
+        r"\s*\(\s*[ء-یٰ\u200c]+(?:\s+[ء-یٰ\u200c]+){0,3}\s*[,،.]?\s*(?:[ء-ی]\.?[,،]?\s*)?[,،]?\s*(?:1[34]|19|20)[\d۰-۹٠-٩]{2}[a-z]?(?:\s*[:،,]\s*(?:ص\.?\s*)?[\d۰-۹٠-٩]+(?:\s*[\-–]\s*[\d۰-۹٠-٩]+)?)?\s*\.?\s*\)",
+        "",
+        text,
+    )
+}
+
 pub fn drop_glosses(text: &str) -> String {
+    let text = &drop_fa_citations(text);
     if !rtl(text) || !has_latin(text) {
+        return text.to_string();
+    }
+    let text = sub_fn(
+        r"\s*[\[(]\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’\-]*(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’\-]*){0,5})\s*[\])]",
+        text,
+        |c| {
+            let g = &c[1];
+            if !g.contains(' ') && len(g) <= 6 && g.chars().all(|ch| ch.is_uppercase()) { c[0].to_string() } else { String::new() }
+        },
+    );
+    let text = sub(
+        r"\s*[\[(]\s*[A-ZÀ-Þ][A-Za-zÀ-ÿ0-9 ,.:;&'’\-–/]{0,90}?(?:1[5-9]|20)\d\d[a-z]?[A-Za-zÀ-ÿ0-9 ,.:;&'’\-–/]{0,30}\s*[\])]",
+        "",
+        &text,
+    );
+    let text = text.as_str();
+    if !has_latin(text) {
         return text.to_string();
     }
     let toks: Vec<&str> = text.split(' ').collect();
@@ -1586,7 +1623,12 @@ pub fn drop_running_lines(pages: &mut [(Vec<LLine>, f64)]) {
     let edge = |l: &LLine, h: f64| l.bot < h * 0.1 || l.top > h * 0.9;
     let folio = |t: &str| {
         let g = fullmatch_groups(r"\s*(?:(\d{1,4})\s+\D.*|.*\D\s+(\d{1,4}))\s*", t)?;
-        g[1].as_deref().or(g[2].as_deref())?.parse::<i64>().ok()
+        let ascii: String = g[1].as_deref().or(g[2].as_deref())?.chars().map(|c| match c {
+            '۰'..='۹' => char::from(b'0' + (c as u32 - '۰' as u32) as u8),
+            '٠'..='٩' => char::from(b'0' + (c as u32 - '٠' as u32) as u8),
+            _ => c,
+        }).collect();
+        ascii.parse::<i64>().ok()
     };
     let mut seen: HashMap<String, usize> = HashMap::new();
     let mut numbered: HashMap<(String, i64), usize> = HashMap::new();
@@ -1617,15 +1659,25 @@ pub fn paragraphs_from_lines(lines: &[LLine]) -> Vec<String> {
     let mut widths: Vec<f64> = lines.iter().map(|l| l.x1 - l.x0).collect();
     widths.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let full = widths.get(widths.len() * 4 / 5).copied().unwrap_or(0.0);
-    let mut gaps: Vec<f64> = lines
-        .windows(2)
-        .filter(|w| (w[1].size - w[0].size).abs() <= 0.15 * w[0].size.max(w[1].size))
-        .map(|w| (w[1].top - w[0].bot) / (w[0].bot - w[0].top).max(w[1].bot - w[1].top).max(1.0))
-        .filter(|g| *g > 0.0 && *g < 1.2)
-        .collect();
-    gaps.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let usual = if gaps.len() >= 5 { gaps[gaps.len() / 2] } else { 0.0 };
-    let close_gap = 0.6f64.max(usual * 1.3);
+    let bucket = |size: f64| (size * 2.0).round() as i64;
+    let mut by_size: HashMap<i64, Vec<f64>> = HashMap::new();
+    for w in lines.windows(2) {
+        if (w[1].size - w[0].size).abs() > 0.15 * w[0].size.max(w[1].size) {
+            continue;
+        }
+        let g = (w[1].top - w[0].bot) / (w[0].bot - w[0].top).max(w[1].bot - w[1].top).max(1.0);
+        if g > 0.0 && g < 1.2 {
+            by_size.entry(bucket(w[0].size)).or_default().push(g);
+        }
+    }
+    let median = |v: &mut Vec<f64>| {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        v[v.len() / 2]
+    };
+    let mut all: Vec<f64> = by_size.values().flatten().copied().collect();
+    let usual_all = if all.len() >= 5 { median(&mut all) } else { 0.0 };
+    let usual_by: HashMap<i64, f64> = by_size.iter_mut().filter(|(_, v)| v.len() >= 5).map(|(k, v)| (*k, median(v))).collect();
+    let close_gap_for = |size: f64| 0.6f64.max(usual_by.get(&bucket(size)).copied().unwrap_or(usual_all) * 1.3);
     let col_full = |p: &LLine| {
         let mut w: Vec<f64> = lines
             .iter()
@@ -1642,9 +1694,10 @@ pub fn paragraphs_from_lines(lines: &[LLine]) -> Vec<String> {
         let same_para = !heading(&l.text) && !prev.is_some_and(|p| heading(&p.text)) && prev.is_some_and(|p| {
             let gap = l.top - p.bot;
             let h = (p.bot - p.top).max(l.bot - l.top);
-            let close = gap < 0.6 * h || (gap < close_gap * h && (p.x1 - p.x0) >= 0.75 * col_full(p) && rtl(&p.text) == rtl(&l.text));
+            let same_edges = (p.x0 - l.x0).abs() < 2.0 && (p.x1 - l.x1).abs() < 2.0 && (p.x1 - p.x0) >= 0.45 * full;
+            let close = gap < 0.6 * h || (gap < close_gap_for(l.size) * h && ((p.x1 - p.x0) >= 0.75 * col_full(p) || same_edges) && rtl(&p.text) == rtl(&l.text));
             let same_size = (l.size - p.size).abs() <= 0.15 * p.size.max(l.size);
-            let ended = (p.x1 - p.x0) < 0.75 * full && search(r"[.!?؟:»)\]…]$", &p.text);
+            let ended = (p.x1 - p.x0) < 0.75 * full && !same_edges && search(r"[.!?؟:»)\]…]$", &p.text);
             let label = search(r"^\s*(?:Keywords|Key words|Abstract|Title|کلیدواژه(?:\x{200c}?ها)?|کلید واژه(?:\x{200c}?ها)?|واژگان کلیدی|چکیده)\s*:", &l.text);
             close && same_size && !ended && !label
         });
@@ -1663,5 +1716,9 @@ pub fn paragraphs_from_lines(lines: &[LLine]) -> Vec<String> {
     }
     paras
 }
+
+
+
+
 
 

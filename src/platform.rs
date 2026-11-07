@@ -27,6 +27,16 @@ mod imp {
         crate::mac::reveal(p)
     }
 
+    pub fn to_m4a(src: &Path, dst: &Path) -> bool {
+        std::process::Command::new("/usr/bin/afconvert")
+            .args(["-f", "m4af", "-d", "aac", "-b", "64000"])
+            .arg(src)
+            .arg(dst)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
     pub fn to_wav24k(src: &Path, dst: &Path) -> bool {
         std::process::Command::new("/usr/bin/afconvert")
             .args(["-f", "WAVE", "-d", "LEI16@24000", "-c", "1"])
@@ -43,7 +53,7 @@ mod imp {
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 mod imp {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -122,6 +132,10 @@ mod imp {
 
     pub fn reveal(p: &Path) {
         event("reveal", p);
+    }
+
+    pub fn to_m4a(_src: &Path, _dst: &Path) -> bool {
+        false
     }
 
     pub fn to_wav24k(src: &Path, dst: &Path) -> bool {
