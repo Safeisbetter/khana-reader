@@ -4,7 +4,7 @@
 
 **Download safely.** Only download the app from this repository's [Releases](../../releases) page. Each release has a `SHA256SUMS.txt`; compare the file's SHA-256 with it
 (`shasum -a 256 file` on Mac/Linux, `Get-FileHash file` in Windows PowerShell). The Android APKs are all signed with one key; its SHA-256 certificate fingerprint is
-`32:44:BB:08:80:95:34:B9:B6:03:B9:B1:61:EA:32:11:C2:84:C0:1F:AF:76:E0:C8:62:E3:FB:7B:C9:C0:7F:C5`
+`32:44:BB:08:80:95:34:D3:42:78:5A:FD:CA:E9:C8:16:03:B9:B2:63:FC:7B:C2:3D:E5:78:32:D5:C1:D9:E0:F9`
 (`apksigner verify --print-certs file.apk`). A file with another fingerprint is not from this project.
 
 **What the app does.** It works fully offline. The Android app has no internet permission. Nothing you open is sent anywhere.
