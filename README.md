@@ -15,10 +15,10 @@ Get the files from the **[Releases page](../../releases/latest)**.
 
 ### Mac
 
-Needs an Apple Silicon Mac (M1 or newer) with macOS 13 or newer and about 4 GB of disk space. 16 GB of memory is recommended,
+Needs an Apple Silicon Mac (M1 or newer) with macOS 13 or newer and about 7 GB of disk space. 16 GB of memory is recommended,
 because translating uses about 7 GB.
 
-1. Download **both** `KhanaReader-Mac.dmg` and `KhanaReader-Mac.002.dmgpart` into the same folder.
+1. Download **all** the Mac files (`KhanaReader-Mac.dmg`, `KhanaReader-Mac.002.dmgpart` and, if listed, `KhanaReader-Mac.003.dmgpart`) into the same folder.
 2. Double-click the `.dmg` file and drag the app to Applications.
 3. The first time, macOS warns you, because this free app is not signed with a paid Apple Developer ID. Try to open the app,
    then go to **System Settings → Privacy & Security** and choose **Open Anyway**.
@@ -60,7 +60,7 @@ edition) translated a text. It has no MP3 (WAV instead) and no translated PDF ye
 |---|---|---|
 | اندروید (سبک) | `KhanaReader-Android-lite.apk` (حدود ۰٫۷ گیگابایت) | بدون ترجمه؛ کتاب فارسی، عکس و متن تایپ‌شده را می‌خواند. اگر اینترنت کند است این را بگیرید. |
 | اندروید (کامل) | `KhanaReader-Android.apk` (حدود ۱٫۳ گیگابایت) | با ترجمه‌ی کتاب‌های خارجی به فارسی. |
-| مک | `KhanaReader-Mac.dmg` **و** `KhanaReader-Mac.002.dmgpart` | هر دو فایل را در یک پوشه بگذارید، بعد `.dmg` را باز کنید. |
+| مک | `KhanaReader-Mac.dmg` **و** همه‌ی فایل‌های `KhanaReader-Mac.00x.dmgpart` | همه‌ی فایل‌ها را در یک پوشه بگذارید، بعد `.dmg` را باز کنید. |
 | ویندوز (آزمایشی، سبک) | `KhanaReader-Windows-light-experimental.zip` (حدود ۰٫۵ گیگابایت) | بدون ترجمه. هنوز روی رایانه‌ی واقعی آزمایش نشده است. |
 | ویندوز (آزمایشی، کامل) | `KhanaReader-Windows-full-experimental.zip` (حدود ۱٫۱ گیگابایت) | با ترجمه‌ی کتاب‌های خارجی. هنوز روی رایانه‌ی واقعی آزمایش نشده است. |
 

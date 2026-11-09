@@ -39,6 +39,7 @@ The GrapheneOS PDF Viewer is under the MIT licence:
 | [pocket-tts-farsi-v2](https://huggingface.co/mehdi-hf/pocket-tts-farsi-v2), with its news voice sample | Farsi speech | mehdi-hf | CC BY-NC 4.0, **non-commercial** |
 | [Pocket TTS](https://huggingface.co/kyutai/pocket-tts) | The speech model's design and its Mimi codec | Kyutai | CC BY 4.0 |
 | [Vosk small Farsi model](https://alphacephei.com/vosk/models) | Language data and listening checks | Alpha Cephei | Apache 2.0 |
+| [Whisper large-v3-turbo](https://huggingface.co/openai/whisper-large-v3-turbo), CTranslate2 format by [deepdml](https://huggingface.co/deepdml/faster-whisper-large-v3-turbo-ct2) | Speech to text (Mac) | OpenAI; conversion by deepdml | MIT |
 | [PP-OCRv5 Arabic-script recogniser](https://github.com/PaddlePaddle/PaddleOCR) | Reading scanned pages | PaddlePaddle | Apache 2.0 |
 | [CMUdict](http://www.speech.cs.cmu.edu/cgi-bin/cmudict) | English pronunciation | Carnegie Mellon University | BSD-style, Copyright (C) 1993-2015 Carnegie Mellon University |
 
