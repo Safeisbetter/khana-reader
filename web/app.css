@@ -189,3 +189,6 @@ button, .btn, a, label, select, summary, input[type="radio"], input[type="checkb
 input[type="text"], input[type="search"], input[type="password"], textarea { cursor: var(--cur, text); }
 button:hover:not(:disabled), .btn:hover, select:hover, input[type="text"]:hover, input[type="search"]:hover, textarea:hover { outline: 3px solid var(--lapis); outline-offset: 2px; background-color: color-mix(in srgb, var(--lapis) 14%, transparent); }
 .panel-body label:hover, .panel-body .check:hover, .panel-body .lexrow:hover { background: color-mix(in srgb, var(--lapis) 18%, transparent); border-radius: 8px; outline: 2px solid var(--lapis); outline-offset: 1px; }
+
+.speedctl { direction: ltr; }
+.pager { direction: ltr; }

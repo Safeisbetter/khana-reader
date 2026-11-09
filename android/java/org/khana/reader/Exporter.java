@@ -111,7 +111,7 @@ final class Exporter {
             asking = false;
         }
         if (u == null) {
-            Toast.makeText(ctx, "فایل ذخیره نشد. با «ذخیره / باز کردن» دوباره می‌توانید.", Toast.LENGTH_LONG).show();
+            Toast.makeText(ctx, "فایل ذخیره نشد. با «ذخیره / بازکردن» دوباره می‌توانید.", Toast.LENGTH_LONG).show();
             return;
         }
         Context app = ctx.getApplicationContext();

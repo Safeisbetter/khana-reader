@@ -692,7 +692,13 @@ pub fn join_across_pages(mut pages: Vec<Vec<String>>) -> Vec<Vec<String>> {
         let only_farsi = |p: &str| rtl(p) && !p.chars().any(|c| c.is_ascii_alphabetic());
         let same_script = !((!rtl(&pages[t][i]) && only_farsi(&pages[m][j])) || (only_farsi(&pages[t][i]) && !rtl(&pages[m][j])));
         let stops = |p: &str| notes_heading(p) || contents_heading(p);
-        if open && same_script && !stops(&pages[t][i]) && !stops(&pages[m][j]) {
+        let title_page = {
+            let tail: Vec<&str> = pages[t][i].split_whitespace().rev().take(2).collect::<Vec<_>>().into_iter().rev().collect();
+            let head: Vec<&str> = pages[m][j].split_whitespace().take(tail.len()).collect();
+            let heading = pages[m][j].split_whitespace().count() <= 5 && !pages[m][j].chars().any(|c| ".!?؟…،,;؛:»”)".contains(c));
+            (tail.len() == 2 && tail == head) || heading
+        };
+        if open && !title_page && same_script && !stops(&pages[t][i]) && !stops(&pages[m][j]) {
             let cut = sentence_end(&pages[m][j]);
             let first = match cut {
                 Some(e) => {

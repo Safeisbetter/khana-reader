@@ -300,7 +300,7 @@ async function openImages(files) {
 async function openFile(file, images) {
   if (!file) return;
   stopReading();
-  note(`در حال باز کردن «${esc(file.name)}»…`);
+  note(`در حال بازکردن «${esc(file.name)}»…`);
   try {
     // (a PDF is read by pdf.js in its sandboxed frame; other files by the app)
     const d = /\.pdf$/i.test(file.name) ? await openWithPdfjs(file)
@@ -616,8 +616,8 @@ $("q").onkeydown = e => {
 };
 addEventListener("keydown", e => {
   if (!S.doc || e.target.closest("input,select,textarea") || !$("settings").hidden || !$("mp3").hidden) return;
-  if (e.key === "ArrowLeft") $("next").click();
-  if (e.key === "ArrowRight") $("prev").click();
+  if (e.key === "ArrowLeft") $("prev").click();
+  if (e.key === "ArrowRight") $("next").click();
   if (e.key === " ") { e.preventDefault(); $("play").click(); }
 });
 $("copy").onclick = () => {
