@@ -49,8 +49,19 @@ addEventListener("load", () => setTimeout(async () => {
     await new Promise(r => setTimeout(r, 3000));
     await say("opened: pages " + document.getElementById("pageCount").textContent + ", paragraphs on screen " + document.querySelectorAll("#text p, .para, p").length);
     const r = await api("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "سلام، این یک آزمایش است.", voice: "khabari", speed: 1.0 }) });
+    const wavBytes = await r.clone().arrayBuffer();
     const buf = await ensureAudio().decodeAudioData(await r.arrayBuffer());
     await say("speech: " + buf.duration.toFixed(2) + " s decoded, audio context " + actx.state);
+    if (!$("sttRow").hidden) {
+      // the speech just made is written down again (Whisper, inside the sandbox)
+      try {
+        const t0 = Date.now();
+        await api("/api/stt_start?lang=fa&name=x.wav", { method: "POST", body: wavBytes });
+        let st;
+        do { await new Promise(r => setTimeout(r, 500)); st = await (await api("/api/stt_status")).json(); } while (st.state !== "done" && st.state !== "error" && Date.now() - t0 < 180000);
+        await say("speech to text: " + st.state + " in " + ((Date.now() - t0) / 1000).toFixed(1) + " s: " + (st.text || st.error));
+      } catch (e) { await say("speech to text FAILED " + e.message); }
+    }
     S.view = "page"; syncChrome(); renderPageImage();
     for (let k = 0; k < 30 && !$("pageImg").naturalWidth; k++) await new Promise(r => setTimeout(r, 500));
     let peek = "blocked";

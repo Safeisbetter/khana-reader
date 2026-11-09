@@ -10,6 +10,7 @@ mkdir -p "$STAGE"
 cp -cR "$SRC" "$STAGE/"
 APP="$STAGE/$SRC"
 rm -rf "$APP/Contents/Resources/models/voices"
+rm -rf "$APP/Contents/Resources/models/whisper"  # (speech to text: 1.6 GB, only in the builds made for oneself)
 cp LICENSE THIRD_PARTY_NOTICES.md "$STAGE/"
 find "$STAGE" -name .DS_Store -delete
 codesign -f -s - --entitlements packaging/entitlements.plist "$APP"

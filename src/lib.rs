@@ -19,6 +19,7 @@ pub mod audio;
 pub mod prosody;
 pub mod lexicon;
 pub mod asr;
+pub mod stt;
 pub mod planner;
 pub mod tts;
 pub mod mp3;

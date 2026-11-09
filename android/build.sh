@@ -61,6 +61,7 @@ rm -rf "$A/app/models/translate/nllb-200-1.3B"  # (the Mac's larger model: too h
 # (KHANA_LITE=1: the light download, without the translator: about half the size; foreign-language books are not translated)
 if [ -n "${KHANA_LITE:-}" ]; then rm -rf "$A/app/models/translate"; fi
 rm -rf "$A/app/models/asr/vosk-model-small-fa-0.5/test"
+rm -rf "$A/app/models/whisper"  # (speech to text is on the Mac only: 1.6 GB)
 [ -f "$OUT/fonts/Vazirmatn.ttf" ] || { mkdir -p "$OUT/fonts"; swift "$HERE/tools/woff2_to_ttf.swift" "$ROOT/web/Vazirmatn.woff2" "$OUT/fonts/Vazirmatn.ttf"; }
 cp "$OUT/fonts/Vazirmatn.ttf" "$A/fonts/"
 (cd "$A/app" && find . -type f | sed 's|^\./||' | LC_ALL=C sort | while IFS= read -r f; do printf '%s\t%s\n' "$f" "$(stat -f %z "$f")"; done) > "$A/app.files"

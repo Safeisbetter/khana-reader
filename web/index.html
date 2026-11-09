@@ -64,10 +64,18 @@
 <main>
   <div class="sheet">
     <section class="welcome" id="welcome">
+      <svg class="hero" viewBox="0 0 108 96" width="108" height="96" aria-hidden="true" focusable="false">
+        <rect x="14" y="20" width="68" height="56" rx="10" fill="none" stroke="currentColor" stroke-width="5"/>
+        <path d="M48 26v44M24 36h16M24 46h16M24 56h12M56 36h16M56 46h16M56 56h12" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+        <path d="M84 40c5 5 5 11 0 16M90 34c9 9 9 21 0 30" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+      </svg>
       <h1>فایل را باز کنید</h1>
       <p>فایل را روی این صفحه بکشید یا دکمه‌ی «بازکردن فایل» را بزنید. خوانا نوشتار فارسی را نشان می‌دهد و با صدای بلند می‌خواند و می‌تواند صدای آن را به صورت MP3 ذخیره کند.</p>
       <div class="formats"><span>PDF</span><span>DOCX</span><span>DOC</span><span>EPUB</span><span>RTF</span><span>ODT</span><span>TXT</span><span>تصویر (JPG، PNG…)</span></div>
-      <p><button type="button" class="primary" id="typeBtn2">✎ یا یک متن بنویسید</button></p>
+      <div class="actions">
+        <label class="btn primary big" for="fileInput">بازکردن فایل</label>
+        <button type="button" class="big" id="typeBtn2">✎ یا یک متن بنویسید</button>
+      </div>
       <p class="note">طراحی این برنامه براین اساس انجام شده است که برای افراد دارای محدودیت دیداری و خواندن، قابل استفاده باشد: دکمه‌ها و نوشته‌ها بزرگ و قابل تمایز هستند، قلم و رنگ‌ها قابل تنظیم‌اند، با صفحه‌خوان کار می‌کند و کارهای اصلی را می‌توان با صدا انجام داد.</p>
       <p class="hint">کلیدها: <kbd>Space</kbd> خواندن / مکث · <kbd>← →</kbd> صفحه‌ی بعد / قبل · <kbd>⌘[</kbd> <kbd>⌘]</kbd> سرعت · <kbd>⌘0</kbd> سرعت عادی · <kbd>⌘,</kbd> تنظیمات</p>
     </section>
@@ -130,12 +138,14 @@
       <input id="fontSize" type="range" aria-label="اندازه‌ی قلم" min="14" max="52" step="1">
     </div>
     <div class="field">
-      <span class="lbl">پوسته</span>
+      <span class="lbl">رنگ پس‌زمینه</span>
       <span class="hint">«خودکار»: مثل حالت تاریک یا روشن دستگاه.</span>
-      <div class="hlpick" role="radiogroup" aria-label="پوسته">
+      <div class="hlpick" role="radiogroup" aria-label="رنگ پس‌زمینه">
         <label><input type="radio" name="theme" value="auto"><span>خودکار</span></label>
         <label><input type="radio" name="theme" value="light"><span>روشن</span></label>
         <label><input type="radio" name="theme" value="dark"><span>تاریک</span></label>
+        <label><input type="radio" name="theme" value="black"><span>مشکی، نوشته‌ی سفید</span></label>
+        <label><input type="radio" name="theme" value="blackyellow"><span>مشکی، نوشته‌ی زرد</span></label>
       </div>
     </div>
     <div class="field">
@@ -147,11 +157,23 @@
         <label><input type="radio" name="hl" value="cyan"><span class="sw sw-cyan">آبی</span></label>
         <label><input type="radio" name="hl" value="black"><span class="sw sw-black">مشکی</span></label>
         <label><input type="radio" name="hl" value="white"><span class="sw sw-white">سفید</span></label>
+        <label><input type="radio" name="hl" value="frame"><span class="sw sw-frame">قاب دور کلمه</span></label>
+      </div>
+      <div id="frameField" hidden>
+        <span class="hint">رنگ قاب:</span>
+        <div class="hlpick" role="radiogroup" aria-label="رنگ قاب دور کلمه">
+          <label><input type="radio" name="fc" value="text"><span class="sw sw-fc-text">همرنگ متن</span></label>
+          <label><input type="radio" name="fc" value="red"><span class="sw sw-fc-red">قرمز</span></label>
+          <label><input type="radio" name="fc" value="blue"><span class="sw sw-fc-blue">آبی</span></label>
+          <label><input type="radio" name="fc" value="green"><span class="sw sw-fc-green">سبز</span></label>
+          <label><input type="radio" name="fc" value="orange"><span class="sw sw-fc-orange">نارنجی</span></label>
+          <label><input type="radio" name="fc" value="yellow"><span class="sw sw-fc-yellow">زرد</span></label>
+        </div>
       </div>
     </div>
     <div class="field">
       <span class="lbl">متن</span>
-      <div class="field">
+      <div class="field" id="cursorField">
         <span class="lbl">اندازه‌ی نشانگر ماوس</span>
         <div class="inline" role="radiogroup" aria-label="اندازه‌ی نشانگر ماوس">
           <label><input type="radio" name="cursor" value="normal"><span>معمولی</span></label>
@@ -178,16 +200,7 @@
         <button type="button" id="lexAdd" class="primary">افزودن</button>
         <span class="hint">حرکت‌ها: ـَ ـِ ـُ ـْ ـّ</span>
       </div>
-      <div class="lexlist" id="lexList"></div>
-    </div>
-    <div class="field">
-      <label for="bitrate">کیفیت MP3 (کیلوبیت در ثانیه)</label>
-      <select id="bitrate">
-        <option value="48">۴۸ کیلوبیت (فایل کوچک)</option>
-        <option value="64">۶۴ کیلوبیت (پیشنهادی برای گفتار)</option>
-        <option value="96">۹۶ کیلوبیت</option>
-        <option value="128">۱۲۸ کیلوبیت (بهترین کیفیت)</option>
-      </select>
+      <details id="lexDetails" hidden><summary id="lexSummary">فهرست اصلاح‌ها</summary><div class="lexlist" id="lexList"></div></details>
     </div>
   </div>
 </div>
@@ -240,12 +253,23 @@
     <div class="panel-head"><h2 id="typeTitle">نوشتن متن</h2><button type="button" data-close>بستن</button></div>
     <p class="hint">متن را این جا بنویسید یا بچسبانید. با «خواندن» آن را می‌شنوید و با «ذخیره‌ی صدا» آن را به صورت فایل صدا (MP3 یا WAV) ذخیره می‌کنید.</p>
     <div class="field"><textarea id="typeText" dir="auto" rows="12" placeholder="متن شما…" aria-label="متن"></textarea></div>
+    <div id="sttRow" hidden>
+      <p class="hint">گفتار را به متن فارسی تبدیل کنید: یک فایل صدا (MP3، M4A، WAV…) انتخاب کنید یا مستقیم صحبت کنید. نوشته در بالا اضافه می‌شود و می‌توانید آن را ویرایش کنید. همه‌چیز روی همین دستگاه انجام می‌شود.</p>
+      <div class="inline">
+        <button type="button" id="sttFile">فایل صدا به متن…</button>
+        <button type="button" id="sttLive">🎤 ضبط و نوشتن</button>
+        <button type="button" id="sttCancel" hidden>انصراف</button>
+      </div>
+      <input id="sttInput" type="file" accept="audio/*,.m4a,.mp3,.wav,.aac,.flac,.mp4,.caf,.aif,.aiff" hidden>
+      <p id="sttStatus" class="hint" role="status" aria-live="polite"></p>
+    </div>
     <div class="inline">
       <button type="button" class="primary" id="typeRead">▶ خواندن</button>
       <button type="button" id="typeSave">ذخیره صدا…</button>
       <button type="button" data-close>انصراف</button>
     </div>
   </div>
+  <div class="grip" id="typeGrip" role="separator" aria-orientation="vertical" aria-label="تغییر عرض پنجره (با کشیدن یا با کلیدهای جهت‌دار؛ دو بار کلیک: اندازه‌ی اولیه)" tabindex="0" title="بکشید تا پنجره بزرگ یا کوچک شود"></div>
 </div>
 
 <!-- MP3 -->
@@ -269,6 +293,15 @@
         <label><input type="radio" name="afmt" value="wav"> WAV (بدون فشرده‌سازی)</label>
         <label id="m4aLabel"><input type="radio" name="afmt" value="m4a"> M4A (AAC)</label>
       </div>
+    </div>
+    <div class="field" id="bitrateField">
+      <label for="bitrate">کیفیت MP3 (کیلوبیت در ثانیه)</label>
+      <select id="bitrate">
+        <option value="48">۴۸ کیلوبیت (فایل کوچک)</option>
+        <option value="64">۶۴ کیلوبیت (پیشنهادی برای گفتار)</option>
+        <option value="96">۹۶ کیلوبیت</option>
+        <option value="128">۱۲۸ کیلوبیت (بهترین کیفیت)</option>
+      </select>
     </div>
     <div class="field" id="fastField">
       <label><input type="checkbox" id="fastExport"> سریع‌تر (حدود دو برابر): صدا بعد از ساخته شدن دوباره بررسی نمی‌شود</label>

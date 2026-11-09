@@ -21,3 +21,15 @@ impl Translator {
         None
     }
 }
+
+pub struct Whisper(());
+
+impl Whisper {
+    pub fn load(_dir: &Path, _threads: usize) -> Result<Whisper, String> {
+        Err("speech to text is not in this app yet".into())
+    }
+
+    pub fn transcribe(&mut self, _mel: &[f32], _n_mels: usize, _frames: usize, _prompt: &str, _beam: i32, _max_len: i32) -> Option<String> {
+        None
+    }
+}

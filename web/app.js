@@ -31,9 +31,9 @@ function applySettings() {
   $("speedChip").textContent = pct(s.speed);
   $("speedChip").classList.toggle("changed", Number(s.speed) !== 1);
   $("speedChip").setAttribute("aria-label", "سرعت " + pct(s.speed) + "؛ برای سرعت عادی بزنید");
-  document.documentElement.dataset.theme = ["light", "dark"].includes(s.theme) ? s.theme : "auto";
+  document.documentElement.dataset.theme = ["light", "dark", "black", "blackyellow"].includes(s.theme) ? s.theme : "auto";
   document.querySelectorAll("input[name=comma]").forEach(r => r.checked = r.value === (s.commaPause || "normal"));
-  document.querySelectorAll("input[name=theme]").forEach(r => r.checked = r.value === (["light", "dark"].includes(s.theme) ? s.theme : "auto"));
+  document.querySelectorAll("input[name=theme]").forEach(r => r.checked = r.value === (["light", "dark", "black", "blackyellow"].includes(s.theme) ? s.theme : "auto"));
   document.querySelectorAll("[data-speed]").forEach(b => b.classList.toggle("on", Number(b.dataset.speed) === Number(s.speed) && b.id !== "speedReset"));
   $("fontSize").value = s.fontSize; $("fontVal").textContent = fa(s.fontSize);
   $("voice").value = s.voice;
@@ -44,6 +44,9 @@ function applySettings() {
   $("autoPlay").checked = !!s.autoPlay;
   document.documentElement.dataset.hl = s.highlight || "yellow";
   document.querySelectorAll("input[name=hl]").forEach(r => r.checked = r.value === (s.highlight || "yellow"));
+  document.documentElement.dataset.fc = s.frameColor || "text";
+  document.querySelectorAll("input[name=fc]").forEach(r => r.checked = r.value === (s.frameColor || "text"));
+  $("frameField").hidden = s.highlight !== "frame";
   $("persianYeh").checked = !!s.persianYeh;
   $("reversed").checked = !!s.reversed;
   $("bitrate").value = String(s.bitrate);
@@ -110,6 +113,7 @@ $("autoNext").onchange = e => setSetting("autoNext", e.target.checked);
 $("naturalTone").onchange = e => setSetting("naturalTone", e.target.checked);
 $("autoPlay").onchange = e => setSetting("autoPlay", e.target.checked);
 document.querySelectorAll("input[name=hl]").forEach(r => r.onchange = () => setSetting("highlight", r.value));
+document.querySelectorAll("input[name=fc]").forEach(r => r.onchange = () => setSetting("frameColor", r.value));
 document.querySelectorAll("input[name=comma]").forEach(r => r.onchange = () => { setSetting("commaPause", r.value); ttsCache.clear(); restartReading(); });
 document.querySelectorAll("input[name=theme]").forEach(r => r.onchange = () => setSetting("theme", r.value));
 $("persianYeh").onchange = e => setSetting("persianYeh", e.target.checked, true);
@@ -207,6 +211,10 @@ $("myDel").onclick = async () => {
 /* ---------------- pronunciation dictionary ---------------- */
 function renderLexicon() {
   const lex = S.settings.lexicon || {};
+  // (the list is shut until opened, and not there when empty: a long list made the settings busy to look at)
+  const n = Object.keys(lex).length;
+  $("lexDetails").hidden = !n;
+  $("lexSummary").textContent = "فهرست اصلاح‌ها (" + fa(n) + ")";
   $("lexList").innerHTML = Object.entries(lex).map(([w, p]) =>
     `<div class="lexrow"><span class="w">${esc(w)} ← <b>${esc(p)}</b></span>` +
     `<button type="button" data-say="${esc(w)}">▶</button><button type="button" data-del="${esc(w)}">حذف</button></div>`).join("");
@@ -726,6 +734,8 @@ function setPlayButton() {
 // a big mouse pointer for people who see badly: drawn here as pictures (black arrow with a white edge; yellow over things that can be pressed)
 let cursorUrls = [];
 function applyCursor(size) {
+  // (a phone has no mouse: no pointer to make bigger, and no setting for it)
+  if (/Android|iPhone|iPad/i.test(navigator.userAgent)) { $("cursorField").hidden = true; size = "normal"; }
   cursorUrls.forEach(u => URL.revokeObjectURL(u)); cursorUrls = [];
   const px = size === "huge" ? 56 : size === "large" ? 40 : 0, root = document.documentElement;
   if (!px) { root.style.removeProperty("--cur"); root.style.removeProperty("--cur-hand"); return; }
@@ -936,11 +946,15 @@ function openSave(kind) {
   const pdf = saveKind === "pdf";
   $("mp3Title").textContent = pdf ? "ذخیره‌ی ترجمه‌ی فارسی به صورت PDF" : "ذخیره به صورت فایل صدا";
   $("fmtField").hidden = pdf; $("fastField").hidden = pdf;
+  syncBitrate();
   $("mp3Start").textContent = pdf ? "ساختن PDF" : "ساختن فایل صدا";
   applySettings();
   if (pdf) $("mp3Voice").textContent = "هر صفحه روی همین دستگاه به فارسی ترجمه می‌شود (برای هر صفحه چند ثانیه تا یک دقیقه) و فایل PDF در پوشه Downloads ذخیره می‌شود.";
   openPanel("mp3");
 }
+// (the quality is asked for next to the format, and only when the format is MP3)
+function syncBitrate() { $("bitrateField").hidden = saveKind === "pdf" || document.querySelector("input[name=afmt]:checked").value !== "mp3"; }
+document.querySelectorAll("input[name=afmt]").forEach(r => r.addEventListener("change", syncBitrate));
 $("mp3Btn").onclick = () => openSave("mp3");
 $("pdfBtn").onclick = () => openSave("pdf");
 for (const id of ["pageInput", "from", "to"]) $(id).addEventListener("input", e => { const t = fa(latinDigits(e.target.value).replace(/\D/g, "")); if (t !== e.target.value) e.target.value = t; });
@@ -1001,6 +1015,9 @@ let resizeT; addEventListener("resize", () => { clearTimeout(resizeT); resizeT =
     S.settings = r.settings; S.voices = r.voices;
     // (editing by voice needs the recognizer, which the Mac and Android apps have, and the microphone)
     $("voiceBtn").hidden = !(r.canListen && navigator.mediaDevices && !window.KHANA_NO_MIC);
+    // (speech to text: the Mac app carries the model; a live recording also needs the microphone)
+    $("sttRow").hidden = !r.canWrite;
+    $("sttLive").hidden = !(navigator.mediaDevices && !window.KHANA_NO_MIC);
     fillVoices(r.voices);
     applySettings(); renderLexicon(); syncChrome(); setPlayButton();
   } catch (e) { note("برنامه درست اجرا نشد: " + esc(e.message), true); }
@@ -1111,6 +1128,73 @@ async function openTyped() {
   await loadPage(1);
   return true;
 }
+
+// ---- speech to text: a sound file or a live recording written down in Farsi
+let sttBusy = false, sttRec = null;
+const sttSay = m => { $("sttStatus").textContent = m; };
+const sttMMSS = s => fa(String(Math.floor(s / 60)).padStart(2, "0")) + ":" + fa(String(Math.floor(s % 60)).padStart(2, "0"));
+async function sttRun(path, body) {
+  sttBusy = true; $("sttFile").disabled = $("sttLive").disabled = true; $("sttCancel").hidden = false;
+  try {
+    await api(path, { method: "POST", body });
+    let r;
+    for (;;) {
+      r = await (await api("/api/stt_status")).json();
+      if (r.state === "loading") sttSay("مدل آماده می‌شود…");
+      else if (r.state === "working") sttSay(`در حال نوشتن… بخش ${fa(r.done)} از ${fa(r.total)}`);
+      if (r.state === "done" || r.state === "error") break;
+      await sleep(700);
+    }
+    if (r.state === "error") throw new Error(r.error || "نوشتن ناموفق بود.");
+    if (!r.text) { sttSay("گفتاری شنیده نشد."); return; }
+    const box = $("typeText");
+    box.value = (box.value.trim() ? box.value.replace(/\s+$/, "") + "\n\n" : "") + r.text;
+    sttSay("نوشتن تمام شد. متن را بخوانید و در صورت لزوم ویرایش کنید.");
+  } catch (e) { sttSay("خطا: " + e.message); }
+  finally { sttBusy = false; $("sttFile").disabled = $("sttLive").disabled = false; $("sttCancel").hidden = true; }
+}
+$("sttFile").onclick = () => { if (!sttBusy) $("sttInput").click(); };
+$("sttInput").onchange = async () => {
+  const f = $("sttInput").files[0]; $("sttInput").value = "";
+  if (!f || sttBusy) return;
+  sttSay("فایل خوانده می‌شود…");
+  await sttRun("/api/stt_start?lang=fa&name=" + encodeURIComponent(f.name), await f.arrayBuffer());
+};
+$("sttCancel").onclick = () => { api("/api/stt_cancel", { method: "POST", body: "" }).catch(() => {}); sttSay("انصراف داده شد؛ آنچه نوشته شده بود می‌آید…"); };
+$("sttLive").onclick = async () => {
+  if (sttBusy) return;
+  if (sttRec) { sttRec.stop = true; return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: true } }); }
+  catch (e) { sttSay("به میکروفون دسترسی نیست."); return; }
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  try { await ctx.resume(); } catch (e) {}
+  const src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(4096, 1, 1);
+  const ratio = ctx.sampleRate / 16000, chunks = [];
+  let idx = 0, acc = 0, cnt = 0, outN = 0, cur = [];
+  // 16 kHz, 16-bit, made as the recording goes (an hour of speech stays about 115 MB)
+  node.onaudioprocess = e => {
+    const d = e.inputBuffer.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      acc += d[i]; cnt++; idx++;
+      if (idx >= (outN + 1) * ratio) { cur.push(Math.max(-1, Math.min(1, acc / cnt)) * 32767); acc = 0; cnt = 0; outN++; }
+    }
+    if (cur.length >= 16000) { chunks.push(Int16Array.from(cur)); cur = []; }
+  };
+  src.connect(node); node.connect(ctx.destination);
+  sttRec = { stop: false };
+  $("sttLive").textContent = "■ پایان ضبط"; $("sttFile").disabled = true;
+  const t0 = Date.now();
+  while (!sttRec.stop && Date.now() - t0 < 2 * 3600 * 1000) { sttSay("در حال ضبط… " + sttMMSS((Date.now() - t0) / 1000) + " (برای پایان، «پایان ضبط» را بزنید)"); await sleep(250); }
+  node.disconnect(); src.disconnect(); stream.getTracks().forEach(t => t.stop()); ctx.close();
+  sttRec = null; $("sttLive").textContent = "🎤 ضبط و نوشتن"; $("sttFile").disabled = false;
+  if (cur.length) chunks.push(Int16Array.from(cur));
+  const all = new Int16Array(chunks.reduce((n, c) => n + c.length, 0)); let at = 0;
+  for (const c of chunks) { all.set(c, at); at += c.length; }
+  if (all.length < 16000) { sttSay("ضبط خیلی کوتاه بود."); return; }
+  sttSay("ضبط تمام شد؛ نوشتن شروع می‌شود…");
+  await sttRun("/api/stt_start?lang=fa&pcm=1", all.buffer);
+};
 const showType = () => { $("typePanel").hidden = false; $("typeText").focus(); };
 $("typeBtn").onclick = showType;
 $("typeBtn2").onclick = showType;
@@ -1291,3 +1375,34 @@ async function jumpFigure(dir) {
   readFrom(i);
   return true;
 }
+
+// ---- the writing window can be made wider or narrower (the width is remembered)
+(function () {
+  const grip = $("typeGrip"), body = document.querySelector("#typePanel .panel-body");
+  const lim = w => Math.max(340, Math.min(window.innerWidth - 40, w));
+  const set = (w, save) => {
+    if (w == null) { body.style.width = ""; try { localStorage.removeItem("khana-type-width"); } catch (e) {} return; }
+    body.style.width = lim(w) + "px";
+    if (save) { try { localStorage.setItem("khana-type-width", String(Math.round(lim(w)))); } catch (e) {} }
+  };
+  try { const w = +localStorage.getItem("khana-type-width"); if (w > 0) set(w, false); } catch (e) {}
+  const rtl = () => getComputedStyle(document.documentElement).direction === "rtl";
+  grip.addEventListener("pointerdown", e => {
+    grip.setPointerCapture(e.pointerId); grip.classList.add("drag"); e.preventDefault();
+  });
+  grip.addEventListener("pointermove", e => {
+    if (!grip.classList.contains("drag")) return;
+    set(rtl() ? window.innerWidth - e.clientX : e.clientX, false);
+  });
+  const end = e => { if (!grip.classList.contains("drag")) return; grip.classList.remove("drag"); set(body.getBoundingClientRect().width, true); };
+  grip.addEventListener("pointerup", end); grip.addEventListener("pointercancel", end);
+  grip.addEventListener("dblclick", () => set(null));
+  grip.addEventListener("keydown", e => {
+    const step = e.shiftKey ? 120 : 40, w = body.getBoundingClientRect().width;
+    // (toward the page's middle is wider: left in Farsi, where the window stands at the right)
+    const wider = rtl() ? "ArrowLeft" : "ArrowRight", narrower = rtl() ? "ArrowRight" : "ArrowLeft";
+    if (e.key === wider) { set(w + step, true); e.preventDefault(); }
+    else if (e.key === narrower) { set(w - step, true); e.preventDefault(); }
+    else if (e.key === "Home") { set(null); }
+  });
+})();

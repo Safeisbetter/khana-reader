@@ -66,7 +66,7 @@ fn all_voices() -> Vec<(String, String, String, String)> {
 fn default_settings() -> Map<String, Value> {
     let first = voices().first().map(|v| v.id).unwrap_or("");
     let v = json!({"voice": first, "speed": 1.0, "fontSize": 21, "reversed": false, "persianYeh": true, "autoNext": true,
-                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "translate": true, "naturalTone": true, "theme": "auto", "commaPause": "normal", "cursor": "large"});
+                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "commaPause": "normal", "cursor": "large"});
     v.as_object().unwrap().clone()
 }
 
@@ -181,6 +181,26 @@ fn make_my_voice(data: &[u8], ext: &str) -> Result<f64, String> {
         e.forget_pace("mine");
     }
     Ok((keep.len() as f64 / rate as f64 * 10.0).round() / 10.0)
+}
+
+fn decode_16k(data: &[u8], ext: &str) -> Result<Vec<f32>, String> {
+    let tmp = std::env::temp_dir().join(format!("khana-stt-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
+    let src = tmp.join(format!("input{ext}"));
+    let dst = tmp.join("sound.wav");
+    let res = (|| {
+        std::fs::write(&src, data).map_err(|e| e.to_string())?;
+        if !crate::platform::to_wav24k(&src, &dst) {
+            return Err("این فایل صوتی باز نشد. یک فایل WAV، M4A یا MP3 انتخاب کنید.".to_string());
+        }
+        audio::read_wav(&dst)
+    })();
+    let _ = std::fs::remove_dir_all(&tmp);
+    let (a, rate) = res?;
+    if a.is_empty() || rate == 0 {
+        return Err("در این فایل صدایی نیست.".into());
+    }
+    Ok(audio::resample_poly(&a, 2, 3))
 }
 
 pub fn voice_sample(data: &[u8], ext: &str) -> Result<(Vec<f32>, usize), String> {
@@ -687,7 +707,7 @@ impl App {
         match route {
             "init_get" => {
                 let voices: Vec<Value> = all_voices().into_iter().map(|(id, name, gender, group)| json!({"id": id, "name": name, "gender": gender, "group": group})).collect();
-                Ok(reply_json(&json!({"settings": load_settings(), "voices": voices, "canListen": crate::asr::ready()})))
+                Ok(reply_json(&json!({"settings": load_settings(), "voices": voices, "canListen": crate::asr::ready(), "canWrite": crate::stt::available()})))
             }
             "settings_post" => Ok(reply_json(&Value::Object(save_settings(&body_json()?).map_err(ApiError::Internal)?))),
             "myvoice_post" => {
@@ -918,6 +938,42 @@ impl App {
                 } else { Value::Null };
                 let cmd = if mode == "cmd" { crate::voice::command_word(&text) } else { None };
                 Ok(reply_json(&json!({"text": text, "go": go, "cmd": cmd, "yes": crate::voice::is_yes(&text)})))
+            }
+            "stt_start_post" => {
+                if !crate::stt::available() {
+                    return Err(bad("نوشتن گفتار در این نسخه نیست."));
+                }
+                let lang = q.get("lang").cloned().unwrap_or_else(|| "fa".into());
+                if !lang.chars().all(|c| c.is_ascii_lowercase()) || lang.len() > 3 {
+                    return Err(bad("زبان درست نیست."));
+                }
+                let audio: Vec<f32> = if q.get("pcm").is_some() {
+                    if body.len() < 3200 || body.len() > 2 * 3600 * 16000 * 2 || body.len() % 2 != 0 {
+                        return Err(bad("صدای ضبط‌شده درست نیست."));
+                    }
+                    body.chunks_exact(2).map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0).collect()
+                } else {
+                    let name = q.get("name").cloned().unwrap_or_else(|| "sound.wav".into());
+                    let ext = crate::doc::ext_of(&name);
+                    let ext = if ext.is_empty() { ".wav".to_string() } else { ext };
+                    if ![".wav", ".m4a", ".mp3", ".aif", ".aiff", ".caf", ".mp4", ".aac", ".flac"].contains(&ext.as_str()) {
+                        return Err(bad("این نوع فایل صوتی پشتیبانی نمی\u{200c}شود. WAV، M4A یا MP3 انتخاب کنید."));
+                    }
+                    if body.len() > 400 * 1024 * 1024 {
+                        return Err(bad("فایل صوتی خیلی بزرگ است."));
+                    }
+                    decode_16k(body, &ext).map_err(bad)?
+                };
+                crate::stt::start(audio, &lang).map_err(bad)?;
+                Ok(reply_json(&json!({"ok": true})))
+            }
+            "stt_status_get" => {
+                let st = crate::stt::status();
+                Ok(reply_json(&json!({"state": st.state, "done": st.done, "total": st.total, "text": st.text, "error": st.error, "can": crate::stt::available()})))
+            }
+            "stt_cancel_post" => {
+                crate::stt::cancel();
+                Ok(reply_json(&json!({"ok": true})))
             }
             "figures_get" => {
                 let d = self.doc(q)?;

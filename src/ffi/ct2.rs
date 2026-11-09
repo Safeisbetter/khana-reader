@@ -10,6 +10,9 @@ unsafe extern "C" {
     fn ct2_free(t: *mut c_void);
     fn ct2_translate(t: *mut c_void, tokens: *const c_char, prefix: *const c_char, beam: c_int, max_batch: c_int, max_len: c_int, rep: f32) -> *mut c_char;
     fn ct2_free_str(s: *mut c_char);
+    fn wh_new(path: *const c_char, intra: c_int, err: *mut c_char, errlen: c_int) -> *mut c_void;
+    fn wh_free(w: *mut c_void);
+    fn wh_transcribe(w: *mut c_void, mel: *const f32, n_mels: c_int, frames: c_int, prompt: *const c_char, beam: c_int, max_len: c_int) -> *mut c_char;
 }
 
 pub struct Options {
@@ -53,5 +56,44 @@ impl Drop for Translator {
     fn drop(&mut self) {
         // SAFETY: owned only by this value, freed exactly once.
         unsafe { ct2_free(self.0.as_ptr()) }
+    }
+}
+
+/// A loaded Whisper model (speech to text). One recognition at a time.
+pub struct Whisper(NonNull<c_void>);
+
+// SAFETY: used by one thread at a time (&mut self).
+unsafe impl Send for Whisper {}
+
+impl Whisper {
+    pub fn load(dir: &Path, threads: usize) -> Result<Whisper, String> {
+        let path = CString::new(dir.to_string_lossy().as_bytes()).map_err(|_| "model folder name".to_string())?;
+        let mut err = [0 as c_char; 512];
+        // SAFETY: `path` lives through the call; `err` is 512 bytes, the length passed.
+        let t = unsafe { wh_new(path.as_ptr(), threads.clamp(1, 64) as c_int, err.as_mut_ptr(), 512) };
+        NonNull::new(t).map(Whisper).ok_or_else(|| buffer_text(&err))
+    }
+
+    /// `mel`: n_mels rows of `frames` values (30 s = 3000 frames); `prompt`: the start tokens separated by spaces.
+    /// Returns the best hypothesis' tokens separated by spaces.
+    pub fn transcribe(&mut self, mel: &[f32], n_mels: usize, frames: usize, prompt: &str, beam: i32, max_len: i32) -> Option<String> {
+        if mel.len() != n_mels * frames {
+            return None;
+        }
+        let prompt = CString::new(prompt).ok()?;
+        // SAFETY: self.0 is a loaded model; `mel` holds n_mels * frames values, the prompt lives through the call.
+        let r = unsafe { wh_transcribe(self.0.as_ptr(), mel.as_ptr(), n_mels as c_int, frames as c_int, prompt.as_ptr(), beam, max_len) };
+        let r = NonNull::new(r)?;
+        // SAFETY: the shim returns a NUL-terminated malloc'd string; it is copied, then freed once.
+        let out = unsafe { CStr::from_ptr(r.as_ptr()) }.to_string_lossy().into_owned();
+        unsafe { ct2_free_str(r.as_ptr()) };
+        Some(out)
+    }
+}
+
+impl Drop for Whisper {
+    fn drop(&mut self) {
+        // SAFETY: owned only by this value, freed exactly once.
+        unsafe { wh_free(self.0.as_ptr()) }
     }
 }
