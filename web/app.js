@@ -3,6 +3,9 @@
 const TOKEN = document.querySelector("meta[name=khana-token]").content;
 const $ = id => document.getElementById(id);
 const fa = n => String(n).replace(/\d/g, d => "۰۱۲۳۴۵۶۷۸۹"[d]);
+// (numbers typed in a box are Farsi digits; whatever digits are typed are read: ۱۲, 12 and ١٢ are all twelve)
+const latinDigits = t => String(t).replace(/[۰-۹]/g, d => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+const numOf = v => parseInt(latinDigits(v).replace(/\D/g, ""), 10) || 0;
 const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -29,6 +32,7 @@ function applySettings() {
   $("speedChip").classList.toggle("changed", Number(s.speed) !== 1);
   $("speedChip").setAttribute("aria-label", "سرعت " + pct(s.speed) + "؛ برای سرعت عادی بزنید");
   document.documentElement.dataset.theme = ["light", "dark"].includes(s.theme) ? s.theme : "auto";
+  document.querySelectorAll("input[name=comma]").forEach(r => r.checked = r.value === (s.commaPause || "normal"));
   document.querySelectorAll("input[name=theme]").forEach(r => r.checked = r.value === (["light", "dark"].includes(s.theme) ? s.theme : "auto"));
   document.querySelectorAll("[data-speed]").forEach(b => b.classList.toggle("on", Number(b.dataset.speed) === Number(s.speed) && b.id !== "speedReset"));
   $("fontSize").value = s.fontSize; $("fontVal").textContent = fa(s.fontSize);
@@ -42,7 +46,7 @@ function applySettings() {
   $("reversed").checked = !!s.reversed;
   $("bitrate").value = String(s.bitrate);
   const v = S.voices.find(x => x.id === s.voice);
-  if (saveKind !== "pdf") $("mp3Voice").textContent = "صدا: " + (v ? v.name : "-") + " · سرعت " + pct(s.speed) + " · " + fa(s.bitrate) + " kbps (از تنظیمات)";
+  if (saveKind !== "pdf") $("mp3Voice").textContent = "صدا: " + (v ? v.name : "-") + " · سرعت " + pct(s.speed) + " · " + fa(s.bitrate) + " کیلوبیت (از تنظیمات)";
 }
 let saveT;
 function setSetting(k, v, reloadText) {
@@ -103,6 +107,7 @@ $("autoNext").onchange = e => setSetting("autoNext", e.target.checked);
 $("naturalTone").onchange = e => setSetting("naturalTone", e.target.checked);
 $("autoPlay").onchange = e => setSetting("autoPlay", e.target.checked);
 document.querySelectorAll("input[name=hl]").forEach(r => r.onchange = () => setSetting("highlight", r.value));
+document.querySelectorAll("input[name=comma]").forEach(r => r.onchange = () => { setSetting("commaPause", r.value); ttsCache.clear(); restartReading(); });
 document.querySelectorAll("input[name=theme]").forEach(r => r.onchange = () => setSetting("theme", r.value));
 $("persianYeh").onchange = e => setSetting("persianYeh", e.target.checked, true);
 $("reversed").onchange = e => setSetting("reversed", e.target.checked, true);
@@ -237,10 +242,15 @@ document.addEventListener("selectionchange", () => {
   const t = getSelection().toString().trim();
   const ok = t && t.length <= 30 && !/\s/.test(t) && $("textView").contains(getSelection().anchorNode);
   $("fixWord").hidden = !ok;
-  if (ok) { $("fixWord").textContent = `اصلاح تلفظ «${t}»`; $("fixWord").dataset.word = t; }
+  if (ok) {
+    // (while the text is being edited the button changes the word in the whole book; otherwise it fixes how the word is said)
+    $("fixWord").textContent = S.editing ? `عوض کردن «${t}» در کل کتاب` : `اصلاح تلفظ «${t}»`;
+    $("fixWord").dataset.word = t;
+  }
 });
 $("fixWord").onclick = () => {
   $("fixWord").hidden = true;
+  if (S.editing) return openWordEditor($("fixWord").dataset.word);
   $("lexWord").value = $("fixWord").dataset.word; $("lexSay").value = $("fixWord").dataset.word;
   openPanel("settings");
   $("lexField").scrollIntoView({ block: "start" }); $("lexSay").focus();
@@ -297,13 +307,13 @@ async function openFile(file, images) {
     S.view = "text";
     $("fileName").textContent = d.name;
     $("welcome").hidden = true;
-    $("from").max = $("to").max = d.pages; $("to").value = d.pages;
+    $("from").value = fa(1); $("to").value = fa(d.pages);
     const langName = { en: "انگلیسی", nl: "هلندی", de: "آلمانی", fr: "فرانسوی", es: "اسپانیایی", it: "ایتالیایی", pt: "پرتغالی", tr: "ترکی", pl: "لهستانی" }[d.lang] || "خارجی";
     // (the light download has no translator: a book in another language is said so, not read with the Farsi voice)
-    if (d.hasText && d.lang !== "fa" && !d.canTranslate && d.lang !== "unknown") note(`این سند به زبان ${langName} است. این نسخه ترجمه ندارد و فقط متن فارسی را درست می‌خواند؛ برای کتاب‌های خارجی نسخه‌ی کامل را نصب کنید.`, true);
+    if (d.hasText && d.lang !== "fa" && !d.canTranslate && d.lang !== "unknown") note(`این سند به زبان ${langName} است. نسخه‌ی سبک ترجمه ندارد و فقط متن فارسی را درست می‌خواند. برای خواندن کتاب‌های خارجی، نسخه‌ی کامل را نصب کنید.`, true);
     else if (!d.hasText) note("این سند متنی ندارد؛ احتمالاً اسکن یا تصویر است. می‌توانید صفحه‌ها را در نمای «صفحه» ببینید، اما خواندن با صدا ممکن نیست.", true);
-    else if (d.scanned) note(`${fa(d.pages)} صفحه. این سند اسکن است؛ متن هر صفحه با «تشخیص متن» روی همین کامپیوتر خوانده می‌شود و ممکن است چند غلط داشته باشد.` + (d.canTranslate ? ` متن ${langName} است و به فارسی ترجمه می‌شود.` : ""));
-    else if (d.canTranslate) note(`${fa(d.pages)} صفحه، به زبان ${langName}. متن به فارسی ترجمه می‌شود و همان خوانده می‌شود (ترجمه‌ی ماشینی، روی همین کامپیوتر). متن اصلی را با دکمه‌ی «ترجمه به فارسی» یا نمای «صفحه» ببینید. برای خواندن از هر جای متن، روی همان جمله کلیک کنید.`);
+    else if (d.scanned) note(`${fa(d.pages)} صفحه. این سند اسکن است؛ متن هر صفحه با «تشخیص متن» روی همین دستگاه خوانده می‌شود و ممکن است چند غلط داشته باشد.` + (d.canTranslate ? ` متن ${langName} است و به فارسی ترجمه می‌شود.` : ""));
+    else if (d.canTranslate) note(`${fa(d.pages)} صفحه، به زبان ${langName}. متن به فارسی ترجمه می‌شود و همان خوانده می‌شود (ترجمه‌ی ماشینی، روی همین دستگاه). متن اصلی را با دکمه‌ی «ترجمه به فارسی» یا نمای «صفحه» ببینید. برای خواندن از هر جای متن، روی همان جمله کلیک کنید.`);
     else note(`${fa(d.pages)} صفحه. برای خواندن از هر جای متن، روی همان جمله کلیک کنید.`);
     if (!d.hasText && d.hasImages) S.view = "page";
     await loadPage(1);
@@ -394,7 +404,7 @@ async function openWithPdfjs(file) {
   }
   const out = [];
   for (let n = 1; n <= pages; n++) {
-    if (n === 1 || n % 10 === 0) note(`خواندن «${esc(file.name)}» با pdf.js… صفحه‌ی ${fa(n)} از ${fa(pages)}`);
+    if (n === 1 || n % 10 === 0) note(`در حال خواندن «${esc(file.name)}»… صفحه‌ی ${fa(n)} از ${fa(pages)}`);
     const t = await pdfCall({ op: "text", n });
     out.push({ w: t.w, h: t.h, images: !!t.images, items: t.items });
   }
@@ -568,7 +578,7 @@ function syncChrome() {
   const has = !!S.doc;
   $("docTools").hidden = !has; $("searchRow").hidden = !has || S.view !== "text";
   if (!has) return;
-  $("pageInput").value = S.page; $("pageInput").max = S.doc.pages;
+  $("pageInput").value = fa(S.page);
   $("pageCount").textContent = fa(S.doc.pages);
   $("prev").disabled = S.page <= 1; $("next").disabled = S.page >= S.doc.pages;
   $("viewPage").disabled = !S.doc.hasImages;
@@ -582,7 +592,11 @@ function syncChrome() {
 }
 $("prev").onclick = () => { loadPage(S.page - 1); scrollTo(0, 0); };
 $("next").onclick = () => { loadPage(S.page + 1); scrollTo(0, 0); };
-$("pageInput").onchange = e => loadPage(+e.target.value);
+// (the number is checked on Enter, on leaving the box, and on change: the digits are rewritten as Farsi while typing, and then the browser sends no "change" by itself)
+const goTyped = () => { const n = numOf($("pageInput").value); if (n >= 1 && S.doc) loadPage(Math.min(n, S.doc.pages)); };
+$("pageInput").onchange = goTyped;
+$("pageInput").onblur = () => { if (numOf($("pageInput").value) !== S.page) goTyped(); };
+$("pageInput").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); goTyped(); } });
 $("viewText").onclick = () => { S.view = "text"; syncChrome(); };
 $("trBtn").onclick = () => { setSetting("translate", !S.settings.translate); loadPage(S.page); };
 $("viewPage").onclick = () => { S.view = "page"; syncChrome(); renderPageImage(); };
@@ -639,7 +653,7 @@ function ensureAudio() {  // call inside a click/drop so the Mac lets sound star
 const bufCache = new Map();  // voice|speed|text -> Promise<AudioBuffer>
 let ttsChain = Promise.resolve();  // one request at a time, in order: the next sentence is always made first
 function speechBuffer(text, run) {
-  const key = S.settings.voice + "|" + S.settings.speed + "|" + (S.settings.naturalTone !== false) + "|" + text;
+  const key = S.settings.voice + "|" + S.settings.speed + "|" + (S.settings.naturalTone !== false) + "|" + (S.settings.commaPause || "normal") + "|" + text;
   if (!bufCache.has(key)) {
     const body = JSON.stringify({ text, voice: S.settings.voice, speed: S.settings.speed });
     // a piece queued for reading that was stopped or jumped away from is skipped, so the new
@@ -778,9 +792,9 @@ async function readFrom(i, fromOff = 0) {
       if (starved) { await sleep(600); continue; }
       if (reader.next >= reader.queue.length) {
         // the last page has been read: say so, so the listener knows the book is finished
-        if (!ended && reader.lastPage >= S.doc.pages) {
+        if (!ended && reader.lastPage >= S.doc.pages && S.doc.name !== "متن من.txt") {
           ended = true;
-          reader.queue.push({ page: reader.lastPage, p: -1, start: 0, end: 0, text: "پایان کتاب.", pause: 1.2 });
+          reader.queue.push({ page: reader.lastPage, p: -1, start: 0, end: 0, text: "پایان متن.", pause: 1.2 });
           continue;
         }
         while (reader.run === run && actx.currentTime < reader.lastEnd) await sleep(200);
@@ -879,7 +893,8 @@ $("play").onclick = () => {
 $("stop").onclick = stopReading;
 $("textView").addEventListener("click", e => {
   const p = e.target.closest("p[data-i]");
-  if (S.editing) { if (p && !e.target.closest(".paraeditor")) openParaEditor(p); return; }
+  // (editing: a tap on a paragraph opens its window; a selected word is left for the «change the word» button)
+  if (S.editing) { if (p && !getSelection().toString()) openParaEditor(p); return; }
   if (!p || e.detail > 1) return;
   ensureAudio();
   // from the sentence clicked (the word's offset; between words, the paragraph's start)
@@ -896,7 +911,7 @@ function openSave(kind) {
   if (!(job && job.status === "running")) {
     saveKind = kind;
     $("mp3Status").hidden = true;
-    $("from").value = S.page; $("to").value = S.doc.pages;
+    $("from").value = fa(S.page); $("to").value = fa(S.doc.pages);
     document.querySelector(`input[name=scope][value=${kind === "pdf" ? "all" : "page"}]`).checked = true;
   }
   const pdf = saveKind === "pdf";
@@ -904,17 +919,18 @@ function openSave(kind) {
   $("fmtField").hidden = pdf; $("fastField").hidden = pdf;
   $("mp3Start").textContent = pdf ? "ساختن PDF" : "ساختن فایل صدا";
   applySettings();
-  if (pdf) $("mp3Voice").textContent = "هر صفحه روی همین کامپیوتر به فارسی ترجمه می‌شود (برای هر صفحه چند ثانیه تا یک دقیقه) و فایل PDF در پوشه Downloads ذخیره می‌شود.";
+  if (pdf) $("mp3Voice").textContent = "هر صفحه روی همین دستگاه به فارسی ترجمه می‌شود (برای هر صفحه چند ثانیه تا یک دقیقه) و فایل PDF در پوشه Downloads ذخیره می‌شود.";
   openPanel("mp3");
 }
 $("mp3Btn").onclick = () => openSave("mp3");
 $("pdfBtn").onclick = () => openSave("pdf");
+for (const id of ["pageInput", "from", "to"]) $(id).addEventListener("input", e => { const t = fa(latinDigits(e.target.value).replace(/\D/g, "")); if (t !== e.target.value) e.target.value = t; });
 $("from").oninput = $("to").oninput = () => document.querySelector('input[name=scope][value=range]').checked = true;
 $("mp3Start").onclick = async () => {
   const scope = document.querySelector("input[name=scope]:checked").value;
   let first = S.page, last = S.page;
   if (scope === "all") { first = 1; last = S.doc.pages; }
-  if (scope === "range") { first = +$("from").value; last = +$("to").value; }
+  if (scope === "range") { first = numOf($("from").value); last = numOf($("to").value); }
   try {
     if (S.doc.engine === "pdfjs") {
       // (the app cannot draw a pdf.js document's scanned pages itself: they are drawn here first)
@@ -941,15 +957,15 @@ async function poll() {
   const pct = Math.round(job.progress * 100);
   $("mp3Bar").style.width = pct + "%";
   const mins = Math.floor(job.seconds / 60), secs = job.seconds % 60;
-  const len = fa(mins) + ":" + fa(String(secs).padStart(2, "0"));
+  const len = fa(mins) + " دقیقه و " + fa(secs) + " ثانیه";
   const pdf = saveKind === "pdf";
   if (job.status === "running") {
-    $("mp3Text").textContent = pdf ? `در حال ترجمه… ${fa(pct)}٪` : `در حال ساختن… ${fa(pct)}٪ · ${len} صدا`;
+    $("mp3Text").textContent = pdf ? `در حال ترجمه… ${fa(pct)}٪` : (pct === 0 ? "در حال آماده کردن نخستین بخش… (ممکن است چند ثانیه تا چند دقیقه طول بکشد)" : `در حال ساختن… ${fa(pct)}٪ · ${len} صدا`);
     pollT = setTimeout(poll, 700); return;
   }
   $("mp3Start").disabled = false; $("mp3Cancel").hidden = true;
   if (job.status === "done") {
-    $("mp3Text").textContent = `ذخیره شد در پوشه Downloads: «${job.saved}»` + (pdf ? "" : ` · ${len}`);
+    $("mp3Text").textContent = `فایل در پوشه‌ی دانلودها ذخیره شد: «${job.saved}»` + (pdf ? "" : ` · ${len}`);
     $("mp3Reveal").hidden = false;
   } else if (job.status === "cancelled") $("mp3Text").textContent = "لغو شد.";
   else $("mp3Text").textContent = "ساخته نشد: " + job.error;
@@ -964,6 +980,8 @@ let resizeT; addEventListener("resize", () => { clearTimeout(resizeT); resizeT =
   try {
     const r = await jget("/api/init");
     S.settings = r.settings; S.voices = r.voices;
+    // (editing by voice needs the recognizer, which the Mac and Android apps have, and the microphone)
+    $("pageVoiceBtn").hidden = $("voiceBtn").hidden = !(r.canListen && navigator.mediaDevices && !window.KHANA_NO_MIC);
     fillVoices(r.voices);
     applySettings(); renderLexicon(); syncChrome(); setPlayButton();
   } catch (e) { note("برنامه درست اجرا نشد: " + esc(e.message), true); }
@@ -973,59 +991,56 @@ let resizeT; addEventListener("resize", () => { clearTimeout(resizeT); resizeT =
 /* ---------------- editing the text: a paragraph changed or taken out, a word changed everywhere ---------------- */
 // The corrections are kept on this computer, per book, and reach the reading, the MP3 and the PDF.
 const editQuery = () => `doc=${S.doc.id}&rev=${!!S.settings.reversed}&yeh=${!!S.settings.persianYeh}&tr=${translating()}`;
-async function sendEdit(body) {
+async function sendEdit(body, keep) {
   const r = await jpost(`/api/edit?${editQuery()}`, { n: S.page, ...body });
   if (r.error) { toast(r.error); return false; }
+  // (the page is shown again with the correction, at the same place: not at the top)
+  const y = window.scrollY;
   pageCache.clear();
   stopReading();
   await loadPage(S.page);
+  window.scrollTo(0, y);
   $("edInfo").textContent = r.edits ? `${fa(r.edits)} ویرایش در این کتاب` : "";
   return true;
 }
+// editing a paragraph: a window with a large box, over the page
+let editing = { shown: null };
 function openParaEditor(p) {
-  document.querySelectorAll(".paraeditor").forEach(x => x.remove());
-  const i = +p.dataset.i, shown = S.paras[i];
+  const shown = S.paras[+p.dataset.i];
   if (shown === undefined) return;
-  const box = document.createElement("div");
-  box.className = "paraeditor";
-  box.innerHTML = '<textarea dir="auto" aria-label="متن این بند"></textarea><div class="btns">' +
-    '<button type="button" class="primary" data-act="save">ذخیره</button>' +
-    '<button type="button" data-act="del">حذف این بند</button>' +
-    '<button type="button" data-act="cancel">انصراف</button></div>' +
-    '<span class="editnote">برای بند جدید، متن را با Enter به چند خط تقسیم کنید.</span>';
-  const ta = box.querySelector("textarea");
-  ta.value = shown;
-  p.after(box);
-  ta.focus();
-  box.onclick = async e => {
-    const act = e.target.dataset && e.target.dataset.act;
-    if (!act) return;
-    if (act === "cancel") return box.remove();
-    if (act === "del" && !confirm("این بند حذف شود؟")) return;
-    await sendEdit({ kind: "paragraph", shown, text: act === "del" ? "" : ta.value });
-  };
+  editing = { shown };
+  $("paraText").value = shown;
+  openPanel("paraPanel");
+  $("paraText").focus();
+}
+$("paraSave").onclick = async () => {
+  if (editing.shown == null) return;
+  if (await sendEdit({ kind: "paragraph", shown: editing.shown, text: $("paraText").value })) $("paraPanel").hidden = true;
+};
+$("paraDel").onclick = async () => {
+  if (editing.shown == null || !confirm("این بند حذف شود؟")) return;
+  if (await sendEdit({ kind: "paragraph", shown: editing.shown, text: "" })) $("paraPanel").hidden = true;
+};
+function openWordEditor(from) {
+  if (typeof from === "string") $("edFrom").value = from;
+  openPanel("wordPanel");
+  ($("edFrom").value ? $("edTo") : $("edFrom")).focus();
 }
 $("editBtn").onclick = () => {
   S.editing = !S.editing;
   $("editBar").hidden = !S.editing;
   $("textView").classList.toggle("editing", S.editing);
   $("editBtn").classList.toggle("primary", S.editing);
-  document.querySelectorAll(".paraeditor").forEach(x => x.remove());
   if (S.editing) {
     stopReading();
     if (S.view !== "text") { S.view = "text"; syncChrome(); }
     if (S.doc) jget(`/api/edits?doc=${S.doc.id}`).then(r => { $("edInfo").textContent = r.edits ? `${fa(r.edits)} ویرایش در این کتاب` : ""; }).catch(() => {});
   }
 };
-// a word selected in the text goes into the "wrong word" box
-document.addEventListener("selectionchange", () => {
-  if (!S.editing) return;
-  const t = getSelection().toString().trim();
-  if (t && t.length <= 40 && $("textView").contains(getSelection().anchorNode) && !$("textView").querySelector(".paraeditor textarea:focus")) $("edFrom").value = t;
-});
+$("edWordBtn").onclick = () => openWordEditor();
 $("edWord").onclick = async () => {
-  if (!$("edFrom").value.trim()) return toast("کلمه‌ی غلط را بنویسید یا آن را در متن انتخاب کنید.");
-  if (await sendEdit({ kind: "word", from: $("edFrom").value, to: $("edTo").value })) { $("edFrom").value = ""; $("edTo").value = ""; toast("در کل کتاب عوض شد."); }
+  if (!$("edFrom").value.trim()) return toast("کلمه‌ی غلط را بنویسید.");
+  if (await sendEdit({ kind: "word", from: $("edFrom").value, to: $("edTo").value })) { $("edFrom").value = ""; $("edTo").value = ""; $("wordPanel").hidden = true; toast("در کل کتاب عوض شد."); }
 };
 $("edReset").onclick = async () => {
   if (confirm("همه‌ی ویرایش‌های این کتاب پاک شود؟") && await sendEdit({ kind: "reset" })) toast("ویرایش‌ها پاک شد.");
@@ -1039,7 +1054,7 @@ $("m4aLabel").hidden = /Android|iPhone|iPad/i.test(navigator.userAgent);   // (t
 if (/Windows/i.test(navigator.userAgent)) {
   $("m4aLabel").hidden = true; $("mp3Label").hidden = true;
   document.querySelector("input[name=afmt][value=wav]").checked = true;
-  $("mp3Btn").textContent = "ذخیره صدا (WAV)";
+  $("mp3Btn").textContent = "ذخیره‌ی صدا";
 }
 async function openTyped() {
   const t = $("typeText").value.trim();
@@ -1050,8 +1065,8 @@ async function openTyped() {
   S.doc = d; S.page = 1; S.view = "text";
   $("fileName").textContent = d.name;
   $("welcome").hidden = true;
-  $("from").max = $("to").max = d.pages; $("to").value = d.pages;
-  note(`متن شما آماده است. با «خواندن» می‌خوانیم؛ با «ذخیره MP3» فایل صدا می‌سازیم؛ با «ویرایش متن» آن را عوض می‌کنید.`);
+  $("from").value = fa(1); $("to").value = fa(d.pages);
+  note(`متن شما آماده است. با دکمه‌ی «خواندن» آن را بشنوید، با «ذخیره‌ی صدا» فایل صدا بسازید و با «ویرایش متن» آن را عوض کنید.`);
   $("typePanel").hidden = true;
   await loadPage(1);
   return true;
@@ -1061,3 +1076,144 @@ $("typeBtn").onclick = showType;
 $("typeBtn2").onclick = showType;
 $("typeRead").onclick = async () => { ensureAudio(); if (await openTyped() && S.paras.length) readFrom(0); };
 $("typeSave").onclick = async () => { if (await openTyped()) openSave("mp3"); };
+
+/* ---------------- editing the text by voice: for people who cannot see the screen well ---------------- */
+// The user says a command; the app repeats what it understood, in a spoken sentence, and asks «درست است؟»; only «بله» changes the text.
+let voiceBusy = false, voiceHelped = false;
+const buzz = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
+const vstatus = t => { const b = $("voiceStatus"); b.textContent = t; b.hidden = !t; };
+async function speakWait(text) {
+  ensureAudio();
+  const url = await ttsUrl(text);
+  audio.src = url;
+  await new Promise(done => { audio.onended = audio.onerror = () => done(); audio.play().catch(() => done()); setTimeout(done, 25000); });
+}
+// one recording from the microphone, until the user stops speaking (or the time is up); the recognizer's answer: {text, cmd, yes}
+async function listenOnce(maxMs, mode) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(4096, 1, 1);
+  const chunks = [], t0 = Date.now();
+  let heard = false, quiet = 0;
+  node.onaudioprocess = e => {
+    const d = e.inputBuffer.getChannelData(0);
+    chunks.push(new Float32Array(d));
+    let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
+    if (Math.sqrt(sum / d.length) > 0.015) { heard = true; quiet = 0; } else if (heard) quiet += d.length / ctx.sampleRate;
+  };
+  src.connect(node); node.connect(ctx.destination);
+  while (Date.now() - t0 < maxMs && !(heard && quiet > 1.1) && !(!heard && Date.now() - t0 > 6500)) await sleep(100);
+  node.disconnect(); src.disconnect(); stream.getTracks().forEach(t => t.stop());
+  const rate = ctx.sampleRate; ctx.close();
+  const all = new Float32Array(chunks.reduce((n, c) => n + c.length, 0)); let at = 0;
+  for (const c of chunks) { all.set(c, at); at += c.length; }
+  if (!heard) return { text: "", cmd: null, yes: false };
+  // 16 kHz, 16-bit: each output sample is the mean of the input samples it covers
+  const ratio = rate / 16000, out = new Int16Array(Math.floor(all.length / ratio));
+  for (let i = 0; i < out.length; i++) {
+    const a = Math.floor(i * ratio), b = Math.max(a + 1, Math.floor((i + 1) * ratio));
+    let m = 0; for (let k = a; k < b && k < all.length; k++) m += all[k];
+    out[i] = Math.max(-1, Math.min(1, m / (b - a))) * 32767;
+  }
+  return await (await api("/api/listen?mode=" + mode + "&doc=" + encodeURIComponent(S.doc.id), { method: "POST", body: out.buffer })).json();
+}
+function currentPiece() {
+  const now = actx ? actx.currentTime : 0;
+  const p = reader.playing.find(u => now >= u.t0 && now < u.t1) || reader.playing[reader.playing.length - 1];
+  return p && p.p >= 0 ? { page: p.page, p: p.p } : null;
+}
+const clean = t => (t || "").replace(/\[unk\]/g, " ").replace(/\s+/g, " ").trim();
+async function voiceEdit() {
+  if (voiceBusy || !S.doc) return;
+  voiceBusy = true;
+  // «این کلمه» is the word being read now (marked on the page)
+  const curEl = document.querySelector(".w.cur");
+  const curWord = curEl ? clean(curEl.textContent.replace(/[^\p{L}\u200c]/gu, "")) : "";
+  const cur = currentPiece();
+  stopReading();
+  const ask = async (say, show, mode, ms) => { vstatus(show); if (say) await speakWait(say); vstatus("گوش می‌دهم…\n" + show); return await listenOnce(ms, mode); };
+  const stop = async m => { vstatus(m); await speakWait(m); };
+  const theWord = async () => curWord || clean((await ask("کدام کلمه؟", "کدام کلمه؟ آن را بگویید", "book", 9000)).text);
+  try {
+    vstatus("در حال آماده شدن…");
+    const r1 = await ask("بفرمایید.", "بگویید، مثلاً: «تلفظ این کلمه را درست کن» · «این کلمه را جدا کن» · «این کلمه را عوض کن» · «این بند را حذف کن»", "cmd", 10000);
+    const kind = r1.cmd;
+    if (!kind) { await stop("متوجه نشدم."); return; }
+    let q, apply;
+    if (kind === "paragraph") {
+      const shown = cur && cur.page === S.page ? S.paras[cur.p] : undefined;
+      if (shown === undefined) { await stop("بندی در حال خواندن نبود."); return; }
+      q = "این بند حذف شود؟";
+      apply = () => sendEdit({ kind: "paragraph", shown, text: "" });
+    } else {
+      const w = await theWord();
+      if (!w) { await stop("کلمه را نشنیدم."); return; }
+      if (kind === "say") {
+        const p = clean((await ask("چطور؟", `«${w}» چطور خوانده شود؟ بگویید`, "free", 9000)).text);
+        if (!p) { await stop("نشنیدم."); return; }
+        const before = S.settings.lexicon || {};
+        await saveLexicon({ ...before, [w]: p });
+        vstatus(`«${w}» ← «${p}»`);
+        await speakWait(w);
+        const r3 = await ask("درست شد؟", "درست شد؟ بله یا خیر", "yes", 7000);
+        if (r3.yes) { buzz(80); await stop("ذخیره شد."); } else { await saveLexicon(before); await stop("برگردانده شد."); }
+        return;
+      }
+      let to = "";
+      if (kind === "split") {
+        to = clean((await ask("دو کلمه را جدا بگویید.", `«${w}» به چه دو کلمه‌ای جدا شود؟ بگویید`, "free", 9000)).text);
+        if (!to) { await stop("نشنیدم."); return; }
+        q = `«${w}» به «${to}» تبدیل شود؟`;
+      } else if (kind === "replace") {
+        to = clean((await ask("با چه کلمه‌ای؟", `«${w}» با چه کلمه‌ای عوض شود؟ بگویید`, "free", 9000)).text);
+        if (!to) { await stop("نشنیدم."); return; }
+        q = `«${w}» به «${to}» تبدیل شود؟`;
+      } else {
+        q = `«${w}» حذف شود؟`;
+      }
+      apply = () => sendEdit({ kind: "word", from: w, to });
+    }
+    const r2 = await ask(q + " بله یا خیر؟", q, "yes", 7000);
+    if (r2.yes && await apply()) {
+      buzz(80);
+      await stop("انجام شد.");
+      if (cur && cur.page === S.page && S.paras.length) { ensureAudio(); readFrom(Math.min(cur.p, S.paras.length - 1)); }
+    } else {
+      await stop("انجام نشد.");
+    }
+  } catch (e) {
+    const denied = e && (e.name === "NotAllowedError" || e.name === "SecurityError");
+    vstatus(denied ? "برنامه به میکروفون دسترسی ندارد. در تنظیمات دستگاه اجازه‌ی میکروفون را بدهید." : "خطا: " + (e && e.message || e));
+  } finally {
+    voiceBusy = false;
+    setTimeout(() => { if (!voiceBusy) vstatus(""); }, 5000);
+  }
+}
+$("voiceBtn").onclick = voiceEdit;
+
+// going to a page by voice: «صفحه‌ی بعد», «صفحه‌ی قبل», «برو صفحه‌ی صد و بیست»
+$("pageVoiceBtn").onclick = async () => {
+  if (voiceBusy || !S.doc) return;
+  voiceBusy = true;
+  const wasReading = reader.active;
+  stopReading();
+  try {
+    vstatus("در حال آماده شدن…");
+    await speakWait("کدام صفحه؟");
+    vstatus("گوش می‌دهم…\nبگویید: «صفحه‌ی بعد» · «صفحه‌ی قبل» · «برو صفحه‌ی ۱۲۰»");
+    const r = await listenOnce(9000, "page");
+    const g = r.go;
+    const n = g === "next" ? S.page + 1 : g === "prev" ? S.page - 1 : g;
+    if (!n || n < 1 || n > S.doc.pages) { vstatus("متوجه نشدم."); await speakWait("متوجه نشدم."); return; }
+    await loadPage(n);
+    buzz(60);
+    vstatus("صفحه‌ی " + fa(n));
+    await speakWait("صفحه " + n);
+    if (wasReading) { ensureAudio(); readFrom(0); }
+  } catch (e) {
+    vstatus("خطا: " + (e && e.message || e));
+  } finally {
+    voiceBusy = false;
+    setTimeout(() => { if (!voiceBusy) vstatus(""); }, 4000);
+  }
+};

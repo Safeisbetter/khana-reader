@@ -5,6 +5,7 @@ pub mod consts;
 pub mod difflib;
 pub mod doc;
 pub mod edits;
+pub mod voice;
 pub mod ebook;
 pub mod phon;
 pub mod pyre;

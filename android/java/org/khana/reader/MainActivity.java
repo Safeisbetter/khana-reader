@@ -53,7 +53,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     private static final int PICK_FILE = 1, ASK_MIC = 2, SAVE = 3;
     /** the Mac menu's commands (window.khanaMenu in app.js) */
     private static final String[][] MENU = {
-            {"settings", "تنظیمات"}, {"mp3", "ذخیره MP3"}, {"pdf", "ذخیره PDF ترجمه"},
+            {"settings", "تنظیمات"}, {"mp3", "ذخیره‌ی صدا"}, {"pdf", "ذخیره PDF ترجمه"},
             {"speed-down", "آهسته‌تر"}, {"speed-up", "تندتر"}, {"speed-reset", "سرعت عادی"},
             {"font-up", "قلم بزرگ‌تر"}, {"font-down", "قلم کوچک‌تر"}};
 

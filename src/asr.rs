@@ -40,14 +40,18 @@ fn skeleton_fa(text: &str) -> String {
 }
 
 #[cfg(any(target_os = "ios", windows))]
-pub fn transcribe16(_pcm: &[i16]) -> String {
+pub fn transcribe16(_pcm: &[i16], _grammar: Option<&[String]>) -> String {
     String::new()
 }
 
 #[cfg(not(any(target_os = "ios", windows)))]
-pub fn transcribe16(pcm: &[i16]) -> String {
+pub fn transcribe16(pcm: &[i16], grammar: Option<&[String]>) -> String {
     let Some(m) = model() else { return String::new() };
-    let Some(mut rec) = vosk::Recognizer::new(m, 16000.0) else { return String::new() };
+    let rec = match grammar {
+        Some(g) => vosk::Recognizer::new_with_grammar(m, 16000.0, g),
+        None => vosk::Recognizer::new(m, 16000.0),
+    };
+    let Some(mut rec) = rec else { return String::new() };
     let _ = rec.accept_waveform(pcm);
     match rec.final_result() {
         vosk::CompleteResult::Single(s) => s.text.to_string(),
@@ -72,7 +76,7 @@ pub fn heard_score(phonemes: &str, speech: &[f32], rate: usize) -> (Option<f64>,
         return (None, Vec::new());
     }
     let pcm16 = if rate == 24000 { crate::audio::resample_poly(speech, 2, 3) } else { speech.to_vec() };
-    let heard = transcribe16(&crate::audio::to_pcm16(&pcm16));
+    let heard = transcribe16(&crate::audio::to_pcm16(&pcm16), None);
     let got = skeleton_fa(&heard);
     let wa: Vec<char> = want.chars().collect();
     let ga: Vec<char> = got.chars().collect();

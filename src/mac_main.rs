@@ -23,21 +23,19 @@ fn menu() -> muda::Menu {
     let m = Menu::new();
     let app = Submenu::new("Khana Reader (Rust)", true);
     let _ = app.append_items(&[
-        &PredefinedMenuItem::about(None, None),
-        &PredefinedMenuItem::separator(),
-        &item("settings", "Settings… (تنظیمات)", cmd, Code::Comma),
+        &item("settings", "تنظیمات…", cmd, Code::Comma),
         &PredefinedMenuItem::separator(),
         &PredefinedMenuItem::hide(None),
         &PredefinedMenuItem::hide_others(None),
         &PredefinedMenuItem::separator(),
         &PredefinedMenuItem::quit(None),
     ]);
-    let file = Submenu::new("File", true);
+    let file = Submenu::new("پرونده", true);
     let _ = file.append_items(&[
-        &item("mp3", "Save as MP3… (ذخیره MP3)", cmd, Code::KeyS),
-        &item("pdf", "Save Farsi Translation as PDF… (ذخیره PDF ترجمه)", cmd | Modifiers::SHIFT, Code::KeyS),
+        &item("mp3", "ذخیره‌ی صدا…", cmd, Code::KeyS),
+        &item("pdf", "ذخیره‌ی ترجمه‌ی فارسی به صورت PDF…", cmd | Modifiers::SHIFT, Code::KeyS),
     ]);
-    let edit = Submenu::new("Edit", true);
+    let edit = Submenu::new("ویرایش", true);
     let _ = edit.append_items(&[
         &PredefinedMenuItem::undo(None),
         &PredefinedMenuItem::redo(None),
@@ -47,21 +45,21 @@ fn menu() -> muda::Menu {
         &PredefinedMenuItem::paste(None),
         &PredefinedMenuItem::select_all(None),
     ]);
-    let speed = Submenu::new("Speed", true);
+    let speed = Submenu::new("سرعت", true);
     let _ = speed.append_items(&[
-        &item("speed-down", "Slower (آهسته‌تر)", cmd, Code::BracketLeft),
-        &item("speed-up", "Faster (تندتر)", cmd, Code::BracketRight),
+        &item("speed-down", "آهسته‌تر", cmd, Code::BracketLeft),
+        &item("speed-up", "تندتر", cmd, Code::BracketRight),
         &PredefinedMenuItem::separator(),
-        &item("speed-reset", "Reset Speed to 1× (سرعت عادی)", cmd, Code::Digit0),
+        &item("speed-reset", "سرعت عادی", cmd, Code::Digit0),
     ]);
-    let view = Submenu::new("View", true);
+    let view = Submenu::new("نما", true);
     let _ = view.append_items(&[
-        &item("font-up", "Larger Text (قلم بزرگ‌تر)", cmd, Code::Equal),
-        &item("font-down", "Smaller Text (قلم کوچک‌تر)", cmd, Code::Minus),
+        &item("font-up", "قلم بزرگ‌تر", cmd, Code::Equal),
+        &item("font-down", "قلم کوچک‌تر", cmd, Code::Minus),
         &PredefinedMenuItem::separator(),
         &PredefinedMenuItem::fullscreen(None),
     ]);
-    let window = Submenu::new("Window", true);
+    let window = Submenu::new("پنجره", true);
     let _ = window.append_items(&[&PredefinedMenuItem::minimize(None), &PredefinedMenuItem::close_window(None)]);
     let _ = m.append_items(&[&app, &file, &edit, &speed, &view, &window]);
     m

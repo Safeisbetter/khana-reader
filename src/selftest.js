@@ -125,11 +125,11 @@ addEventListener("load", () => setTimeout(async () => {
     await say("start of book: first piece " + JSON.stringify(reader.queue[0] && reader.queue[0].text) + ", title " + JSON.stringify(S.doc.title));
     await loadPage(S.doc.pages); readFrom(0);
     const t2 = Date.now();
-    while (reader.active && !reader.queue.some(p => p.text === "پایان کتاب.") && Date.now() - t2 < 900000) await new Promise(r => setTimeout(r, 1000));
-    const ended = reader.queue.some(p => p.text === "پایان کتاب."), n = reader.queue.length;
+    while (reader.active && !reader.queue.some(p => p.text === "پایان متن.") && Date.now() - t2 < 900000) await new Promise(r => setTimeout(r, 1000));
+    const ended = reader.queue.some(p => p.text === "پایان متن."), n = reader.queue.length;
     // a played sentence is let go: at the end only the last one or two are still held
     while (reader.active && actx.currentTime < reader.lastEnd - 0.5 && Date.now() - t2 < 300000) await new Promise(r => setTimeout(r, 500));
-    await say("end of book: «پایان کتاب» queued " + ended + ", sentences still held at the end " + reader.sources.length + " of " + n + (ended ? "" : "; message on screen: " + JSON.stringify($("toast").textContent) + ", reached piece " + reader.next));
+    await say("end of book: «پایان متن» queued " + ended + ", sentences still held at the end " + reader.sources.length + " of " + n + (ended ? "" : "; message on screen: " + JSON.stringify($("toast").textContent) + ", reached piece " + reader.next));
     stopReading();
     let mjob = await jpost("/api/mp3", { doc: S.doc.id, first: Math.min(2, S.doc.pages), last: Math.min(2, S.doc.pages), voice: "khabari", speed: 1.0, bitrate: 64 });
     const t0 = Date.now();

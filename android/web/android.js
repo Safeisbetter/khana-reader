@@ -57,8 +57,8 @@
     if (el.title) el.title = el.title.split(from).join(to);
   };
   document.querySelectorAll(".offline, .hint, .privacy").forEach(el => {
-    say(el, "این کامپیوتر", "این گوشی");
-    say(el, "همین کامپیوتر", "همین گوشی");
+    say(el, "این دستگاه", "این گوشی");
+    say(el, "همین دستگاه", "همین گوشی");
   });
   document.querySelectorAll(".hint").forEach(el => { if (el.querySelector("kbd")) el.hidden = true; });
   say(document.querySelector(".privacy"), "با بستن برنامه پاک می‌شوند.",

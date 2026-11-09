@@ -142,13 +142,13 @@ fn say(text: &str, out: &str, voice: &str) {
     eprintln!("{secs:.1} s of speech in {:.1} s ({:.2}x real time)", t0.elapsed().as_secs_f64(), secs / t0.elapsed().as_secs_f64());
     std::fs::write(out, khana::audio::wav_bytes(&a, 24000)).unwrap();
     let pcm = khana::audio::resample_poly(&a, 2, 3);
-    eprintln!("heard: {}", khana::asr::transcribe16(&khana::audio::to_pcm16(&pcm)));
+    eprintln!("heard: {}", khana::asr::transcribe16(&khana::audio::to_pcm16(&pcm), None));
 }
 
 fn hear(path: &str) {
     let (a, sr) = khana::audio::read_wav(std::path::Path::new(path)).unwrap();
     let pcm = if sr == 24000 { khana::audio::resample_poly(&a, 2, 3) } else { a };
-    println!("{}", khana::asr::transcribe16(&khana::audio::to_pcm16(&pcm)));
+    println!("{}", khana::asr::transcribe16(&khana::audio::to_pcm16(&pcm), None));
 }
 
 fn api_test(path: &str) {

@@ -22,21 +22,21 @@ fn menu() -> muda::Menu {
     use muda::{Menu, Submenu};
     let ctrl = Modifiers::CONTROL;
     let m = Menu::new();
-    let file = Submenu::new("File", true);
+    let file = Submenu::new("پرونده", true);
     let _ = file.append_items(&[
-        &item("settings", "Settings… (تنظیمات)", ctrl, Code::Comma),
-        &item("mp3", "Save audio… (ذخیره صدا)", ctrl, Code::KeyS),
+        &item("settings", "تنظیمات…", ctrl, Code::Comma),
+        &item("mp3", "ذخیره‌ی صدا…", ctrl, Code::KeyS),
     ]);
-    let speed = Submenu::new("Speed", true);
+    let speed = Submenu::new("سرعت", true);
     let _ = speed.append_items(&[
-        &item("speed-down", "Slower (آهسته‌تر)", ctrl, Code::BracketLeft),
-        &item("speed-up", "Faster (تندتر)", ctrl, Code::BracketRight),
-        &item("speed-reset", "Reset Speed to 100% (سرعت عادی)", ctrl, Code::Digit0),
+        &item("speed-down", "آهسته‌تر", ctrl, Code::BracketLeft),
+        &item("speed-up", "تندتر", ctrl, Code::BracketRight),
+        &item("speed-reset", "سرعت عادی", ctrl, Code::Digit0),
     ]);
-    let view = Submenu::new("View", true);
+    let view = Submenu::new("نما", true);
     let _ = view.append_items(&[
-        &item("font-up", "Larger Text (قلم بزرگ‌تر)", ctrl, Code::Equal),
-        &item("font-down", "Smaller Text (قلم کوچک‌تر)", ctrl, Code::Minus),
+        &item("font-up", "قلم بزرگ‌تر", ctrl, Code::Equal),
+        &item("font-down", "قلم کوچک‌تر", ctrl, Code::Minus),
     ]);
     let _ = m.append_items(&[&file, &speed, &view]);
     m

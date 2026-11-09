@@ -14,7 +14,6 @@
       <div class="brand">
         <span class="logo">خوانا</span>
         <span class="file" id="fileName"></span>
-        <span class="offline" title="بدون اینترنت؛ هیچ داده‌ای از این کامپیوتر خارج نمی‌شود">● آفلاین و خصوصی</span>
       </div>
       <label class="btn primary" for="fileInput">باز کردن فایل</label>
       <button type="button" id="typeBtn" title="متن را بنویسید یا بچسبانید تا خوانده شود و به صورت فایل صدا ذخیره شود">✎ نوشتن متن</button>
@@ -27,7 +26,7 @@
       </div>
       <div class="pager">
         <button id="prev" type="button" aria-label="صفحه قبل">→</button>
-        <input id="pageInput" type="number" min="1" value="1" aria-label="شماره صفحه">
+        <input id="pageInput" type="text" inputmode="numeric" value="۱" aria-label="شماره صفحه">
         <span>از <span id="pageCount">۰</span></span>
         <button id="next" type="button" aria-label="صفحه بعد">←</button>
       </div>
@@ -41,23 +40,23 @@
       </div>
       <span class="spacer"></span>
       <button id="pdfBtn" type="button" hidden title="ترجمه‌ی فارسی سند را به صورت PDF ذخیره می‌کند (⇧⌘S)">ذخیره PDF ترجمه</button>
-      <button id="mp3Btn" type="button">ذخیره MP3</button>
+      <button id="mp3Btn" type="button">ذخیره‌ی صدا</button>
       <button id="settingsBtn" type="button" aria-label="تنظیمات">⚙︎ تنظیمات</button>
     </div>
     <div class="row" id="searchRow">
       <div class="search">
-        <input id="q" type="search" placeholder="جستجو در این صفحه… (Enter: بعدی)" aria-label="جستجو">
+        <input id="q" type="search" placeholder="جستجو در این صفحه… (کلید ورود: مورد بعدی)" aria-label="جستجو">
         <span class="count" id="count"></span>
       </div>
       <button id="copy" type="button" class="hide-sm">کپی متن صفحه</button>
+      <button id="pageVoiceBtn" type="button" hidden title="بگویید: صفحه‌ی بعد، صفحه‌ی قبل، یا برو صفحه‌ی ۱۲۰">🎤 رفتن به صفحه</button>
+      <button id="voiceBtn" type="button" hidden title="با صدای خودتان یک کلمه را عوض یا حذف کنید، یا بندی را که می‌شنوید حذف کنید">🎤 ویرایش با صدا</button>
       <button id="editBtn" type="button" title="تغییر یا حذف یک بند یا کلمه‌ی متن؛ برای خواندن، ذخیره‌ی MP3 و PDF هم اثر می‌کند">✎ ویرایش متن</button>
     </div>
     <div class="row" id="editBar" hidden>
-      <span class="editnote">روی یک بند کلیک کنید تا آن را عوض یا حذف کنید.</span>
-      <input id="edFrom" type="text" placeholder="کلمه‌ی غلط (در کل کتاب)" aria-label="کلمه‌ی غلط">
-      <input id="edTo" type="text" placeholder="کلمه‌ی درست (خالی: حذف)" aria-label="کلمه‌ی درست">
-      <button id="edWord" type="button" class="primary">عوض کردن در کل کتاب</button>
-      <button id="edReset" type="button" title="همه‌ی ویرایش‌های این کتاب را پاک می‌کند">بازگرداندن همه‌ی ویرایش‌ها</button>
+      <span class="editnote">روی یک بند بزنید تا در یک پنجره عوض یا حذف شود؛ یک کلمه را انتخاب کنید تا در کل کتاب عوض شود.</span>
+      <button id="edWordBtn" type="button">عوض کردن کلمه…</button>
+      <button id="edReset" type="button" title="همه‌ی ویرایش‌های این کتاب را پاک می‌کند">بازگرداندن همه</button>
       <span id="edInfo" class="editnote"></span>
     </div>
   </div>
@@ -67,11 +66,11 @@
   <div class="sheet">
     <section class="welcome" id="welcome">
       <h1>یک فایل را باز کنید</h1>
-      <p>فایل را روی این صفحه بکشید یا «باز کردن فایل» را بزنید. خوانا متن فارسی را مرتب نشان می‌دهد، با صدای بلند می‌خواند و می‌تواند آن را MP3 ذخیره کند.</p>
+      <p>فایل را روی این صفحه بکشید یا دکمه‌ی «باز کردن فایل» را بزنید. خوانا متن فارسی را مرتب و خوانا نشان می‌دهد، آن را با صدای بلند می‌خواند و می‌تواند صدای آن را به صورت MP3 ذخیره کند.</p>
       <div class="formats"><span>PDF</span><span>DOCX</span><span>DOC</span><span>EPUB</span><span>RTF</span><span>ODT</span><span>TXT</span><span>تصویر (JPG، PNG…)</span></div>
       <p><button type="button" class="primary" id="typeBtn2">✎ یا یک متن بنویسید</button></p>
-      <p class="hint">همه‌چیز روی همین کامپیوتر انجام می‌شود. اینترنت لازم نیست و فایل شما جایی فرستاده نمی‌شود.</p>
-      <p class="hint">کلیدها: <kbd>Space</kbd> خواندن/مکث · <kbd>← →</kbd> صفحه بعد/قبل · <kbd>⌘[</kbd> <kbd>⌘]</kbd> سرعت · <kbd>⌘0</kbd> سرعت عادی · <kbd>⌘,</kbd> تنظیمات</p>
+      <p class="note">طراحی این برنامه بر این اساس انجام شده است که برای افراد کم‌بینا قابل استفاده باشد: دکمه‌ها و نوشته‌ها بزرگ و پرتضاد هستند، قلم و رنگ‌ها قابل تنظیم‌اند، با صفحه‌خوان کار می‌کند و کارهای اصلی را می‌توان با صدا انجام داد.</p>
+      <p class="hint">کلیدها: <kbd>Space</kbd> خواندن / مکث · <kbd>← →</kbd> صفحه‌ی بعد / قبل · <kbd>⌘[</kbd> <kbd>⌘]</kbd> سرعت · <kbd>⌘0</kbd> سرعت عادی · <kbd>⌘,</kbd> تنظیمات</p>
     </section>
     <div class="note" id="note" hidden></div>
     <div id="textView" class="text" hidden></div>
@@ -109,7 +108,7 @@
     </div>
     <div class="field">
       <label for="speed">سرعت خواندن: <span id="speedVal"></span></label>
-      <input id="speed" type="range" min="0.5" max="2" step="0.01">
+      <input id="speed" type="range" aria-label="سرعت خواندن" min="0.5" max="2" step="0.01">
       <div class="scale"><span>آهسته ۵۰٪</span><span>۱۰۰٪</span><span>تند ۲۰۰٪</span></div>
       <div class="presets" role="group" aria-label="سرعت‌های آماده">
         <button type="button" data-speed="0.75">۷۵٪</button>
@@ -119,8 +118,17 @@
       </div>
     </div>
     <div class="field">
+      <span class="lbl">مکث در ویرگول و نقطه‌ویرگول</span>
+      <span class="hint">اگر کتاب ویرگول زیاد دارد و خواندن کند به نظر می‌رسد، مکث را کوتاه کنید.</span>
+      <div class="hlpick" role="radiogroup" aria-label="مکث در ویرگول">
+        <label><input type="radio" name="comma" value="short"><span>کوتاه</span></label>
+        <label><input type="radio" name="comma" value="normal"><span>معمولی</span></label>
+        <label><input type="radio" name="comma" value="long"><span>بلند</span></label>
+      </div>
+    </div>
+    <div class="field">
       <label for="fontSize">اندازه قلم: <span id="fontVal"></span></label>
-      <input id="fontSize" type="range" min="14" max="52" step="1">
+      <input id="fontSize" type="range" aria-label="اندازه قلم" min="14" max="52" step="1">
     </div>
     <div class="field">
       <span class="lbl">پوسته</span>
@@ -145,8 +153,8 @@
     <div class="field">
       <span class="lbl">متن</span>
       <label class="check"><input id="naturalTone" type="checkbox"><span>خواندن طبیعی (لحن پرسش، پایان جمله و عنوان)</span></label>
-      <label class="check"><input id="autoPlay" type="checkbox"><span>بعد از باز کردن فایل، خواندن خودکار شروع شود</span></label>
-      <label class="check"><input id="autoNext" type="checkbox"><span>بعد از پایان صفحه، صفحه بعد را هم بخوان</span></label>
+      <label class="check"><input id="autoPlay" type="checkbox"><span>پس از باز کردن فایل، خواندن خودکار شروع شود</span></label>
+      <label class="check"><input id="autoNext" type="checkbox"><span>پس از پایان هر صفحه، صفحه‌ی بعد هم خوانده شود</span></label>
       <label class="check"><input id="persianYeh" type="checkbox"><span>تبدیل «ي» و «ك» عربی به «ی» و «ک» فارسی</span></label>
       <label class="check"><input id="reversed" type="checkbox"><span>متن وارونه است<br><span class="hint">برای بعضی PDFها که حروف از آخر به اول درمی‌آیند.</span></span></label>
     </div>
@@ -165,15 +173,14 @@
       <div class="lexlist" id="lexList"></div>
     </div>
     <div class="field">
-      <label for="bitrate">کیفیت MP3</label>
+      <label for="bitrate">کیفیت MP3 (کیلوبیت در ثانیه)</label>
       <select id="bitrate">
-        <option value="48">۴۸ kbps (فایل کوچک)</option>
-        <option value="64">۶۴ kbps (پیشنهادی برای گفتار)</option>
-        <option value="96">۹۶ kbps</option>
-        <option value="128">۱۲۸ kbps (بهترین)</option>
+        <option value="48">۴۸ کیلوبیت (فایل کوچک)</option>
+        <option value="64">۶۴ کیلوبیت (پیشنهادی برای گفتار)</option>
+        <option value="96">۹۶ کیلوبیت</option>
+        <option value="128">۱۲۸ کیلوبیت (بهترین کیفیت)</option>
       </select>
     </div>
-    <p class="privacy">حریم خصوصی: خوانا فقط روی این کامپیوتر کار می‌کند و به اینترنت وصل نمی‌شود. فایل‌ها فقط در حافظه نگه داشته می‌شوند و با بستن برنامه پاک می‌شوند. نمونه‌ی صدای شما (۵ ثانیه) فقط روی همین کامپیوتر ذخیره می‌شود و با «حذف صدای من» پاک می‌شود.</p>
   </div>
 </div>
 
@@ -182,9 +189,37 @@
   <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="pwTitle">
     <div class="panel-head"><h2 id="pwTitle">رمز PDF</h2><button type="button" data-close>بستن</button></div>
     <p class="hint" id="pwHint">این PDF با رمز محافظت شده است. رمز را وارد کنید.</p>
-    <div class="field"><input type="password" id="pwInput" autocomplete="off" autocapitalize="off" spellcheck="false" dir="ltr"></div>
+    <div class="field"><input type="password" id="pwInput" aria-label="رمز PDF" autocomplete="off" autocapitalize="off" spellcheck="false" dir="ltr"></div>
     <div class="inline">
       <button type="button" class="primary" id="pwOk">باز کردن</button>
+      <button type="button" data-close>انصراف</button>
+    </div>
+  </div>
+</div>
+
+<!-- editing a paragraph: a window of its own, with a large box (the keyboard does not hide it) -->
+<div class="panel" id="paraPanel" hidden>
+  <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="paraTitle">
+    <div class="panel-head"><h2 id="paraTitle">ویرایش این بند</h2><button type="button" data-close>بستن</button></div>
+    <textarea id="paraText" dir="auto" aria-label="متن این بند"></textarea>
+    <span class="hint">برای بند جدید، متن را با کلید ورود به چند خط تقسیم کنید.</span>
+    <div class="inline">
+      <button type="button" class="primary" id="paraSave">ذخیره</button>
+      <button type="button" id="paraDel">حذف این بند</button>
+      <button type="button" data-close>انصراف</button>
+    </div>
+  </div>
+</div>
+
+<!-- changing a word in the whole book -->
+<div class="panel" id="wordPanel" hidden>
+  <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="wordTitle">
+    <div class="panel-head"><h2 id="wordTitle">عوض کردن یک کلمه در کل کتاب</h2><button type="button" data-close>بستن</button></div>
+    <div class="field"><label for="edFrom">کلمه‌ی غلط</label><input id="edFrom" type="text" autocomplete="off"></div>
+    <div class="field"><label for="edTo">کلمه‌ی درست (خالی: حذف کلمه)</label><input id="edTo" type="text" autocomplete="off"></div>
+    <span class="hint">فقط خود کلمه عوض می‌شود، نه وسط کلمه‌ی دیگر. روی خواندن، MP3 و PDF اثر می‌کند.</span>
+    <div class="inline">
+      <button type="button" class="primary" id="edWord">عوض کن</button>
       <button type="button" data-close>انصراف</button>
     </div>
   </div>
@@ -194,7 +229,7 @@
 <div class="panel" id="typePanel" hidden>
   <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="typeTitle">
     <div class="panel-head"><h2 id="typeTitle">نوشتن متن</h2><button type="button" data-close>بستن</button></div>
-    <p class="hint">متن را اینجا بنویسید یا بچسبانید. با «خواندن» می‌خوانیم؛ با «ذخیره صدا» به صورت MP3 یا فایل صدای دیگر ذخیره می‌شود.</p>
+    <p class="hint">متن را اینجا بنویسید یا بچسبانید. با «خواندن» آن را می‌شنوید و با «ذخیره‌ی صدا» آن را به صورت فایل صدا (MP3 یا WAV) ذخیره می‌کنید.</p>
     <div class="field"><textarea id="typeText" dir="auto" rows="12" placeholder="متن شما…" aria-label="متن"></textarea></div>
     <div class="inline">
       <button type="button" class="primary" id="typeRead">▶ خواندن</button>
@@ -214,8 +249,8 @@
         <label><input type="radio" name="scope" value="page" checked> فقط صفحه فعلی</label>
         <label><input type="radio" name="scope" value="all"> کل سند</label>
         <label><input type="radio" name="scope" value="range"> از صفحه
-          <input id="from" type="number" min="1" value="1" class="num"> تا
-          <input id="to" type="number" min="1" value="1" class="num"></label>
+          <input id="from" type="text" inputmode="numeric" value="۱" class="num"> تا
+          <input id="to" type="text" inputmode="numeric" value="۱" class="num"></label>
       </div>
     </div>
     <div class="field" id="fmtField">
@@ -238,12 +273,13 @@
     <div id="mp3Status" hidden class="field">
       <div class="progress"><div id="mp3Bar"></div></div>
       <span class="hint" id="mp3Text"></span>
-      <button type="button" class="primary" id="mp3Reveal" hidden>نمایش در Finder</button>
+      <button type="button" class="primary" id="mp3Reveal" hidden>نمایش فایل</button>
     </div>
   </div>
 </div>
 
 <div class="drop" id="drop" hidden>فایل را اینجا رها کنید</div>
+<div class="voicebox" id="voiceStatus" role="status" aria-live="assertive" hidden></div>
 <div class="toast" id="toast" hidden></div>
 <button type="button" class="primary fixbtn" id="fixWord" hidden></button>
 <audio id="audio" preload="auto"></audio>

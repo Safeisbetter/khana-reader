@@ -20,6 +20,21 @@ const PACE_HIGH: f64 = 1.6;
 const PACE_TRIES: usize = 5;
 pub const PARAGRAPH_GAP: f64 = 0.9;
 
+static COMMA_PAUSE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3F26_6666);
+
+pub fn set_comma_pause(kind: &str) {
+    let f: f32 = match kind {
+        "short" => 0.3,
+        "long" => 1.0,
+        _ => 0.65,
+    };
+    COMMA_PAUSE.store(f.to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+fn comma_pause() -> f64 {
+    f32::from_bits(COMMA_PAUSE.load(std::sync::atomic::Ordering::Relaxed)) as f64
+}
+
 pub static LISTEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 
@@ -691,7 +706,7 @@ impl Engine {
         for (si, (_, plan, _)) in sentences.iter().enumerate() {
             for (pi, (phrase, pgap)) in plan.iter().enumerate() {
                 for (ci, chunk) in chunker.chunk_phonemes(strip(phrase)).into_iter().enumerate() {
-                    let gap = if pi == 0 && ci == 0 { 0.0 } else if ci == 0 { *pgap } else { CHUNK_GAP };
+                    let gap = if pi == 0 && ci == 0 { 0.0 } else if ci == 0 { *pgap * comma_pause() } else { CHUNK_GAP * comma_pause() };
                     jobs.push((si, chunk, gap));
                 }
             }
