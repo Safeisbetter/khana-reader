@@ -37,6 +37,8 @@ function applySettings() {
   document.querySelectorAll("[data-speed]").forEach(b => b.classList.toggle("on", Number(b.dataset.speed) === Number(s.speed) && b.id !== "speedReset"));
   $("fontSize").value = s.fontSize; $("fontVal").textContent = fa(s.fontSize);
   $("voice").value = s.voice;
+  applyCursor(s.cursor || "large");
+  document.querySelectorAll("input[name=cursor]").forEach(r => r.checked = r.value === (s.cursor || "large"));
   $("autoNext").checked = !!s.autoNext;
   $("naturalTone").checked = s.naturalTone !== false;
   $("autoPlay").checked = !!s.autoPlay;
@@ -103,6 +105,7 @@ window.khanaMenu = cmd => {
   }
 };
 $("fontSize").oninput = e => setSetting("fontSize", +e.target.value);
+document.querySelectorAll("input[name=cursor]").forEach(r => r.onchange = () => setSetting("cursor", r.value));
 $("autoNext").onchange = e => setSetting("autoNext", e.target.checked);
 $("naturalTone").onchange = e => setSetting("naturalTone", e.target.checked);
 $("autoPlay").onchange = e => setSetting("autoPlay", e.target.checked);
@@ -244,7 +247,7 @@ document.addEventListener("selectionchange", () => {
   $("fixWord").hidden = !ok;
   if (ok) {
     // (while the text is being edited the button changes the word in the whole book; otherwise it fixes how the word is said)
-    $("fixWord").textContent = S.editing ? `عوض کردن «${t}» در کل کتاب` : `اصلاح تلفظ «${t}»`;
+    $("fixWord").textContent = S.editing ? `عوض کردن «${t}» در همه‌ی کتاب‌ها` : `اصلاح تلفظ «${t}»`;
     $("fixWord").dataset.word = t;
   }
 });
@@ -469,8 +472,10 @@ function getParas(n) {
 async function pageSoFar(n) {
   const s = S.settings, key = `${S.doc.id}|${n}|${!!s.reversed}|${!!s.persianYeh}|true`;
   if (pageCache.has(key)) return { paragraphs: await pageCache.get(key), done: true };
+  const gen = editGen;
   const r = await pageReq(`/api/page?doc=${S.doc.id}&n=${n}&rev=${!!s.reversed}&yeh=${!!s.persianYeh}&tr=true&partial=1`, n);
-  if (r.done) pageCache.set(key, Promise.resolve(r.paragraphs));
+  // (a page asked before a correction was made is not kept: it has the old words)
+  if (r.done && gen === editGen) pageCache.set(key, Promise.resolve(r.paragraphs));
   return r;
 }
 // the visible page gets the paragraphs translated since it was shown
@@ -717,6 +722,20 @@ const reader = { active: false, paused: false, run: 0, queue: [], next: 0, playi
 function setPlayButton() {
   $("play").textContent = reader.active && !reader.paused ? "❚❚ مکث" : (reader.paused ? "▶ ادامه" : "▶ خواندن");
   $("stop").disabled = !reader.active;
+}
+// a big mouse pointer for people who see badly: drawn here as pictures (black arrow with a white edge; yellow over things that can be pressed)
+let cursorUrls = [];
+function applyCursor(size) {
+  cursorUrls.forEach(u => URL.revokeObjectURL(u)); cursorUrls = [];
+  const px = size === "huge" ? 56 : size === "large" ? 40 : 0, root = document.documentElement;
+  if (!px) { root.style.removeProperty("--cur"); root.style.removeProperty("--cur-hand"); return; }
+  const mk = (fill) => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 24 24"><path d="M3 2 L3 20 L8 15.5 L11.5 22.5 L14.5 21 L11 14.2 L18 14 Z" fill="${fill}" stroke="${fill === "#000" ? "#fff" : "#000"}" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+    const u = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" })); cursorUrls.push(u); return u;
+  };
+  const hot = Math.round(px * 3 / 24), hot2 = Math.round(px * 2 / 24);
+  root.style.setProperty("--cur", `url(${mk("#000")}) ${hot} ${hot2}, auto`);
+  root.style.setProperty("--cur-hand", `url(${mk("#FFE600")}) ${hot} ${hot2}, pointer`);
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -981,7 +1000,7 @@ let resizeT; addEventListener("resize", () => { clearTimeout(resizeT); resizeT =
     const r = await jget("/api/init");
     S.settings = r.settings; S.voices = r.voices;
     // (editing by voice needs the recognizer, which the Mac and Android apps have, and the microphone)
-    $("pageVoiceBtn").hidden = $("voiceBtn").hidden = !(r.canListen && navigator.mediaDevices && !window.KHANA_NO_MIC);
+    $("voiceBtn").hidden = !(r.canListen && navigator.mediaDevices && !window.KHANA_NO_MIC);
     fillVoices(r.voices);
     applySettings(); renderLexicon(); syncChrome(); setPlayButton();
   } catch (e) { note("برنامه درست اجرا نشد: " + esc(e.message), true); }
@@ -991,9 +1010,16 @@ let resizeT; addEventListener("resize", () => { clearTimeout(resizeT); resizeT =
 /* ---------------- editing the text: a paragraph changed or taken out, a word changed everywhere ---------------- */
 // The corrections are kept on this computer, per book, and reach the reading, the MP3 and the PDF.
 const editQuery = () => `doc=${S.doc.id}&rev=${!!S.settings.reversed}&yeh=${!!S.settings.persianYeh}&tr=${translating()}`;
+let editGen = 0, lastFound = null;
 async function sendEdit(body, keep) {
   const r = await jpost(`/api/edit?${editQuery()}`, { n: S.page, ...body });
   if (r.error) { toast(r.error); return false; }
+  editGen++;
+  // (a word changed: the reader is told in how many places of the whole book it stood)
+  if (body.kind === "word" && typeof r.found === "number") {
+    lastFound = r.found;
+    toast(r.found ? `در ${fa(r.found)} جای کتاب عوض شد.` : "این کلمه جایی در کتاب پیدا نشد؛ شاید املای آن در کتاب فرق دارد.");
+  }
   // (the page is shown again with the correction, at the same place: not at the top)
   const y = window.scrollY;
   pageCache.clear();
@@ -1038,12 +1064,26 @@ $("editBtn").onclick = () => {
   }
 };
 $("edWordBtn").onclick = () => openWordEditor();
+// the word is always read with the linking «ـِ» (ezafe): «کتاب» becomes «کتابِ» in this book's text (a word correction, so it also reaches the MP3 and the PDF)
+async function addEzafe(w) {
+  w = (w || "").trim().replace(/\u0650$/, "");
+  if (!w) return false;
+  return await sendEdit({ kind: "word", from: w, to: w + "\u0650" });
+}
+$("edEzafe").onclick = async () => {
+  const w = $("edFrom").value.trim();
+  if (!w) return toast("اول کلمه را بنویسید.");
+  if (!await addEzafe(w)) return;
+  $("wordPanel").hidden = true;
+  toast("«" + w + "» از این پس در همه‌ی کتاب‌ها با کسره‌ی اضافه خوانده می‌شود.");
+  sayWord(w + "\u0650 من");
+};
 $("edWord").onclick = async () => {
   if (!$("edFrom").value.trim()) return toast("کلمه‌ی غلط را بنویسید.");
-  if (await sendEdit({ kind: "word", from: $("edFrom").value, to: $("edTo").value })) { $("edFrom").value = ""; $("edTo").value = ""; $("wordPanel").hidden = true; toast("در کل کتاب عوض شد."); }
+  if (await sendEdit({ kind: "word", from: $("edFrom").value, to: $("edTo").value })) { $("edFrom").value = ""; $("edTo").value = ""; $("wordPanel").hidden = true; toast("در همه‌ی کتاب‌ها عوض شد."); }
 };
 $("edReset").onclick = async () => {
-  if (confirm("همه‌ی ویرایش‌های این کتاب پاک شود؟") && await sendEdit({ kind: "reset" })) toast("ویرایش‌ها پاک شد.");
+  if (confirm("همه‌ی ویرایش‌های این کتاب و همه‌ی کلمه‌های اصلاح‌شده‌ی کتاب‌ها پاک شود؟") && await sendEdit({ kind: "reset" })) toast("ویرایش‌ها پاک شد.");
 };
 
 
@@ -1089,33 +1129,44 @@ async function speakWait(text) {
   await new Promise(done => { audio.onended = audio.onerror = () => done(); audio.play().catch(() => done()); setTimeout(done, 25000); });
 }
 // one recording from the microphone, until the user stops speaking (or the time is up); the recognizer's answer: {text, cmd, yes}
-async function listenOnce(maxMs, mode) {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+async function listenOnce(maxMs, mode, endQuiet = 1.2) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  try { await ctx.resume(); } catch (e) {}
   const src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(4096, 1, 1);
   const chunks = [], t0 = Date.now();
-  let heard = false, quiet = 0;
+  // the level of the room is measured in the first third of a second; speech is anything clearly above it
+  let heard = false, quiet = 0, floor = 0, nFloor = 0, seen = 0;
   node.onaudioprocess = e => {
     const d = e.inputBuffer.getChannelData(0);
     chunks.push(new Float32Array(d));
     let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
-    if (Math.sqrt(sum / d.length) > 0.015) { heard = true; quiet = 0; } else if (heard) quiet += d.length / ctx.sampleRate;
+    const rms = Math.sqrt(sum / d.length), secs = d.length / ctx.sampleRate;
+    seen += secs;
+    if (seen < 0.35) { floor = Math.max(floor, rms); nFloor++; return; }
+    if (rms > Math.max(0.008, floor * 2.5)) { heard = true; quiet = 0; } else if (heard) quiet += secs;
   };
   src.connect(node); node.connect(ctx.destination);
-  while (Date.now() - t0 < maxMs && !(heard && quiet > 1.1) && !(!heard && Date.now() - t0 > 6500)) await sleep(100);
+  while (Date.now() - t0 < maxMs && !(heard && quiet > endQuiet) && !(!heard && Date.now() - t0 > 7000)) await sleep(100);
   node.disconnect(); src.disconnect(); stream.getTracks().forEach(t => t.stop());
   const rate = ctx.sampleRate; ctx.close();
   const all = new Float32Array(chunks.reduce((n, c) => n + c.length, 0)); let at = 0;
   for (const c of chunks) { all.set(c, at); at += c.length; }
-  if (!heard) return { text: "", cmd: null, yes: false };
+  if (!heard) return { text: "", cmd: null, yes: false, go: null, silent: true };
+  // a quiet voice is made louder (the loudest part to about 70% of the range, at most 30 times)
+  let peak = 0; for (let i = 0; i < all.length; i++) { const v = Math.abs(all[i]); if (v > peak) peak = v; }
+  const gain = peak > 0.001 ? Math.min(30, 0.7 / peak) : 1;
   // 16 kHz, 16-bit: each output sample is the mean of the input samples it covers
   const ratio = rate / 16000, out = new Int16Array(Math.floor(all.length / ratio));
   for (let i = 0; i < out.length; i++) {
     const a = Math.floor(i * ratio), b = Math.max(a + 1, Math.floor((i + 1) * ratio));
     let m = 0; for (let k = a; k < b && k < all.length; k++) m += all[k];
-    out[i] = Math.max(-1, Math.min(1, m / (b - a))) * 32767;
+    out[i] = Math.max(-1, Math.min(1, gain * m / (b - a))) * 32767;
   }
-  return await (await api("/api/listen?mode=" + mode + "&doc=" + encodeURIComponent(S.doc.id), { method: "POST", body: out.buffer })).json();
+  const r = await (await api("/api/listen?mode=" + mode + "&doc=" + encodeURIComponent(S.doc.id), { method: "POST", body: out.buffer })).json();
+  // (what was heard is shown, so a person who can see a little, or a helper, sees what went wrong)
+  if (r.text !== undefined) vstatus("شنیدم: «" + (clean(r.text) || "—") + "»");
+  return r;
 }
 function currentPiece() {
   const now = actx ? actx.currentTime : 0;
@@ -1131,15 +1182,31 @@ async function voiceEdit() {
   const curWord = curEl ? clean(curEl.textContent.replace(/[^\p{L}\u200c]/gu, "")) : "";
   const cur = currentPiece();
   stopReading();
-  const ask = async (say, show, mode, ms) => { vstatus(show); if (say) await speakWait(say); vstatus("گوش می‌دهم…\n" + show); return await listenOnce(ms, mode); };
+  const ask = async (say, show, mode, ms, endQuiet) => { vstatus(show); if (say) await speakWait(say); vstatus("گوش می‌دهم…\n" + show); return await listenOnce(ms, mode, endQuiet); };
   const stop = async m => { vstatus(m); await speakWait(m); };
   const theWord = async () => curWord || clean((await ask("کدام کلمه؟", "کدام کلمه؟ آن را بگویید", "book", 9000)).text);
   try {
     vstatus("در حال آماده شدن…");
-    const r1 = await ask("بفرمایید.", "بگویید، مثلاً: «تلفظ این کلمه را درست کن» · «این کلمه را جدا کن» · «این کلمه را عوض کن» · «این بند را حذف کن»", "cmd", 10000);
+    const r1 = await ask("بفرمایید.", "بگویید، مثلاً: «تلفظ این کلمه را درست کن» · «کسره‌ی اضافه» · «این بند را عوض کن» · «این کلمه را جدا کن» · «این کلمه را عوض کن» · «این بند را حذف کن»", "cmd", 10000);
     const kind = r1.cmd;
     if (!kind) { await stop("متوجه نشدم."); return; }
     let q, apply;
+    if (kind === "rewrite") {
+      // the whole paragraph being read is said again by the user, in their own words
+      const shown = cur && cur.page === S.page ? S.paras[cur.p] : undefined;
+      if (shown === undefined) { await stop("بندی در حال خواندن نبود."); return; }
+      const r5 = await ask("متن تازه‌ی این بند را بگویید. وقتی تمام شد، چند ثانیه ساکت بمانید.", "متن تازه‌ی این بند را بگویید؛ در پایان چند ثانیه ساکت بمانید", "free", 55000, 2.4);
+      const newText = clean(r5.text);
+      if (!newText) { await stop("متنی نشنیدم."); return; }
+      vstatus("شنیدم:\n«" + newText + "»");
+      await speakWait(newText);
+      const r6 = await ask("این متن جای بند فعلی بیاید؟ بگویید بله یا خیر.", "شنیدم:\n«" + newText + "»\nجای این بند بیاید؟ بله یا خیر", "yes", 7000);
+      if (r6.yes && await sendEdit({ kind: "paragraph", shown, text: newText })) {
+        buzz(80); await stop("انجام شد.");
+        if (cur && cur.page === S.page && S.paras.length) { ensureAudio(); readFrom(Math.min(cur.p, S.paras.length - 1)); }
+      } else { await stop("انجام نشد."); }
+      return;
+    }
     if (kind === "paragraph") {
       const shown = cur && cur.page === S.page ? S.paras[cur.p] : undefined;
       if (shown === undefined) { await stop("بندی در حال خواندن نبود."); return; }
@@ -1148,6 +1215,12 @@ async function voiceEdit() {
     } else {
       const w = await theWord();
       if (!w) { await stop("کلمه را نشنیدم."); return; }
+      if (kind === "ezafe") {
+        const q2 = `«${w}» با کسره‌ی اضافه خوانده شود؟ بله یا خیر؟`;
+        const r4 = await ask(q2, q2, "yes", 7000);
+        if (r4.yes && await addEzafe(w)) { buzz(80); vstatus("انجام شد."); await speakWait(w + "\u0650 من"); await stop("ذخیره شد."); } else { await stop("انجام نشد."); }
+        return;
+      }
       if (kind === "say") {
         const p = clean((await ask("چطور؟", `«${w}» چطور خوانده شود؟ بگویید`, "free", 9000)).text);
         if (!p) { await stop("نشنیدم."); return; }
@@ -1176,7 +1249,7 @@ async function voiceEdit() {
     const r2 = await ask(q + " بله یا خیر؟", q, "yes", 7000);
     if (r2.yes && await apply()) {
       buzz(80);
-      await stop("انجام شد.");
+      await stop(typeof lastFound === "number" && (kind === "replace" || kind === "delete" || kind === "split") ? (lastFound ? `انجام شد. در ${lastFound} جای کتاب عوض شد.` : "انجام شد، اما این کلمه جای دیگری در کتاب پیدا نشد.") : "انجام شد.");
       if (cur && cur.page === S.page && S.paras.length) { ensureAudio(); readFrom(Math.min(cur.p, S.paras.length - 1)); }
     } else {
       await stop("انجام نشد.");
@@ -1191,29 +1264,30 @@ async function voiceEdit() {
 }
 $("voiceBtn").onclick = voiceEdit;
 
-// going to a page by voice: «صفحه‌ی بعد», «صفحه‌ی قبل», «برو صفحه‌ی صد و بیست»
-$("pageVoiceBtn").onclick = async () => {
-  if (voiceBusy || !S.doc) return;
-  voiceBusy = true;
-  const wasReading = reader.active;
+/* ---------------- figures: go to the next or the previous one and read its caption ---------------- */
+let figList = null, figDoc = null;
+async function figures() {
+  if (figDoc !== S.doc.id) { figList = (await (await api(`/api/figures?doc=${S.doc.id}`)).json()).figures || []; figDoc = S.doc.id; }
+  return figList;
+}
+// where the listener is now: the paragraph being read, else the top of the page
+async function jumpFigure(dir) {
+  if (!S.doc) return false;
+  const list = await figures();
+  if (!list.length) { toast("در این کتاب شکل یا تصویری پیدا نشد."); vstatus("شکلی پیدا نشد."); return false; }
+  const cur = currentPiece();
+  const at = cur && cur.page === S.page ? cur.p : -1;
+  const before = (f) => f[0] < S.page || (f[0] === S.page && f[1] <= at);
+  const after = (f) => f[0] > S.page || (f[0] === S.page && f[1] > at);
+  const pick = dir > 0 ? list.find(after) : [...list].reverse().find(f => f[0] < S.page || (f[0] === S.page && f[1] < Math.max(at, 0)));
+  if (!pick) { toast(dir > 0 ? "شکل دیگری بعد از این نیست." : "شکل دیگری قبل از این نیست."); return false; }
+  const idx = list.indexOf(pick) + 1;
   stopReading();
-  try {
-    vstatus("در حال آماده شدن…");
-    await speakWait("کدام صفحه؟");
-    vstatus("گوش می‌دهم…\nبگویید: «صفحه‌ی بعد» · «صفحه‌ی قبل» · «برو صفحه‌ی ۱۲۰»");
-    const r = await listenOnce(9000, "page");
-    const g = r.go;
-    const n = g === "next" ? S.page + 1 : g === "prev" ? S.page - 1 : g;
-    if (!n || n < 1 || n > S.doc.pages) { vstatus("متوجه نشدم."); await speakWait("متوجه نشدم."); return; }
-    await loadPage(n);
-    buzz(60);
-    vstatus("صفحه‌ی " + fa(n));
-    await speakWait("صفحه " + n);
-    if (wasReading) { ensureAudio(); readFrom(0); }
-  } catch (e) {
-    vstatus("خطا: " + (e && e.message || e));
-  } finally {
-    voiceBusy = false;
-    setTimeout(() => { if (!voiceBusy) vstatus(""); }, 4000);
-  }
-};
+  await loadPage(pick[0]);
+  const i = translating() ? 0 : Math.min(pick[1], Math.max(0, S.paras.length - 1));
+  buzz(50);
+  toast(`شکل ${fa(idx)} از ${fa(list.length)}`);
+  ensureAudio();
+  readFrom(i);
+  return true;
+}

@@ -78,7 +78,65 @@ fn lookup<'a>(m: &'a [(&str, &str)], k: &str) -> Option<&'a str> {
     m.iter().find(|(a, _)| *a == k).map(|(_, v)| *v)
 }
 
+const GENERAL_LEXICON: &[(&str, &str)] = &[
+    ("قویا", "qaviyyan"),
+    ("کلاهبردار", "kolAhbardAr"),
+    ("آنلاین", "?Anlayn"),
+    ("گنگ", "gong"),
+    ("شق", "Seqq"),
+    ("سنخ", "senx"),
+    ("ترکه", "tarke"),
+    ("مترسک", "matarsak"),
+    ("کلنگ", "kolang"),
+    ("ولگرد", "velgard"),
+    ("سنگفرش", "sangfarS"),
+    ("سوءظن", "su?ezan"),
+    ("چکش", "CakoS"),
+    ("انبر", "?anbor"),
+    ("عالمه", "?Aleme"),
+    ("وازلین", "vAzelin"),
+    ("مثل", "mesle"),
+    ("باربر", "bArbar"),
+    ("شش", "SeS"),
+    ("پرتره", "portre"),
+    ("شیء", "Sey?"),
+    ("منافع", "manAfe?e"),
+    ("درباره", "darbAreye"),
+    ("نکنند", "nakonand"),
+    ("رای", "ra?y"),
+    ("کریکت", "kriket"),
+    ("قایقرانی", "qAyeqrAni"),
+    ("رویارویی", "ruyAruyi"),
+    ("مونتاژ", "montA;"),
+    ("پروژکتور", "porojektor"),
+    ("تألیفی", "ta?lifi"),
+    ("تالیفی", "ta?lifi"),
+    ("چاره", "CAre"),
+    ("انهدام", "?enhedAm"),
+    ("وانگهی", "vAngahi"),
+    ("درکی", "darki"),
+    ("بدوی", "badavi"),
+    ("مضحک", "mozahek"),
+    ("حول", "havl"),
+    ("کردار", "kardAr"),
+    ("موطن", "mavtan"),
+    ("بنگریم", "bengarim"),
+    ("ممارست", "momArast"),
+    ("جبلی", "jebelli"),
+    ("ادعیه", "?ad?iye"),
+    ("اینده", "?Ayande"),
+    ("گوتیک", "gotik"),
+    ("پژوهش‌گران", "pa;uheSgarAn"),
+    ("ماکیان", "mAkiyAn"),
+    ("علیرغم", "?alA raqme"),
+];
+
 const RUST_LEXICON: &[(&str, &str)] = &[
+];
+
+const EZAFE_PRONE: &[&str] = &["ستم", "نوع", "ضلع", "فرع"];
+const EZAFE_STOP: &[&str] = &[
+    "و", "را", "که", "از", "در", "به", "با", "تا", "یا", "است", "نیست", "بود", "شد", "شده", "می", "نمی", "هم", "نیز", "بر", "بی", "چون", "اما", "ولی", "اگر", "آنکه", "هیچ", "نه", "هر", "چه", "پس", "بلکه",
 ];
 
 fn ezafe_after_ain(w: &str) -> String {
@@ -129,7 +187,7 @@ impl LexiconG2P {
 
     pub fn set_lexicon(&self, user: &[(String, String)]) {
         let mut all: Vec<(String, String)> =
-            BUILTIN_LEXICON.iter().chain(RUST_LEXICON).map(|(a, b)| (a.to_string(), b.to_string())).collect();
+            BUILTIN_LEXICON.iter().chain(GENERAL_LEXICON).chain(RUST_LEXICON).map(|(a, b)| (a.to_string(), b.to_string())).collect();
         for (w, s) in user {
             match all.iter_mut().find(|x| &x.0 == w) {
                 Some(x) => x.1 = s.clone(),
@@ -297,7 +355,7 @@ impl LexiconG2P {
         }
         let in_fix = |w: &str| lookup(WORD_FIX, w).is_some();
         let pair_fix = |a: &str, b: &str| WORD_FIX_PAIRS.iter().find(|((x, y), _)| *x == a && *y == b).map(|(_, v)| *v);
-        if words.iter().any(|w| search(KASRA_END, w) || w.contains("ساخت") || w.contains("جستار") || in_fix(&core(w))) {
+        if words.iter().any(|w| EZAFE_PRONE.contains(&core(w).as_str())) || words.iter().any(|w| search(KASRA_END, w) || w.contains("ساخت") || w.contains("جستار") || in_fix(&core(w))) {
             let aligned = align_words(&words, &phw);
             let has = |k: usize| aligned.iter().find(|x| x.0 == k).map(|x| x.1);
             for &(i, j) in &aligned {
@@ -322,6 +380,13 @@ impl LexiconG2P {
                 }
             }
             for (i, j) in align_words(&words, &phw) {
+                if EZAFE_PRONE.contains(&core(&words[i]).as_str()) && !phw[j].ends_with('1') && !phw[j].ends_with('e') {
+                    let punct_after = sub(r"[^\w\u200c]+$", "", &words[i]) != words[i];
+                    let next_ok = words.get(i + 1).map_or(false, |n| !EZAFE_STOP.contains(&core(n).as_str()) && !core(n).is_empty());
+                    if !punct_after && next_ok {
+                        phw[j] = format!("{}e1", phw[j]);
+                    }
+                }
                 if search(KASRA_END, &words[i]) && !phw[j].ends_with('1') {
                     let stripped = sub(r"[^\w]|[ً-ْ]", "", &words[i]);
                     let last = stripped.chars().last();
@@ -347,7 +412,7 @@ impl LexiconG2P {
         if !text.replace('\u{200c}', "").contains("سه") {
             ph = ph.replace("sh", "S");
         }
-        if !search("[زذضظ]ه", text) {
+        if !search("[زذضظ]ه", &text.replace('\u{200c}', "")) {
             ph = ph.replace("zh", ";");
         }
         Ok(if keep_ezafe { ph } else { ph.replace('1', "") })

@@ -44,7 +44,11 @@ pub fn parse_command(text: &str) -> Option<Command> {
 
 pub fn command_word(text: &str) -> Option<&'static str> {
     let t = plain(text);
-    if search(r"جدا", &t) {
+    if search(r"بند", &t) && search(r"(?:عوض|تغییر|تبدیل|بنویس|بازنویسی|جایگزین)", &t) {
+        Some("rewrite")
+    } else if search(r"اضافه", &t) {
+        Some("ezafe")
+    } else if search(r"جدا", &t) {
         Some("split")
     } else if search(r"(?:تلفظ|جور|جوری|بخوان|خوانده)", &t) {
         Some("say")

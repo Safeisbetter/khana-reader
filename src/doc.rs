@@ -68,6 +68,8 @@ impl Drop for Document {
     }
 }
 
+pub const PICTURE_PAGE: &str = "در این صفحه فقط تصویر هست.";
+
 pub struct Document {
     pub id: String,
     pub name: String,
@@ -75,6 +77,7 @@ pub struct Document {
     pub had_scans: bool,
     pub pictures: HashSet<usize>,
     lang: std::sync::OnceLock<&'static str>,
+    figs: std::sync::OnceLock<Vec<(usize, usize, String)>>,
     pub font_fix: Vec<(char, String)>,
     words: DocWords,
     note_marks: Vec<Vec<u32>>,
@@ -147,6 +150,7 @@ impl Document {
             had_scans,
             pictures,
             lang: std::sync::OnceLock::new(),
+            figs: std::sync::OnceLock::new(),
             font_fix,
             words,
             note_marks,
@@ -156,7 +160,7 @@ impl Document {
             engines,
             pdfjs,
             given: Mutex::new(HashMap::new()),
-            edits: Mutex::new(crate::edits::Edits::load(&edits_file)),
+            edits: Mutex::new(crate::edits::Edits::load_book(&edits_file)),
             edits_file,
         });
         let mut first: Vec<usize> = doc.st.lock().unwrap().scanned.iter().copied().collect();
@@ -335,7 +339,32 @@ impl Document {
 
     pub fn page_text(self: &Arc<Self>, n: usize, opts: Opts) -> Vec<String> {
         let base = self.page_text_base(n, opts);
+        if base.is_empty() && !self.had_scans && self.pictures.contains(&n) {
+            return vec![PICTURE_PAGE.to_string()];
+        }
         self.edits.lock().unwrap().apply(base)
+    }
+
+    pub fn figures(self: &Arc<Self>) -> Vec<(usize, usize, String)> {
+        if let Some(f) = self.figs.get() {
+            return f.clone();
+        }
+        let o = Opts { translate: false, ..Opts::default() };
+        let mut out = Vec::new();
+        for n in 1..=self.n_pages {
+            let base = self.page_text_base(n, o);
+            if base.is_empty() && !self.had_scans && self.pictures.contains(&n) {
+                out.push((n, 0, PICTURE_PAGE.to_string()));
+                continue;
+            }
+            for (i, p) in base.iter().enumerate() {
+                if crate::text::is_figure_caption(p) {
+                    out.push((n, i, p.chars().take(60).collect()));
+                }
+            }
+        }
+        let _ = self.figs.set(out.clone());
+        out
     }
 
     pub fn page_text_base(self: &Arc<Self>, n: usize, opts: Opts) -> Vec<String> {

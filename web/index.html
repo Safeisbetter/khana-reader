@@ -49,14 +49,13 @@
         <span class="count" id="count"></span>
       </div>
       <button id="copy" type="button" class="hide-sm">کپی متن صفحه</button>
-      <button id="pageVoiceBtn" type="button" hidden title="بگویید: صفحه‌ی بعد، صفحه‌ی قبل، یا برو صفحه‌ی ۱۲۰">🎤 رفتن به صفحه</button>
       <button id="voiceBtn" type="button" hidden title="با صدای خودتان یک کلمه را عوض یا حذف کنید، یا بندی را که می‌شنوید حذف کنید">🎤 ویرایش با صدا</button>
       <button id="editBtn" type="button" title="تغییر یا حذف یک بند یا کلمه‌ی متن؛ برای خواندن، ذخیره‌ی MP3 و PDF هم اثر می‌کند">✎ ویرایش متن</button>
     </div>
     <div class="row" id="editBar" hidden>
-      <span class="editnote">روی یک بند بزنید تا در یک پنجره عوض یا حذف شود؛ یک کلمه را انتخاب کنید تا در کل کتاب عوض شود.</span>
+      <span class="editnote">روی یک بند بزنید تا در یک پنجره عوض یا حذف شود؛ یک کلمه را انتخاب کنید تا در همه‌ی کتاب‌ها عوض شود.</span>
       <button id="edWordBtn" type="button">عوض کردن کلمه…</button>
-      <button id="edReset" type="button" title="همه‌ی ویرایش‌های این کتاب را پاک می‌کند">بازگرداندن همه</button>
+      <button id="edReset" type="button" title="همه‌ی ویرایش‌های این کتاب و کلمه‌های اصلاح‌شده‌ی همه‌ی کتاب‌ها را پاک می‌کند">بازگرداندن همه</button>
       <span id="edInfo" class="editnote"></span>
     </div>
   </div>
@@ -152,6 +151,15 @@
     </div>
     <div class="field">
       <span class="lbl">متن</span>
+      <div class="field">
+        <span class="lbl">اندازه‌ی نشانگر ماوس</span>
+        <div class="inline" role="radiogroup" aria-label="اندازه‌ی نشانگر ماوس">
+          <label><input type="radio" name="cursor" value="normal"><span>معمولی</span></label>
+          <label><input type="radio" name="cursor" value="large"><span>بزرگ</span></label>
+          <label><input type="radio" name="cursor" value="huge"><span>خیلی بزرگ</span></label>
+        </div>
+        <span class="hint">نشانگر بزرگ سیاه با لبه‌ی سفید است؛ روی دکمه‌ها و گزینه‌ها زرد می‌شود.</span>
+      </div>
       <label class="check"><input id="naturalTone" type="checkbox"><span>خواندن طبیعی (لحن پرسش، پایان جمله و عنوان)</span></label>
       <label class="check"><input id="autoPlay" type="checkbox"><span>پس از باز کردن فایل، خواندن خودکار شروع شود</span></label>
       <label class="check"><input id="autoNext" type="checkbox"><span>پس از پایان هر صفحه، صفحه‌ی بعد هم خوانده شود</span></label>
@@ -214,12 +222,13 @@
 <!-- changing a word in the whole book -->
 <div class="panel" id="wordPanel" hidden>
   <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="wordTitle">
-    <div class="panel-head"><h2 id="wordTitle">عوض کردن یک کلمه در کل کتاب</h2><button type="button" data-close>بستن</button></div>
+    <div class="panel-head"><h2 id="wordTitle">عوض کردن یک کلمه در همه‌ی کتاب‌ها</h2><button type="button" data-close>بستن</button></div>
     <div class="field"><label for="edFrom">کلمه‌ی غلط</label><input id="edFrom" type="text" autocomplete="off"></div>
     <div class="field"><label for="edTo">کلمه‌ی درست (خالی: حذف کلمه)</label><input id="edTo" type="text" autocomplete="off"></div>
     <span class="hint">فقط خود کلمه عوض می‌شود، نه وسط کلمه‌ی دیگر. روی خواندن، MP3 و PDF اثر می‌کند.</span>
     <div class="inline">
       <button type="button" class="primary" id="edWord">عوض کن</button>
+      <button type="button" id="edEzafe" title="کلمه‌ی بالا در خواندن همیشه با «ـِ» (کسره‌ی اضافه) خوانده شود، مثل «کتابِ من». نوشته‌ی کتاب عوض نمی‌شود.">با کسره‌ی اضافه بخوان</button>
       <button type="button" data-close>انصراف</button>
     </div>
   </div>

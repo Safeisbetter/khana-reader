@@ -36,6 +36,17 @@ pub fn replace_word(text: &str, from: &str, to: &str) -> String {
     }
 }
 
+pub fn count_word(text: &str, word: &str) -> usize {
+    if word.is_empty() {
+        return 0;
+    }
+    text.match_indices(word)
+        .filter(|(i, m)| {
+            !text[..*i].chars().next_back().is_some_and(is_word_char) && !text[i + m.len()..].chars().next().is_some_and(is_word_char)
+        })
+        .count()
+}
+
 pub fn fingerprint(pages: &[Vec<String>]) -> String {
     pages.iter().flatten().filter(|p| !p.trim().is_empty()).flat_map(|p| p.chars()).take(1000).collect()
 }
@@ -58,7 +69,26 @@ pub const MAX_WORD_CHARS: usize = 200;
 pub const MAX_EDITS: usize = 5_000;
 const MAX_FILE_BYTES: u64 = 20 * 1024 * 1024;
 
+pub fn global_words_file() -> PathBuf {
+    crate::app::data_dir().join("edits").join("all-books-words.json")
+}
+
 impl Edits {
+    pub fn load_book(path: &Path) -> Edits {
+        let mut e = Edits::load(path);
+        let g = Edits::load(&global_words_file());
+        for (a, b) in g.words {
+            e.words.retain(|(x, _)| *x != a);
+            e.words.push((a, b));
+        }
+        e
+    }
+
+    pub fn save_book(&self, path: &Path) -> Result<(), String> {
+        Edits { paras: self.paras.clone(), words: Vec::new() }.save(path)?;
+        Edits { paras: Vec::new(), words: self.words.clone() }.save(&global_words_file())
+    }
+
     pub fn is_empty(&self) -> bool {
         self.paras.is_empty() && self.words.is_empty()
     }

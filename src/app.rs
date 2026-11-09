@@ -66,7 +66,7 @@ fn all_voices() -> Vec<(String, String, String, String)> {
 fn default_settings() -> Map<String, Value> {
     let first = voices().first().map(|v| v.id).unwrap_or("");
     let v = json!({"voice": first, "speed": 1.0, "fontSize": 21, "reversed": false, "persianYeh": true, "autoNext": true,
-                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "translate": true, "naturalTone": true, "theme": "auto", "commaPause": "normal"});
+                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "translate": true, "naturalTone": true, "theme": "auto", "commaPause": "normal", "cursor": "large"});
     v.as_object().unwrap().clone()
 }
 
@@ -821,6 +821,7 @@ impl App {
                 }
                 let kind = get("kind");
                 let mut ed = d.edits.lock().unwrap().clone();
+                let mut found: Option<usize> = None;
                 match kind.as_str() {
                     "paragraph" => {
                         let base = d.page_text_base(n, self.opts(q));
@@ -833,20 +834,25 @@ impl App {
                             return Err(bad("کلمه‌ای که باید عوض شود را بنویسید."));
                         }
                         ed.set_word(&get("from"), &get("to"));
+                        if !self.opts(q).translate {
+                            let o = self.opts(q);
+                            let from = get("from");
+                            found = Some((1..=d.n_pages).map(|p| d.page_text_base(p, o).iter().map(|t| crate::edits::count_word(t, from.trim())).sum::<usize>()).sum::<usize>());
+                        }
                     }
                     "reset" => ed = crate::edits::Edits::default(),
                     _ => return Err(bad("درخواست ناشناخته.")),
                 }
-                ed.save(&d.edits_file).map_err(ApiError::Internal)?;
+                ed.save_book(&d.edits_file).map_err(ApiError::Internal)?;
                 let count = ed.paras.len() + ed.words.len();
                 *d.edits.lock().unwrap() = ed;
-                Ok(reply_json(&json!({"edits": count})))
+                Ok(reply_json(&json!({"edits": count, "found": found})))
             }
             "listen_post" => {
                 if !crate::asr::ready() {
                     return Err(bad("تشخیص گفتار در این نسخه نیست."));
                 }
-                if body.len() < 3200 || body.len() > 20 * 16000 * 2 || body.len() % 2 != 0 {
+                if body.len() < 3200 || body.len() > 60 * 16000 * 2 || body.len() % 2 != 0 {
                     return Err(bad("صدای ضبط‌شده درست نیست."));
                 }
                 let pcm: Vec<i16> = body.chunks_exact(2).map(|b| i16::from_le_bytes([b[0], b[1]])).collect();
@@ -854,6 +860,8 @@ impl App {
                 let phrases = |l: &[&str]| -> Vec<String> { l.iter().map(|x| x.to_string()).chain(["[unk]".to_string()]).collect() };
                 let grammar: Option<Vec<String>> = match mode {
                     "cmd" => Some(phrases(&[
+                        "این بند را عوض کن", "بند را عوض کن", "این بند را تغییر بده", "بند را تغییر بده", "این بند را دوباره بنویس", "بند را بازنویسی کن", "متن این بند را عوض کن",
+                        "کسره اضافه", "کسره ی اضافه", "کسره اضافه بده", "این کلمه را با کسره اضافه بخوان", "این کلمه اضافه دارد", "اضافه بخوان", "اضافه",
                         "تلفظ", "تلفظ این کلمه را درست کن", "تلفظ کلمه را درست کن", "تلفظ این کلمه درست نیست", "تلفظ را درست کن", "این کلمه را این جوری بخوان", "این کلمه این جوری باید تلفظ شود", "کلمه این جوری باید تلفظ شود",
                         "جدا کن", "این کلمه را جدا کن", "کلمه را از هم جدا کن", "یک کلمه سر هم را از هم جدا کن", "این کلمه سر هم است جدا کن", "کلمه های سر هم را جدا کن",
                         "عوض کن", "تغییر", "تبدیل کن", "این کلمه را عوض کن", "این کلمه را تغییر بده", "کلمه را عوض کن",
@@ -862,7 +870,7 @@ impl App {
                     "yes" => Some(phrases(&["بله", "آره", "درست", "درست است", "تایید", "باشه", "خیر", "نه", "لغو", "نادرست", "غلط"])),
                     "page" => {
                         let d = self.doc(q)?;
-                        let mut g = phrases(&["صفحه بعد", "صفحه بعدی", "بعدی", "بعد", "صفحه قبل", "صفحه قبلی", "قبلی", "قبل", "اول", "صفحه اول", "آخر", "صفحه آخر"]);
+                        let mut g = phrases(&["صفحه بعد", "صفحه بعدی", "بعدی", "بعد", "صفحه قبل", "صفحه قبلی", "قبلی", "قبل", "اول", "صفحه اول", "آخر", "صفحه آخر", "شکل بعد", "شکل بعدی", "شکل قبل", "شکل قبلی", "تصویر بعدی", "تصویر قبلی"]);
                         for n in 1..=d.n_pages.min(3000) {
                             let w = crate::normfa::number_to_words(n as u64);
                             g.push(format!("صفحه {w}"));
@@ -892,16 +900,29 @@ impl App {
                     }
                     _ => None,
                 };
-                let text = crate::asr::transcribe16(&pcm, grammar.as_deref());
+                let mut text = crate::asr::transcribe16(&pcm, grammar.as_deref());
+                if matches!(mode, "cmd" | "yes") && !text.replace("[unk]", "").trim().is_empty() == false {
+                    text = crate::asr::transcribe16(&pcm, None);
+                } else if mode == "cmd" && crate::voice::command_word(&text).is_none() {
+                    let free = crate::asr::transcribe16(&pcm, None);
+                    if crate::voice::command_word(&free).is_some() {
+                        text = free;
+                    }
+                }
                 let go = if mode == "page" {
                     let d = self.doc(q)?;
                     let t = text.replace("برو", " ").replace("صفحه", " ").replace("[unk]", " ");
                     let t = t.split_whitespace().collect::<Vec<_>>().join(" ");
-                    if t.contains("بعد") { json!("next") } else if t.contains("قبل") { json!("prev") } else if t == "اول" { json!(1) } else if t == "آخر" { json!(d.n_pages) }
+                    if (t.contains("شکل") || t.contains("تصویر")) && t.contains("بعد") { json!("fnext") } else if (t.contains("شکل") || t.contains("تصویر")) && t.contains("قبل") { json!("fprev") } else if t.contains("بعد") { json!("next") } else if t.contains("قبل") { json!("prev") } else if t == "اول" { json!(1) } else if t == "آخر" { json!(d.n_pages) }
                     else { (1..=d.n_pages.min(3000)).find(|n| crate::normfa::number_to_words(*n as u64) == t).map(|n| json!(n)).unwrap_or(Value::Null) }
                 } else { Value::Null };
                 let cmd = if mode == "cmd" { crate::voice::command_word(&text) } else { None };
                 Ok(reply_json(&json!({"text": text, "go": go, "cmd": cmd, "yes": crate::voice::is_yes(&text)})))
+            }
+            "figures_get" => {
+                let d = self.doc(q)?;
+                let f: Vec<Value> = d.figures().into_iter().map(|(n, i, t)| json!([n, i, t])).collect();
+                Ok(reply_json(&json!({"figures": f})))
             }
             "edits_get" => {
                 let d = self.doc(q)?;

@@ -635,6 +635,10 @@ pub fn drop_addresses(pages: &mut [Vec<String>]) {
     }
 }
 
+pub fn is_figure_caption(p: &str) -> bool {
+    search(r"^\s*(?:Figures?|Fig\.|Plates?|Illustration|Photo(?:graph)?|Image|شکل|تصویر|نگاره|عکس)\s*[\d۰-۹IVX]", p)
+}
+
 pub fn is_caption(p: &str) -> bool {
     search(r"^\s*(?:(?:Figures?|Fig\.|Plates?|Table|Map|Illustration|Photo(?:graph)?|Image|شکل|تصویر|نگاره|جدول|عکس)\s*[\d۰-۹IVX]|(?:Sources?|Credits?|Courtesy|Photo(?:graph)?|منبع|عکس)\s*:)", p)
 }

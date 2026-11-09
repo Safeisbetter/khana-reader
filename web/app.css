@@ -182,3 +182,10 @@ button[aria-pressed="true"], .on { text-decoration: underline; }
 /* the tools (buttons, menus, fields, labels, messages) in Arial, with more space between words (extra space between the letters would break the joined Farsi letters), for people who see badly; the book text keeps its own font */
 :root { --ui-font: Arial, "Helvetica Neue", "Geeza Pro", Tahoma, sans-serif; }
 .bar, .panel-body, .welcome, .note, .toast, .voicebox, #editBar, button, input, select, textarea:not(#paraText):not(#typeText), label { font-family: var(--ui-font); word-spacing: .25em; }
+
+/* the mouse pointer (set in Settings) and a clear mark on what it is over */
+html, body { cursor: var(--cur, auto); }
+button, .btn, a, label, select, summary, input[type="radio"], input[type="checkbox"], input[type="range"], .text p[data-i], .hlpick label { cursor: var(--cur-hand, pointer); }
+input[type="text"], input[type="search"], input[type="password"], textarea { cursor: var(--cur, text); }
+button:hover:not(:disabled), .btn:hover, select:hover, input[type="text"]:hover, input[type="search"]:hover, textarea:hover { outline: 3px solid var(--lapis); outline-offset: 2px; background-color: color-mix(in srgb, var(--lapis) 14%, transparent); }
+.panel-body label:hover, .panel-body .check:hover, .panel-body .lexrow:hover { background: color-mix(in srgb, var(--lapis) 18%, transparent); border-radius: 8px; outline: 2px solid var(--lapis); outline-offset: 1px; }

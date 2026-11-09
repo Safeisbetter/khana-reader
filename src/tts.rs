@@ -836,6 +836,7 @@ pub fn voice_file(models: &Path, extra: bool, wav: &str) -> PathBuf {
 
 pub fn speech_clean(text: &str) -> String {
     let t = sub(r"\s+/\s+", "، ", text);
+    let t = sub(r"(?<=[\x{0621}-\x{06D3}])/(?=[\x{0621}-\x{06D3}])", "، ", &t);
     let t = sub(r"_+", " ", &t);
     let t = sub(r"‌+(?=\s)|(?<=\s)‌+", "", &t);
     let t = sub_fn(r"\s*\(([^()]*)\)", &t, |c| {
