@@ -117,7 +117,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         setContentView(outer);
         if (Build.VERSION.SDK_INT >= 33) {
             // (the back gesture, Android 13 and newer; for an app made for Android 16 and newer the only way)
-            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, () -> moveTaskToBack(true));
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::goBack);
         }
         String old = webViewTooOld();
         if (old != null) {
@@ -387,7 +387,19 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     /** (Android 12 and older; newer ones: the callback in onCreate) */
     @Override
     public void onBackPressed() {
-        moveTaskToBack(true); // (the document stays open; a job keeps running)
+        goBack();
+    }
+
+    /** Back (the gesture from either edge, or the button): the page decides first (close a window, or go to the page before); only when it has
+     *  nothing to go back to does the app go down (the document stays open; a job keeps running). */
+    private void goBack() {
+        if (web == null) {
+            moveTaskToBack(true);
+            return;
+        }
+        web.evaluateJavascript("window.khanaBack ? window.khanaBack() : false", v -> {
+            if (!"true".equals(v)) moveTaskToBack(true);
+        });
     }
 
     @Override

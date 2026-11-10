@@ -18,6 +18,16 @@ pub const RATE: usize = 24000;
 const PACE_LOW: f64 = 0.72;
 const PACE_HIGH: f64 = 1.6;
 const PACE_TRIES: usize = 5;
+static MAX_TRIES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(PACE_TRIES);
+
+pub static PROFILE: [std::sync::atomic::AtomicU64; 6] = [const { std::sync::atomic::AtomicU64::new(0) }; 6];
+fn lap(slot: usize, t: std::time::Instant) {
+    PROFILE[slot].fetch_add(t.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn set_max_tries(n: usize) {
+    MAX_TRIES.store(n.clamp(1, PACE_TRIES), std::sync::atomic::Ordering::Relaxed);
+}
 pub const PARAGRAPH_GAP: f64 = 0.9;
 
 static COMMA_PAUSE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3F26_6666);
@@ -561,9 +571,19 @@ impl Engine {
         let mut best_key: Option<[f64; 9]> = None;
         let mut best_heard: Option<(Option<f64>, Vec<String>)> = None;
         let mut cut_short = 0;
-        for take in 0..PACE_TRIES {
+        let mut last_wrong: Option<(Vec<String>, bool, bool, bool)> = None;
+        for take in 0..MAX_TRIES.load(std::sync::atomic::Ordering::Relaxed) {
+            PROFILE[5].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if take == 0 {
+                PROFILE[4].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+            let t = std::time::Instant::now();
             let latents = self.generate_chunk(voice, chunk, rng)?;
+            lap(0, t);
+            let t = std::time::Instant::now();
             let a = self.decode_all(&latents)?;
+            lap(1, t);
+            let t_check = std::time::Instant::now();
             let (s0, e0) = self.speech_bounds(&a);
             let speech = self.compress_pauses(&a[s0..e0], 0.30, 0.12);
             let dur = speech.len() as f64 / RATE as f64;
@@ -584,7 +604,10 @@ impl Engine {
                 (Some(p), Some(u)) => (p / u).log2().abs() < 0.5,
                 _ => true,
             };
+            lap(2, t_check);
+            let t = std::time::Instant::now();
             let (heard, missing) = if loud_ok && LISTEN.load(std::sync::atomic::Ordering::Relaxed) { asr::heard_score(chunk, &speech, RATE) } else { (None, Vec::new()) };
+            lap(3, t);
             let words_ok = asr::heard_ok(heard, &missing);
             let b = |x: bool| if x { 1.0 } else { 0.0 };
             let key = [b(loud_ok), b(same_voice), b(words_ok), b(dur_ok), b(pace_ok), -(missing.len() as f64), heard.unwrap_or(1.0),
@@ -625,6 +648,19 @@ impl Engine {
                 cut_short += 1;
             }
             if cut_short >= 2 {
+                break;
+            }
+            let mut miss_sorted = missing.clone();
+            miss_sorted.sort();
+            let wrong_now = (miss_sorted, words_ok, dur_ok, pace_ok);
+            let repeats = last_wrong.as_ref() == Some(&wrong_now) && loud_ok && same_voice;
+            last_wrong = Some(wrong_now);
+            if repeats && take >= 1 {
+                if let Some((h, m)) = &best_heard {
+                    if !asr::heard_bad(*h, m) {
+                        return Ok(best.unwrap());
+                    }
+                }
                 break;
             }
             if take >= 2 && best_key.unwrap()[1] == 1.0 {

@@ -349,17 +349,47 @@ struct Mp3Req {
     fast: bool,
 }
 
+static JOB_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static READ_SPEED: Mutex<Option<f64>> = Mutex::new(None);
+
+fn adapt_to_device_speed() {
+    if JOB_RUNNING.load(Ordering::Relaxed) || std::env::var("KHANA_FIXED_LISTEN").is_ok() {
+        return;
+    }
+    let speed = *READ_SPEED.lock().unwrap();
+    let listening = tts::LISTEN.load(Ordering::Relaxed);
+    let listen = match speed {
+        None => true,
+        Some(r) => if listening { r >= 1.3 } else { r > 2.6 },
+    };
+    tts::LISTEN.store(listen, Ordering::Relaxed);
+    tts::set_max_tries(match speed { Some(r) if !listen && r < 1.0 => 2, _ => 5 });
+}
+
+fn note_reading_speed(speech_seconds: f64, took: f64) {
+    if speech_seconds < 1.0 || took < 0.1 {
+        return;
+    }
+    let now = speech_seconds / took;
+    let mut g = READ_SPEED.lock().unwrap();
+    *g = Some(g.map_or(now, |old| 0.6 * old + 0.4 * now));
+}
+
 struct ListenAgain;
 
 impl Drop for ListenAgain {
     fn drop(&mut self) {
         tts::LISTEN.store(true, Ordering::Relaxed);
+        tts::set_max_tries(5);
+        JOB_RUNNING.store(false, Ordering::Relaxed);
     }
 }
 
 fn run_job(job: Arc<Job>, r: Mp3Req) {
     let _listen = ListenAgain;
+    JOB_RUNNING.store(true, Ordering::Relaxed);
     tts::LISTEN.store(!r.fast, Ordering::Relaxed);
+    tts::set_max_tries(if r.fast { 3 } else { 5 });
     let wav = r.format == "wav" || r.format == "m4a";
     let path = std::env::temp_dir().join(format!("khana-{}.{}", job.id, if wav { "wav" } else { "mp3" }));
     *job.path.lock().unwrap() = Some(path.clone());
@@ -678,7 +708,7 @@ impl App {
         if method == "GET" && path == "/Vazirmatn.woff2" {
             return Reply { status: 200, ctype: "font/woff2", body: VAZIRMATN.to_vec(), headers: Vec::new() };
         }
-        let authed = token.or(q.get("t").map(|s| s.as_str())) == Some(self.token.as_str());
+        let authed = token == Some(self.token.as_str());
         if !path.starts_with("/api/") || !authed {
             return Reply { status: if path.starts_with("/api/") { 403 } else { 404 }, ctype: "text/plain", body: Vec::new(), headers: Vec::new() };
         }
@@ -1000,9 +1030,20 @@ impl App {
                     .unwrap_or_else(|| s["voice"].as_str().unwrap_or("").to_string());
                 let speed = req.get("speed").and_then(|v| v.as_f64()).unwrap_or(1.0);
                 speech().mark_play();
+                adapt_to_device_speed();
+                let t0 = Instant::now();
                 let (a, rate) = speech().synthesize(&text, &voice, speed, &|| false).map_err(ApiError::Internal)?;
+                note_reading_speed(a.len() as f64 / rate as f64, t0.elapsed().as_secs_f64());
                 speech().mark_play();
                 Ok(Reply { status: 200, ctype: "audio/wav", body: audio::wav_bytes(&a, rate as u32), headers: Vec::new() })
+            }
+            "mp3fast_post" => {
+                let fast = body_json()?.get("fast").and_then(|v| v.as_bool()).unwrap_or(false);
+                if JOB_RUNNING.load(Ordering::Relaxed) {
+                    tts::LISTEN.store(!fast, Ordering::Relaxed);
+                    tts::set_max_tries(if fast { 3 } else { 5 });
+                }
+                Ok(reply_json(&json!({"ok": true, "fast": fast})))
             }
             "mp3_post" => {
                 let req = body_json()?;

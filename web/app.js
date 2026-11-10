@@ -1105,6 +1105,12 @@ $("edReset").onclick = async () => {
 
 
 /* ---------------- a text typed or pasted: read aloud and saved as sound ---------------- */
+// (changed while a job runs: its remaining pieces are made the new way at once)
+$("fastExport").onchange = () => {
+  if (!(job && job.status === "running")) return;
+  const fast = $("fastExport").checked;
+  jpost("/api/mp3fast", { fast }).then(() => toast(fast ? "از این لحظه سریع‌تر ساخته می‌شود." : "از این لحظه با بررسی کامل ساخته می‌شود.")).catch(e => toast(e.message));
+};
 $("fastExport").checked = /Android|iPhone|iPad/i.test(navigator.userAgent);   // (on by default on the phones, which are slower)
 $("m4aLabel").hidden = /Android|iPhone|iPad/i.test(navigator.userAgent);   // (the phones have no M4A maker)
 // (Windows: no MP3 and no M4A maker yet: WAV)
@@ -1406,3 +1412,11 @@ async function jumpFigure(dir) {
     else if (e.key === "Home") { set(null); }
   });
 })();
+
+// Back (the Android back gesture or button): close the window that is open, or go to the page before; false: nothing to go back to
+window.khanaBack = function () {
+  const open = [...document.querySelectorAll(".panel")].filter(p => !p.hidden);
+  if (open.length) { open.forEach(p => { p.hidden = true; }); return true; }
+  if (S.doc && S.page > 1) { $("prev").click(); return true; }
+  return false;
+};
