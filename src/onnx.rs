@@ -32,7 +32,7 @@ fn dylib() -> PathBuf {
 pub fn init() {
     static I: OnceLock<()> = OnceLock::new();
     I.get_or_init(|| {
-        let _ = ort::init_from(dylib().to_string_lossy()).with_name("khana").commit();
+        let _ = ort::init_from(dylib().to_string_lossy()).with_name("khana").with_telemetry(false).commit();
     });
 }
 

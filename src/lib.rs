@@ -25,6 +25,7 @@ pub mod tts;
 pub mod mp3;
 pub mod stretch;
 pub mod app;
+pub mod pdfview;
 #[cfg(target_os = "macos")]
 pub mod mac;
 pub mod platform;

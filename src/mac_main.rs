@@ -11,6 +11,8 @@ use wry::{WebViewBuilder, WebViewBuilderExtDarwin};
 
 const START_URL: &str = "khana://reader/";
 
+const PDF_URL: &str = "khanapdf://pdf/pdfjs/frame.html";
+
 const MENU_COMMANDS: &[&str] = &["speed-down", "speed-up", "speed-reset", "settings", "mp3", "pdf", "font-up", "font-down"];
 
 fn item(id: &str, text: &str, mods: Modifiers, key: Code) -> MenuItem {
@@ -68,6 +70,7 @@ fn menu() -> muda::Menu {
 enum UserEvent {
     Menu(MenuEvent),
     PageGone,
+    PdfGone,
 }
 
 pub fn run() {
@@ -89,16 +92,48 @@ pub fn run() {
         .build(&event_loop)
         .expect("window");
 
+    let bridge = Arc::new(khana::pdfview::Bridge::default());
+    let (a, b, web2) = (app.clone(), bridge.clone(), web.clone());
+    let pdf_handler = move |_id: wry::WebViewId, req: Request<Vec<u8>>, responder: wry::RequestAsyncResponder| {
+        let (a, b, web) = (a.clone(), b.clone(), web2.clone());
+        std::thread::spawn(move || {
+            let (method, path) = (req.method().as_str().to_string(), req.uri().path().to_string());
+            let q = khana::app::query(req.uri().query().unwrap_or(""));
+            let (status, ctype, headers, body) = if path.starts_with("/view/") {
+                b.view(&method, &path, &q, req.body())
+            } else if method == "GET" && path.starts_with("/pdfjs/") {
+                let r = a.handle("GET", &path, "", None, &[], &web);
+                let headers = r.headers.into_iter().filter(|(k, _)| k != "Access-Control-Allow-Origin")
+                    .map(|(k, v)| if k == "Content-Security-Policy" { (k, v.replace("khana:", "khanapdf:").replace("frame-ancestors khanapdf:", "frame-ancestors 'none'")) } else { (k, v) }).collect();
+                (r.status, r.ctype, headers, r.body)
+            } else {
+                (404, "text/plain", Vec::new(), Vec::new())
+            };
+            let mut rb = Response::builder().status(status).header(header::CONTENT_TYPE, ctype).header(header::CACHE_CONTROL, "no-store")
+                .header("X-Content-Type-Options", "nosniff").header("Referrer-Policy", "no-referrer");
+            for (k, v) in &headers {
+                rb = rb.header(k.as_str(), v.as_str());
+            }
+            responder.respond(rb.body(body).unwrap_or_else(|_| Response::builder().status(500).body(Vec::new()).unwrap_or_default()));
+        });
+    };
     let a = app.clone();
+    let b = bridge.clone();
     let handler = move |_id: wry::WebViewId, req: Request<Vec<u8>>, responder: wry::RequestAsyncResponder| {
         let a = a.clone();
+        let b = b.clone();
         let web = web.clone();
         std::thread::spawn(move || {
             let method = req.method().as_str().to_string();
             let path = req.uri().path().to_string();
             let qs = req.uri().query().unwrap_or("").to_string();
             let token = req.headers().get("X-Khana-Token").and_then(|v| v.to_str().ok()).map(|s| s.to_string());
-            let r = a.handle(&method, &path, &qs, token.as_deref(), req.body(), &web);
+            let r = if method == "POST" && path == "/api/pdfview" && token.as_deref() == Some(a.token.as_str()) {
+                let (status, ctype, headers, body) = b.call(&khana::app::query(&qs), req.body());
+                khana::app::Reply { status, ctype, body, headers }
+            } else {
+                a.handle(&method, &path, &qs, token.as_deref(), req.body(), &web)
+            };
             if std::env::var("KHANA_SELFTEST").is_ok() {
                 eprintln!("request {method} {path} body {} -> {} {}", req.body().len(), r.status, if r.status >= 400 { String::from_utf8_lossy(&r.body).into_owned() } else { String::new() });
             }
@@ -116,6 +151,7 @@ pub fn run() {
         });
     };
     let selftest = if std::env::var("KHANA_SELFTEST").is_ok() { include_str!("selftest.js") } else { "" };
+    let selftest = format!("window.KHANA_PDF_VIEW = true;\n{selftest}");
     let gone = event_loop.create_proxy();
     let webview = WebViewBuilder::new()
         .with_initialization_script(selftest)
@@ -137,6 +173,25 @@ pub fn run() {
         .build(&window)
         .expect("webview");
 
+    let pdf_gone = event_loop.create_proxy();
+    let pdfview = WebViewBuilder::new()
+        .with_asynchronous_custom_protocol("khanapdf".into(), pdf_handler)
+        .with_url(PDF_URL)
+        .with_incognito(true)
+        .with_navigation_handler(|url| url.starts_with("khanapdf://pdf/"))
+        .with_new_window_req_handler(|_url, _features| wry::NewWindowResponse::Deny)
+        .with_download_started_handler(|_url, _path| false)
+        .with_drag_drop_handler(|_e| true)
+        .with_permission_handler(|_kind| wry::PermissionResponse::Deny)
+        .with_devtools(false)
+        .with_focused(false)
+        .with_bounds(wry::Rect { position: tao::dpi::LogicalPosition::new(-1.0, -1.0).into(), size: tao::dpi::LogicalSize::new(1.0, 1.0).into() })
+        .with_on_web_content_process_terminate_handler(move || {
+            let _ = pdf_gone.send_event(UserEvent::PdfGone);
+        })
+        .build_as_child(&window)
+        .expect("pdf view");
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
@@ -149,6 +204,11 @@ pub fn run() {
             Event::UserEvent(UserEvent::PageGone) => {
                 eprintln!("the page's process ended; loading the page again");
                 let _ = webview.load_url(START_URL);
+            }
+            Event::UserEvent(UserEvent::PdfGone) => {
+                eprintln!("pdf.js's process ended; starting it again");
+                bridge.reset();
+                let _ = pdfview.load_url(PDF_URL);
             }
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
                 app.shutdown();

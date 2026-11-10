@@ -91,7 +91,7 @@ $("slower").onclick = () => setSpeed(Number(S.settings.speed) - SPEED_STEP);
 $("faster").onclick = () => setSpeed(Number(S.settings.speed) + SPEED_STEP);
 $("speedChip").onclick = resetSpeed;
 document.querySelectorAll("[data-speed]").forEach(b => b.onclick = () => setSpeed(+b.dataset.speed));
-function setFontSize(v) { setSetting("fontSize", Math.min(52, Math.max(14, Math.round(v)))); }
+function setFontSize(v) { setSetting("fontSize", Math.min(72, Math.max(14, Math.round(v)))); }
 // commands from the app's menu bar (src/main.rs)
 window.khanaMenu = cmd => {
   if (cmd === "speed-reset") resetSpeed();
@@ -197,6 +197,14 @@ $("recBtn").onclick = async () => {
   show(); rec.timer = setInterval(() => rec && show(), 250);
 };
 $("voiceFile").onchange = e => { const f = e.target.files[0]; e.target.value = ""; if (f) useMyVoice(f, f.name); };
+$("forgetAll").onclick = async () => {
+  if (!confirm("همه‌ی ویرایش‌ها، صدای شما، تنظیمات و اصلاح‌های تلفظ از این دستگاه پاک شود؟ این کار برگشت ندارد.")) return;
+  try {
+    stopReading();
+    await jpost("/api/forget", {});
+    location.reload();
+  } catch (e) { toast(e.message); }
+};
 $("myDel").onclick = async () => {
   if (!confirm("صدای ضبط‌شده‌ی شما پاک شود؟")) return;
   try {
@@ -268,7 +276,32 @@ $("fixWord").onclick = () => {
 };
 
 /* ---------------- panels ---------------- */
-function openPanel(id) { $(id).hidden = false; $(id).querySelector("button,select,input").focus(); }
+// A window over the page, usable without seeing it: the focus goes into it, Tab stays inside it, and when it closes the
+// focus returns to the button that opened it (a screen reader would otherwise be left at the top of the page).
+const panelOpener = new Map();
+function openPanel(id) {
+  if ($(id).hidden) panelOpener.set(id, document.activeElement);
+  $(id).hidden = false;
+  $(id).querySelector("button,select,input").focus();
+}
+// said by a screen reader, shown nowhere
+function announce(msg) { const n = $("srLive"); n.textContent = ""; setTimeout(() => { n.textContent = msg; }, 50); }
+document.querySelectorAll(".panel").forEach(p => {
+  new MutationObserver(() => {
+    if (!p.hidden) return;
+    const back = panelOpener.get(p.id);
+    panelOpener.delete(p.id);
+    if (back && back.isConnected && !back.disabled && (document.activeElement === document.body || p.contains(document.activeElement))) back.focus();
+  }).observe(p, { attributes: true, attributeFilter: ["hidden"] });
+  p.addEventListener("keydown", e => {
+    if (e.key !== "Tab") return;
+    const f = [...p.querySelectorAll("button, select, input, textarea, summary, [tabindex]")].filter(x => !x.disabled && x.offsetParent !== null);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+});
 document.querySelectorAll(".panel").forEach(p => {
   p.addEventListener("click", e => { if (e.target === p || e.target.hasAttribute("data-close")) p.hidden = true; });
 });
@@ -396,7 +429,31 @@ addEventListener("message", e => {
   pdfWait.delete(m.id);
   if (m.ok) w.ok(m.data); else w.no(new Error("pdf.js: " + String(m.error).slice(0, 200)));
 });
+// On the Mac pdf.js is not in a frame of this page but in a web view of its own (another process): the page asks the app,
+// the app asks pdf.js. The answers are the same as the frame's.
+async function pdfViewCall(msg) {
+  let qs = "op=" + msg.op + (msg.n ? "&n=" + msg.n : "") + (msg.width ? "&width=" + Math.round(msg.width) : "") + (msg.dpi ? "&dpi=" + msg.dpi : "");
+  let body = msg.op === "open" ? msg.data : undefined;
+  for (;;) {
+    const r = await api("/api/pdfview?" + qs, { method: "POST", body });
+    const kind = r.headers.get("X-Khana-Pdf");
+    if (kind === "password") {
+      const pw = await askPassword(r.headers.get("X-Khana-Pdf-Again") === "1");
+      qs = "op=password&id=" + r.headers.get("X-Khana-Pdf-Id") + (pw == null ? "&cancel=1" : "");
+      body = pw == null ? undefined : pw;
+      continue;
+    }
+    if (kind === "json") return r.json();
+    if (kind === "png") return new Blob([await r.arrayBuffer()], { type: "image/png" });
+    if (kind === "gray") {
+      const buf = await r.arrayBuffer(), dv = new DataView(buf);
+      return { w: dv.getUint32(0, true), h: dv.getUint32(4, true), px: new Uint8Array(buf, 8) };
+    }
+    throw new Error("pdf.js: " + (await r.text()).slice(0, 200));
+  }
+}
 async function pdfCall(msg, transfer) {
+  if (window.KHANA_PDF_VIEW) return pdfViewCall(msg);
   await pdfjsFrame();
   return new Promise((ok, no) => {
     const id = ++pdfSeq;
@@ -430,7 +487,7 @@ function givePicture(n) {
     const p = (async () => {
       const g = await pdfCall({ op: "gray", n, dpi: 250 });
       const body = new Uint8Array(8 + g.px.length), dv = new DataView(body.buffer);
-      dv.setUint32(0, g.w, true); dv.setUint32(4, g.h, true); body.set(new Uint8Array(g.px.buffer || g.px), 8);
+      dv.setUint32(0, g.w, true); dv.setUint32(4, g.h, true); body.set(g.px instanceof Uint8Array ? g.px : new Uint8Array(g.px.buffer || g.px), 8);
       await api(`/api/page_picture?doc=${S.doc.id}&n=${n}`, { method: "POST", body: body.buffer });
     })();
     p.catch(() => picturesGiven.delete(key));
@@ -506,6 +563,8 @@ async function loadPage(n, keepReading) {
   if (!S.doc) return;
   n = Math.max(1, Math.min(S.doc.pages, n | 0));
   if (!keepReading) stopReading();
+  // (a screen reader is told where it is; not while the app's own voice reads on into the next page)
+  if (!keepReading && n !== S.page) announce(`صفحه‌ی ${fa(n)} از ${fa(S.doc.pages)}`);
   S.page = n;
   const seq = ++S.loadSeq;
   syncChrome();
@@ -569,6 +628,7 @@ function renderText() {
   const first = box.querySelector("mark");
   if (first) { first.classList.add("cur"); first.scrollIntoView({ block: "center" }); }
   reader.shownWord = null;
+  armParagraphs();
 }
 function renderPageImage() {
   const w = Math.round(Math.min(document.querySelector(".sheet").clientWidth, 900) * (devicePixelRatio || 1));
@@ -923,7 +983,7 @@ $("stop").onclick = stopReading;
 $("textView").addEventListener("click", e => {
   const p = e.target.closest("p[data-i]");
   // (editing: a tap on a paragraph opens its window; a selected word is left for the «change the word» button)
-  if (S.editing) { if (p && !getSelection().toString()) openParaEditor(p); return; }
+  if (S.editing) return;
   if (!p || e.detail > 1) return;
   ensureAudio();
   // from the sentence clicked (the word's offset; between words, the paragraph's start)
@@ -1056,6 +1116,35 @@ function openParaEditor(p) {
   openPanel("paraPanel");
   $("paraText").focus();
 }
+// editing in the page itself: in edit mode every paragraph is a box to type in (select, type, Delete, paste work as in any editor);
+// leaving a paragraph saves it (all text removed: the paragraph is taken out)
+function armParagraphs() {
+  document.querySelectorAll("#textView p[data-i]").forEach(p => {
+    if (!S.editing) { p.removeAttribute("contenteditable"); return; }
+    const shown = S.paras[+p.dataset.i];
+    if (shown === undefined) return;
+    p.textContent = shown;
+    p.dataset.shown = shown;
+    p.contentEditable = "plaintext-only";
+    if (p.contentEditable !== "plaintext-only") p.contentEditable = "true";
+    p.setAttribute("role", "textbox"); p.setAttribute("aria-multiline", "true");
+    p.setAttribute("aria-label", `بند ${fa(+p.dataset.i + 1)}، قابل ویرایش`);
+  });
+}
+$("textView").addEventListener("focusout", async e => {
+  const p = e.target.closest && e.target.closest("p[data-i]");
+  if (!S.editing || !p || p.dataset.shown === undefined) return;
+  const shown = p.dataset.shown;
+  const text = p.innerText.replace(/\u00a0/g, " ").trim();
+  p.dataset.shown = text;
+  if (text === shown.trim()) return;
+  if (!text && !confirm("این بند حذف شود؟")) return renderText();
+  if (await sendEdit({ kind: "paragraph", shown, text })) toast(text ? "بند ذخیره شد." : "بند حذف شد.");
+});
+$("textView").addEventListener("keydown", e => {
+  const p = e.target.closest && e.target.closest("p[data-i]");
+  if (S.editing && p && e.key === "Escape") { p.textContent = p.dataset.shown; p.blur(); }
+});
 $("paraSave").onclick = async () => {
   if (editing.shown == null) return;
   if (await sendEdit({ kind: "paragraph", shown: editing.shown, text: $("paraText").value })) $("paraPanel").hidden = true;
@@ -1074,13 +1163,14 @@ $("editBtn").onclick = () => {
   $("editBar").hidden = !S.editing;
   $("textView").classList.toggle("editing", S.editing);
   $("editBtn").classList.toggle("primary", S.editing);
+  renderText();
   if (S.editing) {
     stopReading();
     if (S.view !== "text") { S.view = "text"; syncChrome(); }
     if (S.doc) jget(`/api/edits?doc=${S.doc.id}`).then(r => { $("edInfo").textContent = r.edits ? `${fa(r.edits)} ویرایش در این کتاب` : ""; }).catch(() => {});
   }
 };
-$("edWordBtn").onclick = () => openWordEditor();
+$("edWordBtn").onclick = () => openWordEditor(getSelection().toString().trim().split(/\s+/)[0] || undefined);
 // the word is always read with the linking «ـِ» (ezafe): «کتاب» becomes «کتابِ» in this book's text (a word correction, so it also reaches the MP3 and the PDF)
 async function addEzafe(w) {
   w = (w || "").trim().replace(/\u0650$/, "");

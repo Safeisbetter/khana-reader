@@ -585,7 +585,7 @@ pub struct App {
     engines: Arc<Engines>,
 }
 
-fn query(q: &str) -> HashMap<String, String> {
+pub fn query(q: &str) -> HashMap<String, String> {
     let mut m = HashMap::new();
     for part in q.split('&').filter(|p| !p.is_empty()) {
         let (k, v) = part.split_once('=').unwrap_or((part, ""));
@@ -619,17 +619,52 @@ fn tf(q: &HashMap<String, String>, k: &str, default: bool) -> bool {
     }
 }
 
-pub fn new_token() -> String {
-    let mut b = [0u8; 24];
+pub fn random_bytes<const N: usize>() -> [u8; N] {
+    let mut b = [0u8; N];
     if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
         use std::io::Read;
-        let _ = f.read_exact(&mut b);
+        if f.read_exact(&mut b).is_ok() && b.iter().any(|x| *x != 0) {
+            return b;
+        }
     }
-    b.iter().map(|x| format!("{x:02x}")).collect()
+    use std::hash::{BuildHasher, Hasher};
+    for (i, chunk) in b.chunks_mut(8).enumerate() {
+        let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+        h.write_usize(i);
+        h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+        let v = h.finish().to_le_bytes();
+        chunk.copy_from_slice(&v[..chunk.len()]);
+    }
+    assert!(b.iter().any(|x| *x != 0), "no random source");
+    b
+}
+
+pub fn new_token() -> String {
+    random_bytes::<24>().iter().map(|x| format!("{x:02x}")).collect()
+}
+
+pub fn sweep_temp(younger_too: bool) {
+    let Ok(dir) = std::fs::read_dir(std::env::temp_dir()) else { return };
+    for e in dir.flatten() {
+        if !e.file_name().to_string_lossy().starts_with("khana-") {
+            continue;
+        }
+        let fresh = e.metadata().and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|d| d.as_secs() < 120);
+        if fresh && !younger_too {
+            continue;
+        }
+        let p = e.path();
+        if p.is_dir() {
+            let _ = std::fs::remove_dir_all(&p);
+        } else {
+            let _ = std::fs::remove_file(&p);
+        }
+    }
 }
 
 impl App {
     pub fn new(engines: Engines) -> App {
+        sweep_temp(false);
         App { token: new_token(), docs: Mutex::new(None), jobs: Mutex::new(HashMap::new()), engines: Arc::new(engines) }
     }
 
@@ -737,7 +772,11 @@ impl App {
         match route {
             "init_get" => {
                 let voices: Vec<Value> = all_voices().into_iter().map(|(id, name, gender, group)| json!({"id": id, "name": name, "gender": gender, "group": group})).collect();
-                Ok(reply_json(&json!({"settings": load_settings(), "voices": voices, "canListen": crate::asr::ready(), "canWrite": crate::stt::available()})))
+                let mut v = json!({"settings": load_settings(), "voices": voices, "canListen": crate::asr::ready(), "canWrite": crate::stt::available()});
+                if std::env::var("KHANA_SELFTEST").is_ok() {
+                    v["testData"] = json!(!data_dir().to_string_lossy().contains("/Containers/"));
+                }
+                Ok(reply_json(&v))
             }
             "settings_post" => Ok(reply_json(&Value::Object(save_settings(&body_json()?).map_err(ApiError::Internal)?))),
             "myvoice_post" => {
@@ -760,6 +799,18 @@ impl App {
                     m.insert("voice".into(), json!(voices().first().map(|v| v.id).unwrap_or("")));
                     save_settings(&m).map_err(ApiError::Internal)?;
                 }
+                Ok(reply_json(&json!({"ok": true})))
+            }
+            "forget_post" => {
+                *self.docs.lock().unwrap() = None;
+                for j in self.jobs.lock().unwrap().values() {
+                    j.cancelled.store(true, Ordering::SeqCst);
+                    j.cleanup();
+                }
+                let _ = std::fs::remove_dir_all(data_dir().join("edits"));
+                let _ = std::fs::remove_file(my_voice());
+                let _ = std::fs::remove_file(settings_file());
+                sweep_temp(true);
                 Ok(reply_json(&json!({"ok": true})))
             }
             "close_post" => {

@@ -1,222 +1,243 @@
 # Khana Reader (خوانا)
 
-Reads books aloud in Farsi and translates foreign books into Farsi, entirely on your own device. Free, with no account, no ads
-and no tracking. For **Mac, Android and Windows** (Windows is experimental).
+Reads books aloud in Farsi and translates foreign books into Farsi, entirely on your own device. Free, with no account, no ads,
+no tracking and no internet connection. For **Mac, Android and Windows** (Windows is experimental).
 
 <div dir="rtl">
 
-خوانا کتاب‌ها را به فارسی با صدای بلند می‌خواند و کتاب‌های خارجی را به فارسی ترجمه می‌کند؛ همه‌چیز فقط روی دستگاه خود شما انجام می‌شود. رایگان است و حساب کاربری، تبلیغ یا ردیابی ندارد. برای **مک، اندروید و ویندوز** (نسخه‌ی ویندوز آزمایشی است).
+خوانا کتاب‌ها را به فارسی با صدای بلند می‌خواند و کتاب‌های خارجی را به فارسی ترجمه می‌کند؛ همه‌چیز فقط روی دستگاه خود شما انجام می‌شود. رایگان است و حساب کاربری، تبلیغ، ردیابی و اتصال به اینترنت ندارد. برای **مک، اندروید و ویندوز** (نسخه‌ی ویندوز آزمایشی است).
+
+**[راهنمای فارسی پایین همین صفحه است.](#راهنمای-فارسی)**
 
 </div>
 
 ## Download
 
-Get the files from the **[Releases page](../../releases/latest)**.
+Get the files from the **[Releases page](../../releases/latest)**. Every platform has a small and a large download, because for
+many readers every megabyte is expensive. **If your connection is slow or costly, take the light one.**
 
-### Mac
+| Device | File | Size | What it has |
+|---|---|---|---|
+| Android, light | `KhanaReader-Android-lite.apk` | about 0.55 GB | Reads Farsi books, pictures and typed text aloud; saves sound. **No translation.** |
+| Android, full | `KhanaReader-Android.apk` | about 1.15 GB | The same, and translates foreign books into Farsi. |
+| Mac, light | `KhanaReader-Mac-lite.dmg` | about 0.45 GB, one file | Reads Farsi aloud, saves sound, reads scanned pages. **No translation, no dictation.** |
+| Mac, medium | `KhanaReader-Mac-medium.dmg` | about 1 GB, one file | The same, and translates with the smaller model (the one the phone uses). |
+| Mac, full | `KhanaReader-Mac.dmg` **and** every `KhanaReader-Mac.00x.dmgpart` | about 5 GB, three files | The best translation model and dictation (speech to text). |
+| Windows, light (experimental) | `KhanaReader-Windows-light-experimental.zip` | about 0.5 GB | No translation. |
+| Windows, full (experimental) | `KhanaReader-Windows-full-experimental.zip` | about 1.1 GB | With translation (the smaller model). |
 
-Needs an Apple Silicon Mac (M1 or newer) with macOS 13 or newer and about 7 GB of disk space. 16 GB of memory is recommended,
-because translating uses about 7 GB.
+**Mac:** an Apple Silicon Mac (M1 or newer) with macOS 13 or newer. For the full download put all three files in one folder, then
+open the `.dmg`. Drag the app to Applications. The first time, macOS warns you, because this free app is not signed with a paid
+Apple Developer ID: try to open the app, then go to **System Settings → Privacy & Security** and choose **Open Anyway**.
+The full version needs about 7 GB of disk and 16 GB of memory is recommended; the light one runs on any Apple Silicon Mac.
 
-1. Download **all** the Mac files (`KhanaReader-Mac.dmg`, `KhanaReader-Mac.002.dmgpart` and, if listed, `KhanaReader-Mac.003.dmgpart`) into the same folder.
-2. Double-click the `.dmg` file and drag the app to Applications.
-3. The first time, macOS warns you, because this free app is not signed with a paid Apple Developer ID. Try to open the app,
-   then go to **System Settings → Privacy & Security** and choose **Open Anyway**.
+**Android:** an arm64 phone with Android 8 or newer and Android System WebView 133 or newer. Open the file and allow installing
+from this source when Android asks. Both versions are signed with the same key, so one can be installed over the other.
 
-### Android
+**Windows:** Windows 10 or 11 (64-bit) with Microsoft's Edge WebView2 (Windows 11 has it). Unzip the whole folder and double-click
+`KhanaReader.exe`. It saves WAV instead of MP3 and has no translated PDF yet.
 
-Needs an arm64 phone with Android 8 or newer and a recent Android System WebView (version 133 or newer).
+> **Please note, honestly:** the Mac app is the only one used every day by a person. The Android app has not yet been tried on a
+> real phone, and the Windows app has only been run by GitHub's own build computers. If something goes wrong, please open an
+> [issue](../../issues). Don't attach books you would not like to make public.
 
-1. Choose one file and download it on your phone:
-   - **`KhanaReader-Android-lite.apk`** (about 0.7 GB): the light version, **without translation**. It reads Farsi books, pictures
-     and typed text aloud. Choose it if your connection is slow; a book in another language is not translated in this version.
-   - **`KhanaReader-Android.apk`** (about 1.3 GB): the full version, which also translates books from other languages into Farsi.
-2. Open it and allow installing from this source when Android asks. The two versions are signed with the same key: the full version
-   can be installed over the light one, and the other way round.
+## Check that your download is the real one
 
-### Windows (experimental)
+1. **Download only from this GitHub page** (`github.com/Safeisbetter/khana-reader`), not from channels, groups or other sites.
+2. **Compare the file's SHA-256 with `SHA256SUMS.txt` of the same release.** On a Mac or Linux: `shasum -a 256 FILE`. On Windows
+   (PowerShell): `Get-FileHash FILE`. The two codes must be exactly the same.
+3. **Android:** every APK of ours is signed with one key. Its certificate's SHA-256 fingerprint is
+   `32:44:BB:08:80:95:34:D3:42:78:5A:FD:CA:E9:C8:16:03:B9:B2:63:FC:7B:C2:3D:E5:78:32:D5:C1:D9:E0:F9`
+   (`apksigner verify --print-certs FILE.apk` shows it). Android refuses to install an update signed with another key.
 
-An experimental Windows 10/11 (64-bit) version is on the same **[Releases page](../../releases/latest)** as the others, in two editions:
+## Staying safe with books and PDFs
 
-- **`KhanaReader-Windows-light-experimental.zip`** (about 0.5 GB): **without translation.**
-- **`KhanaReader-Windows-full-experimental.zip`** (about 1.1 GB): **with translation** of foreign books into Farsi (the smaller 600M model, as on Android).
+**Where a book comes from matters more than the app that reads it.**
 
-Unzip the whole folder and double-click `KhanaReader.exe`. It needs Microsoft's Edge WebView2 (Windows 11 and an updated Windows 10 have it).
-**Nobody has tried it on a real PC yet**: GitHub's own Windows computers built it, opened its window, made the voice speak and (in the full
-edition) translated a text. It has no MP3 (WAV instead) and no translated PDF yet.
+- A site or channel you download from can see **that you downloaded** a book, and when. The app cannot change that. Get books from
+  sources you know and trust, and where it matters, over a connection you trust.
+- A file called a "book" may be something else: a program (`.apk`, `.exe`, `.scr`, `.dmg`) or a PDF built to attack the program
+  that opens it. **Never install an "app needed to read this book".** Khana opens books; it never asks you to install anything.
+- Any reading app that asks for the internet, your contacts or all your files deserves suspicion. Khana asks for none of them.
 
-> **Please note:** the Android app has not yet been tried on a real phone. If something goes wrong, please open an
-> [issue](../../issues). Please don't attach books you would not like to make public.
+**What Khana does when a PDF is bad, broken or full of junk:**
 
-## راهنمای فارسی: دانلود، نصب و اطمینان از امنیت
+- **Nothing in a PDF is ever run.** Scripts, forms, attachments and "launch" actions inside a PDF are ignored. Links are not
+  opened: the app cannot open a web address at all.
+- **Nothing can be sent out.** The Android app has no internet permission; on every platform the app has no network code, and its
+  reading screen refuses every outside address. A hostile PDF cannot "phone home" through the app.
+- **The PDF is read in a locked room.** PDFs are opened by Mozilla's pdf.js, kept up to date, in a sandbox with no permissions. On
+  the Mac it runs in a separate process with its own address, cut off from the reading screen and from your saved corrections.
+- **Limits protect the device:** a page that claims to be enormous is drawn smaller, huge pictures are refused, and a file over
+  300 MB is not opened.
+- **Advertising and junk text** (site addresses stamped on every page, "downloaded from…" lines) are left out of the reading where
+  the app can tell; you can remove any paragraph yourself with «✎ ویرایش متن».
+- **Honest limit:** no program can promise that a hostile file is harmless. Keep your system and (on Android) "Android System
+  WebView" updated, and don't open files from people you have reason to fear.
 
-<div dir="rtl">
+**What stays on your device, and how to remove it:**
 
-### چه چیزی را دانلود کنم؟
-
-از صفحه‌ی **[Releases](../../releases/latest)** (آخرین نسخه) فایل مناسب را بگیرید:
-
-| دستگاه | فایل | توضیح |
-|---|---|---|
-| اندروید (سبک) | `KhanaReader-Android-lite.apk` (حدود ۰٫۷ گیگابایت) | بدون ترجمه؛ کتاب فارسی، عکس و متن تایپ‌شده را می‌خواند. اگر اینترنت کند است این را بگیرید. |
-| اندروید (کامل) | `KhanaReader-Android.apk` (حدود ۱٫۳ گیگابایت) | با ترجمه‌ی کتاب‌های خارجی به فارسی. |
-| مک | `KhanaReader-Mac.dmg` **و** همه‌ی فایل‌های `KhanaReader-Mac.00x.dmgpart` | همه‌ی فایل‌ها را در یک پوشه بگذارید، بعد `.dmg` را باز کنید. |
-| ویندوز (آزمایشی، سبک) | `KhanaReader-Windows-light-experimental.zip` (حدود ۰٫۵ گیگابایت) | بدون ترجمه. هنوز روی رایانه‌ی واقعی آزمایش نشده است. |
-| ویندوز (آزمایشی، کامل) | `KhanaReader-Windows-full-experimental.zip` (حدود ۱٫۱ گیگابایت) | با ترجمه‌ی کتاب‌های خارجی. هنوز روی رایانه‌ی واقعی آزمایش نشده است. |
-
-اندروید: گوشی ۶۴ بیتی (arm64) با اندروید ۸ یا بالاتر و «Android System WebView» نسخه‌ی ۱۳۳ یا جدیدتر لازم است. هنگام نصب، اندروید اجازه‌ی «نصب از این منبع» را می‌خواهد.
-
-### چطور مطمئن شوم فایل دست‌کاری نشده است؟
-
-۱. **فقط از همین صفحه‌ی GitHub دانلود کنید** (نشانی `github.com/Safeisbetter/khana-reader`)، نه از کانال‌ها یا سایت‌های دیگر. اگر فایل را از کسی گرفتید، با روش زیر بررسی کنید.
-
-۲. **کد SHA-256 فایل را با فایل `SHA256SUMS.txt` همین نسخه مقایسه کنید.**
-در مک یا لینوکس: `shasum -a 256 نام‌فایل`  ·  در ویندوز (PowerShell): `Get-FileHash نام‌فایل`
-دو کد باید کاملاً یکی باشند.
-
-۳. **امضای برنامه‌ی اندروید:** همه‌ی فایل‌های APK ما با یک کلید امضا شده‌اند. اثر انگشت (SHA-256) گواهی این کلید:
-
-`32:44:BB:08:80:95:34:D3:42:78:5A:FD:CA:E9:C8:16:03:B9:B2:63:FC:7B:C2:3D:E5:78:32:D5:C1:D9:E0:F9`
-
-می‌توانید آن را با `apksigner verify --print-certs نام‌فایل.apk` ببینید. اگر کد فرق داشت، فایل از ما نیست. اندروید هم اجازه نمی‌دهد نسخه‌ای با کلید دیگر روی این برنامه نصب شود.
-
-### امنیت و حریم خصوصی
-
-- **همه‌چیز فقط روی دستگاه شما انجام می‌شود.** برنامه‌ی اندروید اصلاً اجازه‌ی اینترنت ندارد. کتاب‌ها، متن‌ها و صدا هرگز جایی فرستاده نمی‌شوند. ردیابی، تبلیغ و حساب کاربری ندارد.
-- مشابه برنامه‌ی «PDF Viewer» پروژه‌ی GrapheneOS ساخته شده است: بدون مجوز اضافه، با قفل شدید صفحه (CSP)، بدون اجرای کد پویا و با خواندن PDF در محیط جداشده.
-- متن‌هایی که خودتان اصلاح می‌کنید فقط در پوشه‌ی خصوصی برنامه روی دستگاه خودتان می‌ماند و با «بازگرداندن همه‌ی ویرایش‌ها» پاک می‌شود.
-- کد برنامه کاملاً در همین مخزن است و هر کس می‌تواند آن را بخواند. **هر تغییر در این مخزن فقط توسط صاحب پروژه انجام می‌شود**؛ دیگران فقط می‌توانند «Issue» یا «Pull request» پیشنهاد دهند و هیچ‌چیز بدون بررسی صاحب پروژه وارد نمی‌شود.
-
-### دانلود کتاب از سایت‌های ناشناس خطرناک است
-
-کتاب و فایل PDF که از سایت‌ها، کانال‌ها یا لینک‌های ناشناس می‌گیرید می‌تواند فقط یک کتاب نباشد: ممکن است نسخه‌ی دست‌کاری‌شده باشد، ممکن است برنامه‌ی دیگری که مدعی خواندن کتاب است در پشت آن باشد، و ممکن است سایتی که از آن می‌گیرید ببیند چه می‌خوانید و چه می‌گیرید. چند توصیه:
-
-- کتاب را از منبعی بگیرید که می‌شناسید و به آن اعتماد دارید، و برنامه‌ی خواندن را فقط از همین صفحه‌ی Releases دانلود کنید (اثر انگشت امضای APK در [SECURITY.md](SECURITY.md) است).
-- برنامه‌ی خوانا اینترنت ندارد: در اندروید اجازه‌ی اینترنت ندارد و فایل شما جایی فرستاده نمی‌شود. پس خودِ برنامه نمی‌تواند بفهمد چه می‌خوانید یا از کدام سایت کتاب گرفته‌اید. اما سایتی که کتاب را از آن می‌گیرید می‌تواند.
-- هر برنامه‌ای که برای خواندن کتاب به اینترنت، مخاطبان یا همه‌ی فایل‌های گوشی دسترسی می‌خواهد مشکوک است.
-
-**چیزی که سیستم‌عامل [GrapheneOS](https://grapheneos.org/features#storage-scopes) در این باره دارد.** در اندروید معمولی، برنامه‌ای که «اجازه‌ی حافظه» می‌گیرد می‌تواند همه‌ی فایل‌های مشترک گوشی را ببیند. GrapheneOS ویژگی‌ای به نام **Storage Scopes** (محدوده‌های حافظه) دارد: برنامه فکر می‌کند اجازه‌ی حافظه را دارد، اما فقط فایل‌ها و پوشه‌هایی را می‌بیند که خودِ شما برایش انتخاب کرده‌اید. برنامه‌ای که اجازه‌ی حافظه ندارد هم فقط فایل‌های خودش را می‌بیند و فهرست پوشه‌های ساخته‌شده‌ی دیگر برنامه‌ها از او پنهان می‌ماند. ویژگی مشابهی (**Contact Scopes**) برای مخاطبان هست: برنامه به‌طور پیش‌فرض فهرست مخاطبان را خالی می‌بیند و شما تعیین می‌کنید کدام مخاطب را ببیند.
-
-**ارتباط با خوانا:** خوانا هیچ اجازه‌ی حافظه‌ای نمی‌خواهد. کتاب را خودتان از پنجره‌ی انتخاب فایل سیستم باز می‌کنید و فقط همان فایل در اختیار برنامه قرار می‌گیرد؛ این همان اصل «فقط آنچه شما انتخاب کرده‌اید» است، حتی روی اندرویدی که GrapheneOS نیست. روی GrapheneOS این محافظت قوی‌تر هم می‌شود. این بخش بر پایه‌ی توضیحات رسمی GrapheneOS نوشته شده؛ GrapheneOS این برنامه را تأیید یا پشتیبانی نمی‌کند.
-
-### مشکل یا پرسش؟
-
-در بخش [Issues](../../issues) بنویسید. لطفاً کتاب‌هایی را که نمی‌خواهید همه ببینند پیوست نکنید. مشکل امنیتی را طبق [SECURITY.md](SECURITY.md) گزارش کنید.
-
-</div>
+- The app keeps only: your settings, your own corrections to a book's text (they contain sentences of the book), your list of
+  pronunciation fixes, and your recorded voice if you made one. Nothing else about a book is stored.
+- **Settings → «پاک کردن همه‌ی ردها» (delete all traces)** removes all of that at once. The app also clears its unfinished
+  temporary sound files every time it starts.
+- **MP3, WAV and PDF files you saved, and the books themselves, are your own files:** the app does not delete them. Delete them
+  yourself if they should not be found.
+- Use a screen lock and your device's encryption. On Android, [GrapheneOS](https://grapheneos.org) gives the strongest protection we know of.
 
 ## What it does
 
-- **Reads aloud** in Farsi with a natural-sounding voice, and saves the reading as an **MP3** or a **WAV** (on the Mac also **M4A**).
-- **Reads a text you type or paste:** the «✎ نوشتن متن» button opens an empty page; the text is read aloud and saved as sound like a book.
-- **Opens pictures** (a photo of a page, a screenshot: JPG, PNG, WebP…) and reads their text with OCR; several pictures make one document.
-- **Lets you correct the text:** «✎ ویرایش متن» changes or deletes a paragraph, or changes a word everywhere in the book; the corrections
-  are kept on your device only and reach the reading, the MP3 and the PDF.
-- **Opens** PDF, EPUB, FB2, PowerPoint (`.pptx`), Word (`.docx`) and plain text (`.txt`, `.md`) files. On the Mac it also opens older
-  Word files, RTF, ODT and HTML, through macOS's own converter.
+- **Reads aloud** in Farsi with a natural-sounding voice, and saves the reading as **MP3** or **WAV** (on the Mac also **M4A**).
+- **Reads a text you type or paste** («✎ نوشتن متن»), and reads the text of **pictures** (a photo of a page, a screenshot) with OCR.
+- **Lets you correct the text in the page itself:** «✎ ویرایش متن» makes every paragraph a box you can type in, select in and
+  delete from; a word can be changed or removed in the whole book. Corrections reach the reading, the MP3 and the PDF.
+- **Opens** PDF, EPUB, FB2, PowerPoint (`.pptx`), Word (`.docx`) and plain text. On the Mac also older Word files, RTF, ODT and HTML.
 - **Translates** from English, Dutch, German, French, Spanish, Italian, Portuguese, Turkish and Polish into Farsi, reads the
-  translation, and can save it as a **Farsi PDF**.
-- **Reads scanned pages** with OCR (text recognition).
-- **Leaves out what is not the book** as far as it can tell: page numbers, running heads, footnotes and notes sections, indexes,
-  imprint pages, and the like.
-- **Easy to use while reading:** click any sentence to start reading from there; change the speed (in steps of 1%) and the text size; search; see the page as it is printed; light, dark or automatic theme.
-- **Opens password-protected PDFs:** it asks for the password in a small dialog. The password goes only to the PDF reader inside the
-  app, never to the rest of the app, to a file, or anywhere else.
-- **Can read in your own voice** («صدای من»), from a recording or an audio file of you. Please use only your own voice: copying
-  someone's voice without their consent is forbidden by the speech model's terms.
+  translation, and can save it as a **Farsi PDF** (not in the light versions).
+- **Reads scanned pages** with OCR, and **opens password-protected PDFs** (the password is used to open the file and is never
+  written to storage or sent anywhere).
+- **Leaves out what is not the book** as far as it can tell: page numbers, running heads, footnotes, indexes and the like.
+- **Can read in your own voice** («صدای من»). Please use only your own voice: copying someone's voice without their consent is
+  forbidden by the speech model's terms.
+
+## Made to be usable without good eyesight
+
+- Large buttons and text; text size up to 72; light, dark, black and black-and-yellow themes; follows the system's
+  "increase contrast" and "reduce motion" settings.
+- Everything works from the keyboard: <kbd>Space</kbd> read or pause, <kbd>←</kbd> <kbd>→</kbd> pages, <kbd>⌘[</kbd> <kbd>⌘]</kbd> speed, <kbd>⌘,</kbd> settings.
+- Built for screen readers (VoiceOver, TalkBack): buttons are named, messages and page changes are announced, and a window that
+  opens takes the focus and gives it back when it closes. This has not yet been checked by a blind reader: please tell us what fails.
+- The word being read is marked, and the reading can start from any sentence you click.
 
 ## How it works
 
 Everything runs on your device; nothing is sent anywhere.
 
-- **The engine is written in Rust.** It works out a page's lines and paragraphs from the PDF reader's pieces of text, decides what is
-  body text and what is not, repairs words the PDF broke, translates, and makes the speech.
-- **Translation:** Meta's NLLB-200 model, run with CTranslate2 (the 3.3-billion-parameter model on the Mac, the 600-million one on Android).
-- **Speech:** a Farsi text-to-speech model (pocket-tts-farsi-v2), run with ONNX Runtime, with rules for numbers, names and pauses so it
-  reads like a person.
-- **Scanned pages:** a PaddleOCR text recogniser, and on the Mac also Apple's Vision.
-- **PDFs** are read by Mozilla's pdf.js, inside a sandboxed frame of the reading screen. **MP3s** are made with LAME.
-- **The reading screen is a web page** (HTML, CSS and JavaScript) shown in the system's web view: WebKit on the Mac, Android's
-  WebView on the phone. A small native shell around it opens the window and the file pickers.
-
-## What it is written in
-
-| Language | About | What for |
-|---|---|---|
-| **Rust** | 10,100 lines (75%) | The whole engine: text layout, translation, speech, OCR, MP3 and PDF export |
-| **Java** | 1,200 lines (9%) | The Android shell: the web view, file pickers, background jobs |
-| **JavaScript** | 1,150 lines (9%) | The reading screen and the PDF reader's frame |
-| **HTML and CSS** | 350 lines (2.5%) | The reading screen's look |
-| **C, C++, Objective-C** | 270 lines (2%) | Small bridges to native libraries: translation, Apple's Vision and PDF typesetting |
-| **Shell** | 200 lines (1.5%) | Building the apps |
-| **Swift** | 70 lines | Build helpers for the Android app (not in the apps) |
-
-The counts are for this repository's own code at version 1.0. Third-party code is not counted: pdf.js (JavaScript), LAME (C) and
-CTranslate2's headers (C++).
-
-All of the Rust is safe Rust except one folder, `src/ffi`, where each call into a native library is wrapped once, behind a safe
-interface; the compiler refuses `unsafe` anywhere else.
+- **The engine is written in Rust.** It works out a page's lines and paragraphs, decides what is body text, repairs words the PDF
+  broke, translates, and makes the speech. All of it is safe Rust except one folder, `src/ffi`, where each call into a native
+  library is wrapped once; the compiler refuses `unsafe` anywhere else.
+- **Translation:** Meta's NLLB-200, run with CTranslate2 (the 3.3-billion-parameter model in the full Mac app, the 600-million one elsewhere).
+- **Speech:** a Farsi text-to-speech model (pocket-tts-farsi-v2), run with ONNX Runtime (its usage reporting to Microsoft is switched
+  off, and could not work without a network anyway), with rules for numbers, names and pauses.
+- **Scanned pages:** a PaddleOCR recogniser, and on the Mac also Apple's Vision. **Dictation** (Mac, full): OpenAI's Whisper, on the device.
+- **PDFs:** Mozilla's pdf.js. **MP3:** LAME.
+- **The reading screen is a web page** shown in the system's web view (WebKit on the Mac, Android's WebView, WebView2 on Windows),
+  with a strict content policy: no outside address, no inline script, no JavaScript evaluation.
+- The models are data files (weights and tables), not programs. Every part and where it comes from is listed in the
+  [credits](THIRD_PARTY_NOTICES.md). No part of the app is fetched from a server when it runs.
 
 ## Privacy
 
-- Your books stay on your device, and there is no account, analytics or server.
-- The Android app has no internet permission, no storage permission and no microphone permission. Files are opened and saved
-  through Android's own screens.
-- The text of the book you have open is kept in memory while it is open, because reading aloud, searching and translating need
-  it. The app overwrites its own copies when it lets the book go (another book opened, the window closed). It keeps no copy of
-  the book on storage: an MP3 or PDF you ask for is made in the app's private storage until you save it where you choose, and on
-  the Mac a Word or RTF file is copied for a moment to a temporary file for Apple's converter and deleted at once. Copies inside
-  the web view's page and Android's Java layer are out of the app's reach, and Android keeps other apps out of this app's memory.
-- The only thing kept about a book is what you write yourself with "Edit text" (a paragraph you changed or removed, a word you
-  changed): a small file per book in the app's private folder, which you can clear at any time with "Undo all edits". Nothing
-  else about the book is written to storage.
-- On the Mac, the app runs in Apple's App Sandbox. It holds Apple's "outgoing network" permission only because Apple's WebKit
+- Your books stay on your device. There is no account, no analytics and no server, anywhere.
+- The Android app has no internet, no storage and no microphone permission. Files are opened and saved through Android's own screens.
+- The text of the open book is kept in memory while it is open and overwritten when the book is closed.
+- On the Mac the app runs in Apple's App Sandbox. It holds Apple's "outgoing network" permission only because Apple's WebKit
   needs it to start its own helper processes (the app does not open without it); the program has no network code and its page
   refuses every outside address.
 - The safety design follows [GrapheneOS's PDF Viewer](https://github.com/GrapheneOS/PdfViewer): a strict content policy, no
   JavaScript evaluation, no fonts loaded by the browser, a cap on the size of a drawn page, a minimum web view version, and
-  reproducible Android builds. See the [credits](THIRD_PARTY_NOTICES.md).
+  reproducible Android builds. GrapheneOS does not endorse or support this app.
+- Only the owner of this repository can change it. Others can only propose changes, and nothing enters without the owner's review.
 
 ## Limits
 
-**Translation and speech**
-- Translation is done by a machine and makes mistakes, especially with names, old spelling, poetry and technical terms. Don't rely on it where accuracy matters.
-- The voice speaks Farsi only. Foreign text is translated first. Names and foreign words may be pronounced wrongly.
-- The reader uses general rules; it has no corrections made for particular books, so some books will read better than others.
-
-**Documents**
-- How well a book reads depends on the file. PDFs with broken fonts, bad scans, unusual layouts, or notes that look like body text can come out wrong: words run together or split, notes read aloud, or parts left out.
-- Scanned pages depend on OCR, which makes mistakes, and Android's OCR is weaker than the Mac's.
-- One document is open at a time, up to 300 MB.
-- Older Word, RTF, ODT and HTML files open on the Mac only.
-
-**Mac**
-- Apple Silicon only (no Intel Macs), macOS 13 or newer, about 4 GB of disk and about 7 GB of memory while translating. Translating is slower on a Mac with 8 GB.
-- So far tested on one Mac only (M2 Pro, macOS 27).
-
-**Android**
-- arm64 phones only, Android 8 or newer, with Android System WebView 133 or newer.
-- **Not yet tried on a real phone.**
-- It uses the smaller translation model, so its translations have more errors.
-- It cannot open a PDF from another app's "Open with"; open files from inside the app.
-- You can choose an audio file for your own voice, but there is no recording button.
-
-**Everything**
-- The app never updates itself; download a new release to update.
+- **Translation is done by a machine and makes mistakes,** especially with names, old spelling, poetry and technical terms.
+- **The voice speaks Farsi only.** Farsi writing leaves out short vowels, so the app has to guess how a rare word or a name
+  sounds, and sometimes guesses wrong. A foreign name in Latin letters is read by the English dictionary, by Dutch rules in a
+  Dutch book, and otherwise by plain letter rules. You can fix any word for good: select it, choose «اصلاح تلفظ».
+- **How well a book reads depends on the file.** PDFs with broken fonts, bad scans or unusual layouts can come out wrong.
+- **Dictation and voice editing** (Mac) hear clear, slow speech best and make mistakes with names and in noise. Check what was written.
+- One document at a time, up to 300 MB. The app never updates itself: download a new release to update.
 - The translation and speech models are for **non-commercial use only**, so the apps may not be sold.
 
 <div dir="rtl">
 
-## درباره‌ی برنامه و محدودیت‌ها
+## راهنمای فارسی
 
-- ترجمه ماشینی است و اشتباه دارد، به‌ویژه در نام‌ها، املای قدیمی، شعر و واژه‌های تخصصی. جایی که دقت مهم است به آن تکیه نکنید.
-- صدای برنامه فقط فارسی است؛ متن خارجی ابتدا ترجمه می‌شود. نام‌ها و واژه‌های خارجی ممکن است درست خوانده نشوند.
-- کیفیت خواندن به خود فایل بستگی دارد. PDFهای با فونت خراب، اسکن‌های بد، صفحه‌آرایی‌های غیرمعمول، یا پانوشت‌هایی که شبیه متن اصلی‌اند ممکن است درست خوانده نشوند.
-- هر بار فقط یک سند باز است و اندازه‌اش تا ۳۰۰ مگابایت می‌تواند باشد.
-- مک: فقط مک‌های اپل‌سیلیکون (نه اینتل)، macOS 13 یا جدیدتر، و برای ترجمه حدود ۷ گیگابایت حافظه.
-- اندروید: هنوز روی گوشی واقعی آزمایش نشده است، مدل ترجمه‌ی کوچک‌تری دارد، و نمی‌تواند PDF را از «باز کردن با» برنامه‌های دیگر بگیرد.
+### چه چیزی را دانلود کنم؟
+
+فایل‌ها در صفحه‌ی **[Releases](../../releases/latest)** هستند. برای هر دستگاه یک نسخه‌ی کوچک و یک نسخه‌ی بزرگ هست، چون اینترنت برای خیلی‌ها گران است. **اگر اینترنت شما کند یا گران است، نسخه‌ی سبک را بگیرید.**
+
+| دستگاه | فایل | حجم | چه دارد |
+|---|---|---|---|
+| اندروید، سبک | `KhanaReader-Android-lite.apk` | حدود ۰٫۵۵ گیگابایت | کتاب فارسی، عکس و متن تایپ‌شده را می‌خواند و صدا ذخیره می‌کند. **بدون ترجمه.** |
+| اندروید، کامل | `KhanaReader-Android.apk` | حدود ۱٫۱۵ گیگابایت | همان، به‌اضافه‌ی ترجمه‌ی کتاب‌های خارجی به فارسی. |
+| مک، سبک | `KhanaReader-Mac-lite.dmg` | حدود ۰٫۴۵ گیگابایت، یک فایل | فارسی را می‌خواند، صدا ذخیره می‌کند، صفحه‌ی اسکن‌شده را می‌خواند. **بدون ترجمه و بدون تبدیل گفتار به نوشته.** |
+| مک، متوسط | `KhanaReader-Mac-medium.dmg` | حدود ۱ گیگابایت، یک فایل | همان، به‌اضافه‌ی ترجمه با مدل کوچک‌تر (همان مدل گوشی). |
+| مک، کامل | `KhanaReader-Mac.dmg` **و** همه‌ی فایل‌های `KhanaReader-Mac.00x.dmgpart` | حدود ۵ گیگابایت، سه فایل | بهترین مدل ترجمه و تبدیل گفتار به نوشته. |
+| ویندوز، سبک (آزمایشی) | `KhanaReader-Windows-light-experimental.zip` | حدود ۰٫۵ گیگابایت | بدون ترجمه. |
+| ویندوز، کامل (آزمایشی) | `KhanaReader-Windows-full-experimental.zip` | حدود ۱٫۱ گیگابایت | با ترجمه (مدل کوچک‌تر). |
+
+- **مک:** مک با تراشه‌ی اپل (M1 یا جدیدتر) و macOS 13 یا جدیدتر. برای نسخه‌ی کامل هر سه فایل را در یک پوشه بگذارید و بعد `.dmg` را باز کنید. بار اول macOS هشدار می‌دهد، چون این برنامه‌ی رایگان امضای پولی اپل ندارد: برنامه را باز کنید، بعد در **System Settings → Privacy & Security** گزینه‌ی **Open Anyway** را بزنید.
+- **اندروید:** گوشی ۶۴ بیتی (arm64) با اندروید ۸ یا بالاتر و «Android System WebView» نسخه‌ی ۱۳۳ یا جدیدتر. هنگام نصب، اندروید اجازه‌ی «نصب از این منبع» را می‌خواهد.
+- **ویندوز:** ویندوز ۱۰ یا ۱۱ (۶۴ بیتی). پوشه را کامل از حالت فشرده درآورید و `KhanaReader.exe` را باز کنید.
+
+> **صادقانه:** فقط نسخه‌ی مک هر روز به دست یک انسان استفاده می‌شود. نسخه‌ی اندروید هنوز روی گوشی واقعی آزمایش نشده و نسخه‌ی ویندوز فقط روی رایانه‌های ساخت GitHub اجرا شده است. اگر مشکلی دیدید در بخش [Issues](../../issues) بنویسید؛ کتابی را که نمی‌خواهید همه ببینند پیوست نکنید.
+
+### چطور مطمئن شوم فایل دست‌کاری نشده است؟
+
+۱. **فقط از همین صفحه‌ی GitHub دانلود کنید** (نشانی `github.com/Safeisbetter/khana-reader`)، نه از کانال، گروه یا سایت دیگر.
+
+۲. **کد SHA-256 فایل را با فایل `SHA256SUMS.txt` همان نسخه مقایسه کنید.** در مک یا لینوکس: `shasum -a 256 نام‌فایل` · در ویندوز (PowerShell): `Get-FileHash نام‌فایل`. دو کد باید کاملاً یکی باشند.
+
+۳. **اندروید:** همه‌ی فایل‌های APK ما با یک کلید امضا شده‌اند. اثر انگشت (SHA-256) گواهی آن:
+
+`32:44:BB:08:80:95:34:D3:42:78:5A:FD:CA:E9:C8:16:03:B9:B2:63:FC:7B:C2:3D:E5:78:32:D5:C1:D9:E0:F9`
+
+اگر این کد فرق داشت، فایل از ما نیست. اندروید هم اجازه نمی‌دهد نسخه‌ای با کلید دیگر روی این برنامه نصب شود.
+
+### کتاب و PDF را چطور امن‌تر بگیریم؟
+
+**این‌که کتاب از کجا می‌آید از برنامه‌ای که آن را می‌خواند مهم‌تر است.**
+
+- سایت یا کانالی که از آن دانلود می‌کنید می‌تواند ببیند **که شما چه کتابی را چه وقت گرفته‌اید.** برنامه این را نمی‌تواند عوض کند. کتاب را از منبعی بگیرید که می‌شناسید و به آن اعتماد دارید، و هر جا مهم است، با اتصالی که به آن اعتماد دارید.
+- فایلی که اسمش «کتاب» است ممکن است چیز دیگری باشد: یک برنامه (`.apk`، `.exe`، `.scr`، `.dmg`) یا PDFی که برای حمله به برنامه‌ی خواننده ساخته شده است. **هرگز «برنامه‌ای که برای خواندن این کتاب لازم است» نصب نکنید.** خوانا کتاب را باز می‌کند و هیچ‌وقت از شما نمی‌خواهد چیزی نصب کنید.
+- هر برنامه‌ی کتاب‌خوانی که اینترنت، مخاطبان یا دسترسی به همه‌ی فایل‌های شما را می‌خواهد مشکوک است. خوانا هیچ‌کدام را نمی‌خواهد.
+
+**اگر یک PDF خراب، آلوده یا پر از تبلیغ باشد، خوانا چه می‌کند؟**
+
+- **هیچ چیزِ درون PDF اجرا نمی‌شود.** اسکریپت، فرم، پیوست و دستورهای «اجرا» در PDF نادیده گرفته می‌شوند. لینک‌ها باز نمی‌شوند: برنامه اصلاً نمی‌تواند نشانی اینترنتی باز کند.
+- **هیچ چیز بیرون فرستاده نمی‌شود.** برنامه‌ی اندروید اجازه‌ی اینترنت ندارد؛ در همه‌ی دستگاه‌ها برنامه کد شبکه ندارد و صفحه‌ی آن هر نشانی بیرونی را رد می‌کند. یک PDF آلوده نمی‌تواند از راه این برنامه با جایی تماس بگیرد.
+- **PDF در یک اتاق قفل‌شده خوانده می‌شود.** PDF را pdf.js (ساخت موزیلا، به‌روز) در محیطی جداشده و بدون هیچ مجوزی باز می‌کند. در مک، این بخش در پردازه‌ای جدا اجرا می‌شود و به صفحه‌ی خواندن و ویرایش‌های شما دسترسی ندارد.
+- **محدودیت‌ها از دستگاه محافظت می‌کنند:** صفحه‌ای که ادعا می‌کند بسیار بزرگ است کوچک‌تر کشیده می‌شود، تصویر خیلی بزرگ پذیرفته نمی‌شود و فایل بزرگ‌تر از ۳۰۰ مگابایت باز نمی‌شود.
+- **تبلیغ و متن اضافه** (نشانی سایت روی هر صفحه، خط «دانلود شده از…») تا جایی که برنامه تشخیص دهد خوانده نمی‌شود؛ هر بند را هم خودتان می‌توانید با «✎ ویرایش متن» حذف کنید.
+- **محدودیت، صادقانه:** هیچ برنامه‌ای نمی‌تواند قول بدهد که یک فایل دشمنانه بی‌خطر است. سیستم‌عامل و (در اندروید) «Android System WebView» را به‌روز نگه دارید و فایلِ کسی را که از او می‌ترسید باز نکنید.
+
+**چه چیزی روی دستگاه می‌ماند و چطور پاک می‌شود؟**
+
+- برنامه فقط این‌ها را نگه می‌دارد: تنظیمات، ویرایش‌های خود شما در متن کتاب (که جمله‌هایی از کتاب در آن‌هاست)، فهرست اصلاح تلفظ، و صدای ضبط‌شده‌ی شما اگر ساخته باشید. هیچ چیز دیگری از کتاب ذخیره نمی‌شود.
+- **تنظیمات ← «پاک کردن همه‌ی ردها»** همه‌ی این‌ها را یک‌جا پاک می‌کند. برنامه هر بار که باز می‌شود فایل‌های صوتی نیمه‌کاره‌ی موقت خودش را هم پاک می‌کند.
+- **فایل‌های MP3، WAV و PDF که ذخیره کرده‌اید، و خودِ کتاب‌ها، فایل‌های خود شما هستند:** برنامه آن‌ها را پاک نمی‌کند. اگر نباید پیدا شوند، خودتان پاکشان کنید.
+- قفل صفحه و رمزگذاری دستگاه را روشن نگه دارید. در اندروید، [GrapheneOS](https://grapheneos.org) قوی‌ترین محافظتی است که می‌شناسیم. (GrapheneOS این برنامه را تأیید یا پشتیبانی نمی‌کند.)
+
+### برنامه چه می‌کند؟
+
+- متن فارسی را با صدای طبیعی **می‌خواند** و خواندن را به صورت **MP3** یا **WAV** ذخیره می‌کند.
+- **متنی که خودتان می‌نویسید** («✎ نوشتن متن») و متن **عکس‌ها** را هم می‌خواند.
+- **ویرایش در خودِ صفحه:** با «✎ ویرایش متن» هر بند جایی برای نوشتن می‌شود: انتخاب کنید، بنویسید، با کلید Delete پاک کنید. یک کلمه را می‌شود در همه‌ی کتاب عوض یا حذف کرد. ویرایش‌ها در خواندن، MP3 و PDF هم اثر می‌کنند.
+- PDF، EPUB، FB2، پاورپوینت، ورد و متن ساده را **باز می‌کند**؛ صفحه‌ی اسکن‌شده و PDF رمزدار را هم.
+- از انگلیسی، هلندی، آلمانی، فرانسوی، اسپانیایی، ایتالیایی، پرتغالی، ترکی و لهستانی به فارسی **ترجمه می‌کند** و ترجمه را به صورت **PDF فارسی** ذخیره می‌کند (در نسخه‌های سبک نیست).
+- می‌تواند با **صدای خود شما** بخواند («صدای من»). فقط صدای خودتان را به کار ببرید.
+
+### برای کسانی که خوب نمی‌بینند
+
+- دکمه‌ها و نوشته‌های بزرگ؛ اندازه‌ی قلم تا ۷۲؛ پوسته‌ی روشن، تیره، سیاه و سیاه‌وزرد؛ از تنظیم «تضاد بیشتر» و «حرکت کمتر» سیستم پیروی می‌کند.
+- همه‌چیز با صفحه‌کلید کار می‌کند: <kbd>Space</kbd> خواندن یا مکث، <kbd>←</kbd> <kbd>→</kbd> صفحه‌ی بعد و قبل.
+- برای صفحه‌خوان‌ها (VoiceOver، TalkBack) ساخته شده: دکمه‌ها نام دارند، پیام‌ها و عوض شدن صفحه گفته می‌شود. هنوز یک کاربر نابینا آن را نیازموده است؛ اگر جایی کار نکرد به ما بگویید.
+- کلمه‌ای که خوانده می‌شود نشان‌دار است و می‌شود خواندن را از هر جمله شروع کرد.
+
+### محدودیت‌ها
+
+- **ترجمه ماشینی است و اشتباه دارد،** به‌ویژه در نام‌ها، املای قدیمی، شعر و واژه‌های تخصصی.
+- **صدا فقط فارسی است.** خط فارسی مصوت‌های کوتاه را نمی‌نویسد؛ پس برنامه باید تلفظ واژه‌ی کم‌کاربرد یا نام را حدس بزند و گاهی اشتباه می‌کند. نام خارجی با حروف لاتین با واژه‌نامه‌ی انگلیسی، در کتاب هلندی با قاعده‌های هلندی، و وگرنه با قاعده‌ی ساده‌ی حروف خوانده می‌شود. هر کلمه را می‌توانید برای همیشه درست کنید: آن را انتخاب کنید و «اصلاح تلفظ» را بزنید.
+- **کیفیت خواندن به خود فایل بستگی دارد.** PDF با فونت خراب، اسکن بد یا صفحه‌آرایی غیرمعمول ممکن است درست خوانده نشود.
+- **تبدیل گفتار به نوشته و ویرایش با صدا** (مک) گفتار روشن و آرام را بهتر می‌شنود و در نام‌ها و جای پرسروصدا اشتباه می‌کند. نوشته را بازبینی کنید.
+- هر بار یک سند، تا ۳۰۰ مگابایت. برنامه خودش را به‌روز نمی‌کند: برای به‌روزرسانی نسخه‌ی تازه را دانلود کنید.
 - مدل‌های ترجمه و گفتار فقط برای استفاده‌ی غیرتجاری‌اند؛ پس برنامه را نمی‌توان فروخت.
-- برنامه به اینترنت وصل نمی‌شود و کتاب‌های شما فقط روی دستگاه خودتان می‌مانند.
+
+### مشکل یا پرسش؟
+
+در بخش [Issues](../../issues) بنویسید. مشکل امنیتی را طبق [SECURITY.md](SECURITY.md) گزارش کنید.
 
 </div>
 
@@ -228,6 +249,7 @@ complete apps may not be sold. See [credits and licences](THIRD_PARTY_NOTICES.md
 ## Building from source
 
 The models and prebuilt libraries are too large for this repository; the credits list where each comes from.
-`tools/make_app.sh` builds the Mac app and `android/build.sh` builds the Android app. A release of your own needs your own
-Android signing key. The code has unit tests (`cargo test --lib`) and a self-test that runs the real window
-(`KHANA_SELFTEST=<file>`).
+`tools/make_app.sh` builds the Mac app, `tools/make_release.sh` the three Mac downloads, and `android/build.sh` the Android app
+(`KHANA_LITE=1` for the light one). The Windows app is built by GitHub (`.github/workflows/windows.yml`), with every outside step
+pinned to an exact commit. A release of your own needs your own Android signing key. The code has unit tests (`cargo test --lib`)
+and a self-test that runs the real window (`KHANA_SELFTEST=<file>`).

@@ -35,7 +35,7 @@
       <button id="stop" type="button" disabled>■ توقف</button>
       <div class="speedctl" role="group" aria-label="سرعت خواندن">
         <button id="slower" type="button" aria-label="آهسته‌تر" title="آهسته‌تر (⌘[)">−</button>
-        <button id="speedChip" type="button" title="برگرداندن سرعت به ۱۰۰٪ (⌘0)"></button>
+        <button id="speedChip" type="button" aria-label="سرعت خواندن؛ با زدن به ۱۰۰٪ برمی‌گردد" title="برگرداندن سرعت به ۱۰۰٪ (⌘0)"></button>
         <button id="faster" type="button" aria-label="تندتر" title="تندتر (⌘])">+</button>
       </div>
       <span class="spacer"></span>
@@ -53,7 +53,7 @@
       <button id="editBtn" type="button" title="تغییر یا حذف یک بند یا کلمه‌ی متن؛ برای خواندن، ذخیره‌ی MP3 و PDF هم اثر می‌کند">✎ ویرایش متن</button>
     </div>
     <div class="row" id="editBar" hidden>
-      <span class="editnote">روی یک بند بزنید تا در یک پنجره عوض یا حذف شود؛ یک کلمه را انتخاب کنید تا در همه‌ی کتاب‌ها عوض شود.</span>
+      <span class="editnote">هر بند را می‌شود انتخاب کرد و همان‌جا نوشت یا با کلید Delete پاک کرد (بیرون از بند بزنید تا ذخیره شود؛ همه‌ی متن پاک شود، بند حذف می‌شود). یک کلمه را انتخاب کنید و «عوض کردن کلمه…» را بزنید تا در همه‌ی کتاب‌ها عوض یا حذف شود.</span>
       <button id="edWordBtn" type="button">عوض کردن کلمه…</button>
       <button id="edReset" type="button" title="همه‌ی ویرایش‌های این کتاب و کلمه‌های اصلاح‌شده‌ی همه‌ی کتاب‌ها را پاک می‌کند">بازگرداندن همه</button>
       <span id="edInfo" class="editnote"></span>
@@ -79,7 +79,7 @@
       <p class="note">طراحی این برنامه براین اساس انجام شده است که برای افراد دارای محدودیت دیداری و خواندن، قابل استفاده باشد: دکمه‌ها و نوشته‌ها بزرگ و قابل تمایز هستند، قلم و رنگ‌ها قابل تنظیم‌اند، با صفحه‌خوان کار می‌کند و کارهای اصلی را می‌توان با صدا انجام داد.</p>
       <p class="hint">کلیدها: <kbd>Space</kbd> خواندن / مکث · <kbd>← →</kbd> صفحه‌ی بعد / قبل · <kbd>⌘[</kbd> <kbd>⌘]</kbd> سرعت · <kbd>⌘0</kbd> سرعت عادی · <kbd>⌘,</kbd> تنظیمات</p>
     </section>
-    <div class="note" id="note" hidden></div>
+    <div class="note" id="note" role="status" aria-live="polite" hidden></div>
     <div id="textView" class="text" hidden></div>
     <div id="pageView" hidden><img id="pageImg" class="pageimg" alt="تصویر صفحه"></div>
   </div>
@@ -135,7 +135,7 @@
     </div>
     <div class="field">
       <label for="fontSize">اندازه‌ی قلم: <span id="fontVal"></span></label>
-      <input id="fontSize" type="range" aria-label="اندازه‌ی قلم" min="14" max="52" step="1">
+      <input id="fontSize" type="range" aria-label="اندازه‌ی قلم" min="14" max="72" step="1">
     </div>
     <div class="field">
       <span class="lbl">رنگ پس‌زمینه</span>
@@ -201,6 +201,11 @@
         <span class="hint">حرکت‌ها: ـَ ـِ ـُ ـْ ـّ</span>
       </div>
       <details id="lexDetails" hidden><summary id="lexSummary">فهرست اصلاح‌ها</summary><div class="lexlist" id="lexList"></div></details>
+    </div>
+    <div class="field" id="forgetField">
+      <label>ردهای برنامه روی این دستگاه</label>
+      <p class="editnote">خوانا این‌ها را روی همین دستگاه نگه می‌دارد: ویرایش‌های شما (که جمله‌هایی از کتاب‌ها در آن‌هاست)، صدای ضبط‌شده‌ی شما، تنظیمات و فهرست اصلاح تلفظ. با این دکمه همه پاک می‌شود. فایل‌های MP3 و PDF که ذخیره کرده‌اید و خودِ کتاب‌ها پاک نمی‌شوند؛ آن‌ها را خودتان پاک کنید.</p>
+      <button type="button" id="forgetAll">پاک کردن همه‌ی ردها</button>
     </div>
   </div>
 </div>
@@ -322,7 +327,8 @@
 
 <div class="drop" id="drop" hidden>فایل را این جا رها کنید</div>
 <div class="voicebox" id="voiceStatus" role="status" aria-live="assertive" hidden></div>
-<div class="toast" id="toast" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+<div class="sr-only" id="srLive" role="status" aria-live="polite" aria-atomic="true"></div>
 <button type="button" class="primary fixbtn" id="fixWord" hidden></button>
 <audio id="audio" preload="auto"></audio>
 

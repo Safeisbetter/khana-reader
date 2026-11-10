@@ -18,7 +18,8 @@ const IMAGE_OPS = new Set([pdfjsLib.OPS.paintImageXObject, pdfjsLib.OPS.paintInl
 let passwordWaiter = null;
 
 async function open(bytes, requestId) {
-  if (doc) { await doc.destroy(); doc = null; }
+  // (pdf.js 6: a document is closed through its loading task; the document itself has no destroy)
+  if (doc) { const old = doc; doc = null; await old.loadingTask.destroy().catch(() => {}); }
   const task = pdfjsLib.getDocument({
     data: new Uint8Array(bytes),
     isEvalSupported: false, enableXfa: false, useWasm: false, useSystemFonts: false, disableFontFace: true,
@@ -29,7 +30,7 @@ async function open(bytes, requestId) {
   // An encrypted PDF asks for its password (again, when it was wrong): the reader page shows the dialog and answers with
   // {op: "password", value} or {op: "password", cancel: true}.
   task.onPassword = (update, reason) => {
-    parent.postMessage({ needPassword: true, id: requestId, again: reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD }, "*");
+    send({ needPassword: true, id: requestId, again: reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD });
     new Promise(r => { passwordWaiter = r; }).then(value => {
       passwordWaiter = null;
       if (value == null) { cancelled = true; task.destroy().catch(() => {}); } else update(value);
@@ -107,11 +108,27 @@ async function gray(n, dpi) {
   return { w, h, px };
 }
 
-addEventListener("message", async e => {
-  if (e.source !== parent) return;
-  const m = e.data || {};
+// Where pdf.js lives: in a sandboxed frame of the reader page (messages to and from the page), or, on the Mac, in a web view
+// of its own (BRIDGE: it asks the app for its next job and posts its answers to the app; it never meets the reader page).
+const BRIDGE = parent === window;
+const VIEW = new URL("../view/", import.meta.url).href;
+async function send(m, transfer) {
+  if (!BRIDGE) return parent.postMessage(m, "*", transfer || []);
+  let kind, body = "", extra = "";
+  if (m.needPassword) { kind = "password"; extra = m.again ? "&again=1" : ""; }
+  else if (!m.ok) { kind = "error"; body = String(m.error); }
+  else if (m.data instanceof Blob) { kind = "png"; body = await m.data.arrayBuffer(); } // (bytes: WebKit gives the app no body for a Blob)
+  else if (m.data && m.data.px) {
+    kind = "gray";
+    body = new Uint8Array(8 + m.data.px.length);
+    const dv = new DataView(body.buffer);
+    dv.setUint32(0, m.data.w, true); dv.setUint32(4, m.data.h, true); body.set(m.data.px, 8);
+  } else { kind = "json"; body = JSON.stringify(m.data); }
+  fetch(`${VIEW}reply?id=${m.id}&kind=${kind}${extra}`, { method: "POST", body }).catch(() => {});
+}
+async function handle(m) {
   if (m.op === "password") { if (passwordWaiter) passwordWaiter(m.cancel ? null : String(m.value ?? "")); return; }
-  const reply = (data, transfer) => parent.postMessage({ id: m.id, ok: true, data }, "*", transfer || []);
+  const reply = (data, transfer) => send({ id: m.id, ok: true, data }, transfer);
   try {
     if (m.op === "open") reply(await open(m.data, m.id));
     else if (!doc) throw new Error("no document");
@@ -120,7 +137,24 @@ addEventListener("message", async e => {
     else if (m.op === "gray") { const g = await gray(m.n, m.dpi); reply(g, [g.px.buffer]); }
     else throw new Error("unknown request");
   } catch (err) {
-    parent.postMessage({ id: m.id, ok: false, error: String((err && err.message) || err) }, "*");
+    send({ id: m.id, ok: false, error: String((err && err.message) || err) });
   }
-});
-parent.postMessage({ ready: true }, "*");
+}
+if (BRIDGE) {
+  const session = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
+  (async () => {
+    for (;;) {
+      try {
+        const m = await (await fetch(`${VIEW}next?s=${session}`)).json();
+        if (!m.op) continue;
+        if (m.op === "open") m.data = await (await fetch(`${VIEW}bytes`)).arrayBuffer();
+        handle(m); // (not awaited: the password for a PDF being opened comes as the next job)
+      } catch (e) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+  })();
+} else {
+  addEventListener("message", e => { if (e.source === parent) handle(e.data || {}); });
+  send({ ready: true });
+}

@@ -265,10 +265,78 @@ pub fn source_is_dutch() -> bool {
 }
 
 pub fn latin_phonemes(word: &str) -> Option<String> {
-    if !source_is_dutch() || (word.chars().count() <= 6 && word.chars().all(|c| c.is_uppercase())) {
-        return english_phonemes(word);
+    let abbreviation = word.chars().count() <= 6 && word.chars().all(|c| c.is_uppercase());
+    if !source_is_dutch() || abbreviation {
+        return english_phonemes(word).or_else(|| if abbreviation { None } else { foreign_phonemes(word) });
     }
     let out = dutch_phonemes(word)?;
+    english_ph().lock().unwrap().insert(out.clone());
+    Some(out)
+}
+
+pub fn foreign_phonemes(word: &str) -> Option<String> {
+    let mut w = String::new();
+    for c in word.to_lowercase().chars() {
+        match c {
+            'á' | 'à' | 'â' | 'ã' | 'å' => w.push('a'),
+            'ä' | 'é' | 'è' | 'ê' | 'ë' | 'ě' | 'ę' => w.push('e'),
+            'í' | 'ì' | 'î' | 'ï' | 'ı' => w.push('i'),
+            'ó' | 'ò' | 'ô' | 'ö' | 'õ' | 'ø' => w.push('o'),
+            'ú' | 'ù' | 'û' | 'ü' => w.push('u'),
+            'ç' | 'ś' => w.push('s'),
+            'ş' | 'š' => w.push_str("sh"),
+            'č' | 'ć' => w.push_str("tsch"),
+            'ž' | 'ż' => w.push_str("zh"),
+            'ñ' | 'ń' => w.push_str("ny"),
+            'ł' => w.push('l'),
+            'ß' => w.push('s'),
+            'ğ' => {}
+            c if c.is_ascii_lowercase() => w.push(c),
+            _ => {}
+        }
+    }
+    if w.chars().count() < 3 {
+        return None;
+    }
+    const VOWELS: &str = "aeiouy";
+    const SOUNDS: &[(&str, &str)] = &[
+        ("tzsch", "C"), ("tsch", "C"), ("eau", "o"), ("sch", "S"), ("cht", "xt"), ("sci", "Si"), ("oir", "vAr"),
+        ("sh", "S"), ("kh", "x"), ("zh", ";"), ("gh", "q"), ("ph", "f"), ("th", "t"), ("ck", "k"), ("qu", "k"), ("ng", "ng"),
+        ("ai", "Ay"), ("ay", "Ay"), ("ei", "Ay"), ("ey", "ey"), ("ie", "i"), ("ee", "i"), ("oo", "u"), ("ou", "u"), ("au", "o"), ("eu", "o"), ("oi", "oy"),
+        ("oy", "oy"), ("aa", "A"),
+        ("a", "A"), ("b", "b"), ("d", "d"), ("e", "e"), ("f", "f"), ("g", "g"), ("h", "h"), ("i", "i"), ("j", "j"), ("k", "k"), ("l", "l"), ("m", "m"),
+        ("n", "n"), ("o", "o"), ("p", "p"), ("q", "k"), ("r", "r"), ("s", "s"), ("t", "t"), ("u", "u"), ("v", "v"), ("w", "v"), ("x", "ks"), ("z", "z"),
+    ];
+    let b: Vec<char> = w.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < b.len() {
+        let rest: String = b[i..].iter().collect();
+        let prev_vowel = i > 0 && VOWELS.contains(b[i - 1]);
+        let next = b.get(i + 1).copied();
+        let (sound, used): (String, usize) = if rest.starts_with("ch") {
+            ((if i == 0 { "C" } else if prev_vowel { "x" } else { "k" }).to_string(), 2)
+        } else if b[i] == 'c' {
+            ((if next.is_some_and(|n| "eiy".contains(n)) { "s" } else { "k" }).to_string(), 1)
+        } else if b[i] == 'y' {
+            ((if next.is_some_and(|n| "aeiou".contains(n)) && !prev_vowel { "y" } else { "i" }).to_string(), 1)
+        } else {
+            match SOUNDS.iter().find(|(k, _)| rest.starts_with(k)) {
+                Some((k, v)) => (v.to_string(), k.len()),
+                None => (String::new(), 1),
+            }
+        };
+        if !(used == 1 && i > 0 && b[i - 1] == b[i] && !VOWELS.contains(b[i])) {
+            out.push_str(&sound);
+        }
+        i += used;
+    }
+    if out.is_empty() {
+        return None;
+    }
+    if "aeiouA".contains(out.chars().next().unwrap()) {
+        out.insert(0, '?');
+    }
     english_ph().lock().unwrap().insert(out.clone());
     Some(out)
 }

@@ -48,6 +48,41 @@ addEventListener("load", () => setTimeout(async () => {
     }
     await new Promise(r => setTimeout(r, 3000));
     await say("opened: pages " + document.getElementById("pageCount").textContent + ", paragraphs on screen " + document.querySelectorAll("#text p, .para, p").length);
+    // Editing the text, as a person does it: edit mode, a paragraph typed over, one word changed, a word taken out, a paragraph taken out, all undone.
+    try {
+      window.confirm = () => true;
+      if ((await jget("/api/init")).testData !== true) throw "skipped: never on the app's real data (it ends with a reset)";
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const first = () => ((document.querySelector("#textView p[data-i='0']") || {}).textContent || "").trim();
+      const count = () => document.querySelectorAll("#textView p[data-i]").length;
+      const until = async f => { for (let k = 0; k < 60 && !f(); k++) await wait(250); return f(); };
+      await until(() => S.pageDone !== false && count() > 0);
+      const before = { n: count(), first: first() };
+      $("editBtn").click();
+      await say("edit: button «" + $("editBtn").textContent.trim() + "», edit mode on " + S.editing + ", bar shown " + !$("editBar").hidden + ", " + before.n + " paragraphs");
+      const w0 = (before.first.split(/\s+/).find(x => /^[\u0600-\u06ff]{3,}$/.test(x)) || "");
+      $("edFrom").value = w0; $("edTo").value = "ZZتست"; $("edWord").click();
+      const changed = await until(() => first().includes("ZZتست"));
+      await say("edit: one word «" + w0 + "» changed: " + changed + ", toast «" + ($("toast") ? $("toast").textContent : "") + "»");
+      $("edFrom").value = "ZZتست"; $("edTo").value = ""; $("edWord").click();
+      const gone = await until(() => !first().includes("ZZتست") && first() !== "");
+      await say("edit: that word taken out: " + gone + ", the paragraph now «" + first().slice(0, 60) + "»");
+      const typeOver = async text => {
+        const el = document.querySelector("#textView p[data-i='0']");
+        await say("edit: paragraph is typeable without a tap " + el.isContentEditable);
+        el.focus(); el.textContent = text; el.blur();
+      };
+      await typeOver("این متن برای آزمایش نوشته شد.");
+      const typed = await until(() => first() === "این متن برای آزمایش نوشته شد.");
+      await say("edit: typed in the page: " + typed + ", count shown «" + $("edInfo").textContent + "»");
+      await wait(800); await typeOver("");
+      const removed = await until(() => count() === before.n - 1);
+      await say("edit: all text removed, paragraph taken out: " + removed + " (" + before.n + " -> " + count() + ")");
+      $("edReset").click();
+      const back = await until(() => count() === before.n && first() === before.first);
+      await say("edit: all undone, the page is as it was: " + back + " (" + count() + " paragraphs, first «" + first().slice(0, 40) + "» was «" + before.first.slice(0, 40) + "»), count shown «" + $("edInfo").textContent + "»");
+      $("editBtn").click();
+    } catch (e) { await say("edit: ERROR " + e); }
     const r = await api("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "سلام، این یک آزمایش است.", voice: "khabari", speed: 1.0 }) });
     const wavBytes = await r.clone().arrayBuffer();
     const buf = await ensureAudio().decodeAudioData(await r.arrayBuffer());
@@ -65,8 +100,15 @@ addEventListener("load", () => setTimeout(async () => {
     S.view = "page"; syncChrome(); renderPageImage();
     for (let k = 0; k < 30 && !$("pageImg").naturalWidth; k++) await new Promise(r => setTimeout(r, 500));
     let peek = "blocked";
-    try { peek = pdfFrame.contentWindow.document ? "OPEN" : "blocked"; } catch (e) { peek = "blocked"; }
-    await say(`page picture (pdf.js): ${$("pageImg").naturalWidth}×${$("pageImg").naturalHeight} from ${($("pageImg").src || "").slice(0, 5)}; engine ${S.doc.engine}; the page sees into pdf.js's frame: ${peek}, contentDocument ${pdfFrame.contentDocument === null ? "null" : "VISIBLE"}`);
+    if (window.KHANA_PDF_VIEW) {
+      // (pdf.js in a view of its own: the page has no frame at all, and pdf.js's address is not one the page can ask)
+      let reach = "refused";
+      try { const r = await fetch("khanapdf://pdf/view/bytes"); reach = "ANSWERED " + r.status; } catch (e) { reach = "refused"; }
+      await say(`page picture (pdf.js, own view): ${$("pageImg").naturalWidth}×${$("pageImg").naturalHeight} from ${($("pageImg").src || "").slice(0, 5)}; engine ${S.doc.engine}; frames in the page ${document.querySelectorAll("iframe").length}; the page asking pdf.js's address directly: ${reach}`);
+    } else {
+      try { peek = pdfFrame.contentWindow.document ? "OPEN" : "blocked"; } catch (e) { peek = "blocked"; }
+      await say(`page picture (pdf.js): ${$("pageImg").naturalWidth}×${$("pageImg").naturalHeight} from ${($("pageImg").src || "").slice(0, 5)}; engine ${S.doc.engine}; the page sees into pdf.js's frame: ${peek}, contentDocument ${pdfFrame.contentDocument === null ? "null" : "VISIBLE"}`);
+    }
     try {
       // (a rough look at the picture: the share of dark pixels in a 4x4 grid, to compare two settings of pdf.js)
       const im = $("pageImg"), cv = document.createElement("canvas");
@@ -151,7 +193,7 @@ addEventListener("load", () => setTimeout(async () => {
     await openFile(new File([sc], "scan.pdf"));
     await loadPage(1);
     stopReading();
-    await say(`scanned book (pdf.js's picture, the app's OCR): ${S.doc.pages} pages, scanned ${S.doc.scanned}, page 1 ${S.paras.length} paragraphs, ${S.paras.join(" ").length} letters in ${Math.round((Date.now() - t1) / 1000)} s`);
+    await say(`scanned book (pdf.js's picture, the app's OCR): name ${S.doc.name}, note «${$("note").hidden ? "" : $("note").textContent.slice(0, 120)}», ${S.doc.pages} pages, scanned ${S.doc.scanned}, page 1 ${S.paras.length} paragraphs, ${S.paras.join(" ").length} letters in ${Math.round((Date.now() - t1) / 1000)} s`);
   } catch (e) { await say("FAILED " + e); }
   const sw = document.querySelector(".sw-yellow");
   try {
@@ -167,5 +209,15 @@ addEventListener("load", () => setTimeout(async () => {
   const d = document.createElement("div"); d.setAttribute("style", "color: red"); document.body.appendChild(d);
   await new Promise(r => setTimeout(r, 300));
   await say("inline script ran " + !!window.__inlineRan + ", inline style applied " + (getComputedStyle(d).color === "rgb(255, 0, 0)") + ", refusals " + (cspViolations.length - before));
+  // «پاک کردن همه‌ی ردها»: only where the test's own data folder is used (the program run from its build folder, not the app)
+  try {
+    if ((await jget("/api/init")).testData === true) {
+      await jpost("/api/settings", { speed: 1.25 });
+      const before = (await jget("/api/init")).settings.speed;
+      const r = await jpost("/api/forget", {});
+      const after = (await jget("/api/init")).settings.speed;
+      await say("forget: button there " + !!$("forgetAll") + ", answered " + JSON.stringify(r) + ", speed setting " + before + " -> " + after);
+    } else await say("forget: not run on the app's real data");
+  } catch (e) { await say("forget: ERROR " + e); }
   await say("DONE");
 }, 1500));

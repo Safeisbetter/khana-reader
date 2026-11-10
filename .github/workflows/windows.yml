@@ -15,13 +15,14 @@ on:
   push:
     branches: [windows-full]
 
+# (the build may only read the repository; only the publishing job below may write to the release page)
 permissions:
-  contents: write
+  contents: read
 
 env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: "v1.1.8"
+  MODELS_RELEASE: "v1.2"
 
 jobs:
   build:
@@ -31,12 +32,14 @@ jobs:
       matrix:
         edition: [light, full]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: ONNX Runtime for Windows
         shell: pwsh
         run: |
           Invoke-WebRequest "https://github.com/microsoft/onnxruntime/releases/download/v$env:ORT_VERSION/onnxruntime-win-x64-$env:ORT_VERSION.zip" -OutFile ort.zip
+          # (the file must be the size Microsoft published for this version: 64,540,734 bytes; GitHub gives no checksum for it)
+          if ((Get-Item ort.zip).Length -ne 64540734) { throw "onnxruntime zip: unexpected size $((Get-Item ort.zip).Length)" }
           Expand-Archive ort.zip -DestinationPath ort
 
       - name: Models (from the Android download of the release)
@@ -62,7 +65,7 @@ jobs:
       - name: CTranslate2 (cache)
         if: matrix.edition == 'full'
         id: ct2cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ct2build
           key: ct2-${{ env.CT2_VERSION }}-ruy-1
@@ -72,6 +75,8 @@ jobs:
         shell: pwsh
         run: |
           git clone --depth 1 --branch v$env:CT2_VERSION --recurse-submodules --shallow-submodules https://github.com/OpenNMT/CTranslate2.git ct2src
+          # (the tag must still be the commit it was when this was written: a tag can be moved, a commit cannot)
+          if ((git -C ct2src rev-parse HEAD) -ne "383d063daf0bf338a22b491864cb2018eb8efd15") { throw "CTranslate2: the v$env:CT2_VERSION tag is not the expected commit" }
           cmake -S ct2src -B ct2build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DWITH_MKL=OFF -DWITH_RUY=ON -DOPENMP_RUNTIME=COMP -DBUILD_CLI=OFF -DBUILD_TESTS=OFF "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
           cmake --build ct2build --config Release --parallel 4
           Get-ChildItem -Recurse ct2build -Include ctranslate2.dll, ctranslate2.lib | Select-Object FullName
@@ -111,7 +116,7 @@ jobs:
           Copy-Item LICENSE, THIRD_PARTY_NOTICES.md $out
           Copy-Item windows/README-Windows.txt $out
           $zip = "KhanaReader-Windows-${{ matrix.edition }}-experimental.zip"
-          Compress-Archive -Path $out -DestinationPath $zip -CompressionLevel Fastest
+          Compress-Archive -Path $out -DestinationPath $zip -CompressionLevel Optimal
           Get-Item $zip | Select-Object Name, Length
 
       - name: Window smoke test (does the window open and load the page?)
@@ -132,7 +137,7 @@ jobs:
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           if (-not $ok) { throw "the window did not load the page" }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: KhanaReader-Windows-${{ matrix.edition }}-experimental
           path: KhanaReader-Windows-${{ matrix.edition }}-experimental.zip
@@ -143,9 +148,11 @@ jobs:
     needs: build
     if: ${{ inputs.release }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: zips
           merge-multiple: true
@@ -153,6 +160,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v1.1.8"
+          tag="v1.2"
           ls -la zips
           gh release upload "$tag" zips/*.zip --clobber

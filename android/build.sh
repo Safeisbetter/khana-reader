@@ -75,7 +75,9 @@ if [ -n "${KHANA_PUBLIC:-}" ]; then
   MANIFEST="$OUT/AndroidManifest.public.xml"
   grep -v -E 'android.permission.(RECORD_AUDIO|MODIFY_AUDIO_SETTINGS)' "$HERE/AndroidManifest.xml" > "$MANIFEST"
 fi
-"$BT/aapt2" link -o "$OUT/unsigned.apk" --manifest "$MANIFEST" -I "$JAR" -A "$A" --no-compress \
+# (the models are compressed inside the APK: about a quarter less to download, where every megabyte costs; the app unpacks them
+# on its first start as before. resources.arsc stays uncompressed, as Android 11 and newer require)
+"$BT/aapt2" link -o "$OUT/unsigned.apk" --manifest "$MANIFEST" -I "$JAR" -A "$A" -0 .arsc \
   --proguard "$OUT/aapt-rules.pro" "$OUT/res.zip"
 # R8: the shell shrunk and its names shortened (release), keeping what the manifest and JNI name
 java -cp "$BT/lib/d8.jar" com.android.tools.r8.R8 --release --min-api $API --lib "$JAR" \

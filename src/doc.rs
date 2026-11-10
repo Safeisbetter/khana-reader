@@ -409,10 +409,7 @@ impl Document {
 fn new_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let t = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let mut b = [0u8; 16];
-    if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
-        let _ = f.read_exact(&mut b);
-    }
+    let b = crate::app::random_bytes::<16>();
     format!("{:032x}{}", u128::from_le_bytes(b) ^ t, "").chars().take(32).collect()
 }
 
