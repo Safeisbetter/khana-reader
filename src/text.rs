@@ -968,6 +968,11 @@ pub fn latin_only_paragraph(p: &str) -> bool {
     !rtl(p) && search(r"[A-Za-zÀ-ÿ]{3,}", p)
 }
 
+pub fn price_line(p: &str) -> bool {
+    const AMOUNT: &str = r"(?:US|CAN|CDN|UK|AUS|NZ|EUR)?\s*[$£€¥]\s*[\d۰-۹٠-٩]+(?:[.,٫٬][\d۰-۹٠-٩]+)?\s*(?:USA|USD|US|CAND|CAN|CAD|CDN|UK|GBP|AUS|AUD|NZ|EUR)?";
+    fullmatch(&format!(r"\s*{AMOUNT}(?:\s*[/|،,;·\-–]?\s*{AMOUNT})*\s*[.،]?\s*"), p)
+}
+
 pub fn drop_fa_citations(text: &str) -> String {
     if !text.contains('(') {
         return text.to_string();

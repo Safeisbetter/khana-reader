@@ -22,6 +22,7 @@ addEventListener("load", () => setTimeout(async () => {
   } catch (e) { /* (no passwords) */ }
   try {
     await say("loaded: voices " + (await jget("/api/init")).voices.length + ", mediaDevices " + !!navigator.mediaDevices);
+    { const t = document.querySelector(".thanks"); await say("thanks line: «" + (t ? t.textContent : "MISSING") + "», shown " + !!(t && t.offsetParent) + ", width " + (t ? Math.round(t.getBoundingClientRect().width) : 0) + ", nastaliq face there " + document.fonts.check('20px "Noto Nastaliq Urdu"', "تشکر") + ", naskh " + document.fonts.check('20px "DecoType Naskh"', "تشکر")); }
     const b = await (await api("/api/selftest_file")).blob();
     if ((await (await api("/api/selftest_layout", { method: "POST" })).json()).only) {
       const buf = await b.arrayBuffer(), { pages } = await pdfCall({ op: "open", data: buf }, [buf]), out = [];
@@ -48,6 +49,23 @@ addEventListener("load", () => setTimeout(async () => {
     }
     await new Promise(r => setTimeout(r, 3000));
     await say("opened: pages " + document.getElementById("pageCount").textContent + ", paragraphs on screen " + document.querySelectorAll("#text p, .para, p").length);
+    // KHANA_SELFTEST_SCREEN: reading aloud and saving an MP3 while the screen is switched off (the tester puts the display to
+    // sleep): every 5 s, whether the page is shown, how far the voice is, how far the file is.
+    if ((await jget("/api/init")).screenTest === true) {
+      if (!reader.active) $("play").click();
+      await new Promise(r => setTimeout(r, 4000));
+      for (let n = 8; n <= 30; n++) await pageReq(`/api/page?doc=${S.doc.id}&n=${n}&rev=false&yeh=true&tr=false`, n);
+      const mjob = await jpost("/api/mp3", { doc: S.doc.id, first: 8, last: 30, voice: "khabari", speed: 1.0, bitrate: 64 });
+      for (let k = 0; k < 22; k++) {
+        const j = await jget("/api/job?id=" + mjob.id);
+        await say(`screen: page ${document.visibilityState}, sound ${actx.state} at ${actx.currentTime.toFixed(0)} s, sentence ${reader.next} of ${reader.queue.length}, page ${S.page}, reading ${reader.active}; mp3 ${j.status} ${j.error || ""} ${Math.round(j.progress * 100)}%, ${j.seconds} s of sound`);
+        if (k === 21) await jpost("/api/cancel?id=" + mjob.id, {}).catch(() => {});
+        await new Promise(r => setTimeout(r, 5000));
+      }
+      stopReading();
+      await say("DONE");
+      return;
+    }
     // Editing the text, as a person does it: edit mode, a paragraph typed over, one word changed, a word taken out, a paragraph taken out, all undone.
     try {
       window.confirm = () => true;
@@ -75,9 +93,12 @@ addEventListener("load", () => setTimeout(async () => {
       await typeOver("این متن برای آزمایش نوشته شد.");
       const typed = await until(() => first() === "این متن برای آزمایش نوشته شد.");
       await say("edit: typed in the page: " + typed + ", count shown «" + $("edInfo").textContent + "»");
+      // (taking a paragraph out by erasing its text must not depend on a question: the window may answer «no» by itself)
+      window.confirm = () => false;
       await wait(800); await typeOver("");
       const removed = await until(() => count() === before.n - 1);
       await say("edit: all text removed, paragraph taken out: " + removed + " (" + before.n + " -> " + count() + ")");
+      window.confirm = () => true;
       $("edReset").click();
       const back = await until(() => count() === before.n && first() === before.first);
       await say("edit: all undone, the page is as it was: " + back + " (" + count() + " paragraphs, first «" + first().slice(0, 40) + "» was «" + before.first.slice(0, 40) + "»), count shown «" + $("edInfo").textContent + "»");
@@ -188,6 +209,12 @@ addEventListener("load", () => setTimeout(async () => {
     const t0 = Date.now();
     while (mjob.status === "running" && Date.now() - t0 < 300000) { await new Promise(r => setTimeout(r, 2000)); mjob = await jget("/api/job?id=" + mjob.id); }
     await say("mp3: " + mjob.status + " " + (mjob.error || "") + " saved as " + mjob.saved + " (" + mjob.seconds + " s) in " + Math.round((Date.now() - t0) / 1000) + " s");
+    try {
+      // the saving window's numbers: the percent with its sign at the right, and the time left from a made-up half-done job
+      job = mjob; saveKind = "mp3"; await poll();
+      jobClock = { id: "x", t0: Date.now() - 600000 };
+      await say("saving window: percent «" + $("mp3Pct").textContent + "» (direction " + getComputedStyle($("mp3Pct")).direction + "), after 10 minutes at 40%: «" + timeLeft(0.4) + "», at 1%: «" + timeLeft(0.01) + "», bar " + $("mp3Prog").getAttribute("aria-valuenow"));
+    } catch (e) { await say("saving window: ERROR " + e); }
     const sc = await (await api("/api/selftest_file?name=scan")).blob();
     const t1 = Date.now();
     await openFile(new File([sc], "scan.pdf"));

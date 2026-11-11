@@ -23,8 +23,8 @@ many readers every megabyte is expensive. **If your connection is slow or costly
 | Mac, light | `KhanaReader-Mac-lite.dmg` | about 0.45 GB, one file | Reads Farsi aloud, saves sound, reads scanned pages. **No translation, no dictation.** |
 | Mac, medium | `KhanaReader-Mac-medium.dmg` | about 1 GB, one file | The same, and translates with the smaller model (the one the phone uses). |
 | Mac, full | `KhanaReader-Mac.dmg` **and** every `KhanaReader-Mac.00x.dmgpart` | about 5 GB, three files | The best translation model and dictation (speech to text). |
-| Windows, light (experimental) | `KhanaReader-Windows-light-experimental.zip` | about 0.5 GB | No translation. |
-| Windows, full (experimental) | `KhanaReader-Windows-full-experimental.zip` | about 1.1 GB | With translation (the smaller model). |
+| Windows, light (experimental) | `KhanaReader-Windows-light-experimental.zip` | about 0.4 GB | No translation. |
+| Windows, full (experimental) | `KhanaReader-Windows-full-experimental.zip` | about 1 GB | With translation (the smaller model). |
 
 **Mac:** an Apple Silicon Mac (M1 or newer) with macOS 13 or newer. For the full download put all three files in one folder, then
 open the `.dmg`. Drag the app to Applications. The first time, macOS warns you, because this free app is not signed with a paid
@@ -87,7 +87,7 @@ from this source when Android asks. Both versions are signed with the same key, 
 
 ## What it does
 
-- **Reads aloud** in Farsi with a natural-sounding voice, and saves the reading as **MP3** or **WAV** (on the Mac also **M4A**).
+- **Reads aloud** in Farsi with a natural-sounding voice (three to choose from; two were donated to the public domain by their owners), and saves the reading as **MP3** or **WAV** (on the Mac also **M4A**).
 - **Reads a text you type or paste** («✎ نوشتن متن»), and reads the text of **pictures** (a photo of a page, a screenshot) with OCR.
 - **Lets you correct the text in the page itself:** «✎ ویرایش متن» makes every paragraph a box you can type in, select in and
   delete from; a word can be changed or removed in the whole book. Corrections reach the reading, the MP3 and the PDF.
@@ -165,8 +165,8 @@ Everything runs on your device; nothing is sent anywhere.
 | مک، سبک | `KhanaReader-Mac-lite.dmg` | حدود ۰٫۴۵ گیگابایت، یک فایل | فارسی را می‌خواند، صدا ذخیره می‌کند، صفحه‌ی اسکن‌شده را می‌خواند. **بدون ترجمه و بدون تبدیل گفتار به نوشته.** |
 | مک، متوسط | `KhanaReader-Mac-medium.dmg` | حدود ۱ گیگابایت، یک فایل | همان، به‌اضافه‌ی ترجمه با مدل کوچک‌تر (همان مدل گوشی). |
 | مک، کامل | `KhanaReader-Mac.dmg` **و** همه‌ی فایل‌های `KhanaReader-Mac.00x.dmgpart` | حدود ۵ گیگابایت، سه فایل | بهترین مدل ترجمه و تبدیل گفتار به نوشته. |
-| ویندوز، سبک (آزمایشی) | `KhanaReader-Windows-light-experimental.zip` | حدود ۰٫۵ گیگابایت | بدون ترجمه. |
-| ویندوز، کامل (آزمایشی) | `KhanaReader-Windows-full-experimental.zip` | حدود ۱٫۱ گیگابایت | با ترجمه (مدل کوچک‌تر). |
+| ویندوز، سبک (آزمایشی) | `KhanaReader-Windows-light-experimental.zip` | حدود ۰٫۴ گیگابایت | بدون ترجمه. |
+| ویندوز، کامل (آزمایشی) | `KhanaReader-Windows-full-experimental.zip` | حدود ۱ گیگابایت | با ترجمه (مدل کوچک‌تر). |
 
 - **مک:** مک با تراشه‌ی اپل (M1 یا جدیدتر) و macOS 13 یا جدیدتر. برای نسخه‌ی کامل هر سه فایل را در یک پوشه بگذارید و بعد `.dmg` را باز کنید. بار اول macOS هشدار می‌دهد، چون این برنامه‌ی رایگان امضای پولی اپل ندارد: برنامه را باز کنید، بعد در **System Settings → Privacy & Security** گزینه‌ی **Open Anyway** را بزنید.
 - **اندروید:** گوشی ۶۴ بیتی (arm64) با اندروید ۸ یا بالاتر و «Android System WebView» نسخه‌ی ۱۳۳ یا جدیدتر. هنگام نصب، اندروید اجازه‌ی «نصب از این منبع» را می‌خواهد.
@@ -212,7 +212,7 @@ Everything runs on your device; nothing is sent anywhere.
 
 ### برنامه چه می‌کند؟
 
-- متن فارسی را با صدای طبیعی **می‌خواند** و خواندن را به صورت **MP3** یا **WAV** ذخیره می‌کند.
+- متن فارسی را با صدای طبیعی **می‌خواند** (سه مدل صدا؛ دو تا را صاحبانشان به مالکیت عمومی بخشیده‌اند) و خواندن را به صورت **MP3** یا **WAV** ذخیره می‌کند.
 - **متنی که خودتان می‌نویسید** («✎ نوشتن متن») و متن **عکس‌ها** را هم می‌خواند.
 - **ویرایش در خودِ صفحه:** با «✎ ویرایش متن» هر بند جایی برای نوشتن می‌شود: انتخاب کنید، بنویسید، با کلید Delete پاک کنید. یک کلمه را می‌شود در همه‌ی کتاب عوض یا حذف کرد. ویرایش‌ها در خواندن، MP3 و PDF هم اثر می‌کنند.
 - PDF، EPUB، FB2، پاورپوینت، ورد و متن ساده را **باز می‌کند**؛ صفحه‌ی اسکن‌شده و PDF رمزدار را هم.

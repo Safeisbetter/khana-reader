@@ -24,7 +24,9 @@ pub struct VoiceInfo {
 }
 
 pub const VOICES: &[VoiceInfo] = &[
-    VoiceInfo { id: "khabari", wav: "male_news.wav", name: "استاندارد", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
+    VoiceInfo { id: "khabari", wav: "male_news.wav", name: "مدل صدا ۱", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
+    VoiceInfo { id: "seda2", wav: "donated_andrea.wav", name: "مدل صدا ۲", gender: "زن", group: "natural", extra: false, tempo: 1.1 },
+    VoiceInfo { id: "seda3", wav: "donated_aryobe.wav", name: "مدل صدا ۳", gender: "مرد", group: "natural", extra: false, tempo: 1.1 },
 ];
 
 pub fn data_dir() -> PathBuf {
@@ -397,7 +399,7 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
     let res = (|| -> Result<(), String> {
         let mut paras = Vec::new();
         for n in r.first..=r.last {
-            paras.extend(r.doc.page_text(n, r.opts));
+            paras.extend(r.doc.page_text(n, r.opts).into_iter().filter(|p| p != crate::doc::PICTURE_PAGE));
         }
         if r.first == 1 && !paras.is_empty() && r.doc.title_is_said() {
             paras.insert(0, format!("{}.", r.doc.spoken_title(r.opts)));
@@ -519,7 +521,7 @@ fn run_pdf_job(job: Arc<Job>, doc: Arc<Document>, first: usize, last: usize, opt
             if job.cancelled.load(Ordering::SeqCst) {
                 return Err("cancelled".into());
             }
-            let paras = doc.page_text(n, opts);
+            let paras: Vec<String> = doc.page_text(n, opts).into_iter().filter(|p| p != crate::doc::PICTURE_PAGE).collect();
             if !paras.is_empty() {
                 pages.push((format!("صفحه {}", fa_digits(n)), paras));
             }
@@ -532,6 +534,9 @@ fn run_pdf_job(job: Arc<Job>, doc: Arc<Document>, first: usize, last: usize, opt
         for (head, paras) in &pages {
             blocks.push(Block::Heading(head));
             blocks.extend(paras.iter().map(|p| Block::Paragraph(p)));
+        }
+        if last >= doc.n_pages {
+            blocks.push(Block::Paragraph(END_WORD));
         }
         let font = VAZIRMATN.to_vec();
         let saved = unique_path(save_dir().join(&job.filename));
@@ -775,6 +780,7 @@ impl App {
                 let mut v = json!({"settings": load_settings(), "voices": voices, "canListen": crate::asr::ready(), "canWrite": crate::stt::available()});
                 if std::env::var("KHANA_SELFTEST").is_ok() {
                     v["testData"] = json!(!data_dir().to_string_lossy().contains("/Containers/"));
+                    v["screenTest"] = json!(std::env::var("KHANA_SELFTEST_SCREEN").is_ok());
                 }
                 Ok(reply_json(&v))
             }

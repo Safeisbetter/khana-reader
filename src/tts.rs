@@ -292,6 +292,7 @@ impl Engine {
             let g = gcd(sr as usize, RATE);
             a = audio::resample_poly(&a, RATE / g, sr as usize / g);
         }
+        let mut a = audio::dehum(a, RATE);
         a.truncate(5 * RATE);
         let a = trim_hot_onset(a);
         let n = a.len();
@@ -585,7 +586,7 @@ impl Engine {
             lap(1, t);
             let t_check = std::time::Instant::now();
             let (s0, e0) = self.speech_bounds(&a);
-            let speech = self.compress_pauses(&a[s0..e0], 0.30, 0.12);
+            let speech = audio::settle_tail(self.compress_pauses(&a[s0..e0], 0.30, 0.12), RATE);
             let dur = speech.len() as f64 / RATE as f64;
             let r = if speech.is_empty() { 0.0 } else { rms(&speech) };
             let frac = if speech.is_empty() { 0.0 } else { self.solid_fraction(&speech) };

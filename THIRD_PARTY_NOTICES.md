@@ -37,6 +37,7 @@ The GrapheneOS PDF Viewer is under the MIT licence:
 | [NLLB-200](https://huggingface.co/facebook/nllb-200-3.3B) 3.3B (Mac) and distilled 600M (Android) | Translation | Meta AI | CC BY-NC 4.0, **non-commercial** |
 | [CTranslate2 conversion of NLLB 3.3B](https://huggingface.co/OpenNMT/nllb-200-3.3B-ct2-int8) | Translation model in the format the app reads | OpenNMT | CC BY-NC 4.0, **non-commercial** |
 | [pocket-tts-farsi-v2](https://huggingface.co/mehdi-hf/pocket-tts-farsi-v2), with its news voice sample | Farsi speech | mehdi-hf | CC BY-NC 4.0, **non-commercial** |
+| Two voice samples, `Andrea` and `Aryobe`, from [kyutai/tts-voices](https://huggingface.co/kyutai/tts-voices) (`voice-donations/`) | The voices «مدل صدا ۲» and «مدل صدا ۳» | Volunteers of the Unmute Voice Donation Project, collected by Kyutai | CC0 (public domain); the files equal the SHA-256 Hugging Face lists |
 | [Pocket TTS](https://huggingface.co/kyutai/pocket-tts) | The speech model's design and its Mimi codec | Kyutai | CC BY 4.0 |
 | [Vosk small Farsi model](https://alphacephei.com/vosk/models) | Language data and listening checks | Alpha Cephei | Apache 2.0 |
 | [Whisper large-v3-turbo](https://huggingface.co/openai/whisper-large-v3-turbo), CTranslate2 format by [deepdml](https://huggingface.co/deepdml/faster-whisper-large-v3-turbo-ct2) | Speech to text (Mac) | OpenAI; conversion by deepdml | MIT |
@@ -44,6 +45,22 @@ The GrapheneOS PDF Viewer is under the MIT licence:
 | [CMUdict](http://www.speech.cs.cmu.edu/cgi-bin/cmudict) | English pronunciation | Carnegie Mellon University | BSD-style, Copyright (C) 1993-2015 Carnegie Mellon University |
 
 These models were changed only by converting them to run on a device. Their authors do not endorse this app.
+
+### How the model files were checked
+
+Each file was compared with its publisher's own copy (November 2026):
+
+- **Translation (NLLB 600M, 1.3B, 3.3B) and dictation (Whisper):** the same SHA-256 as Hugging Face lists; the 600M file was also
+  converted again from Meta's original and came out byte for byte the same.
+- **Listening model (Vosk):** every file identical to the publisher's zip.
+- **OCR model:** the same SHA-256 as PaddlePaddle's file on Hugging Face.
+- **Voice and pronunciation models:** these are our own conversions to ONNX, so no published checksum exists for them. Their
+  weights were compared number by number with the published originals (`mehdi-hf/pocket-tts-farsi-v2`,
+  `mehdi-hf/Homo-GE2PE-Persian-HF`) and are equal; the files contain only standard ONNX operations, no custom code.
+- **ONNX Runtime and Vosk libraries (Mac):** the program body is identical to the publisher's download (only the code signature differs).
+
+[`MODELS.sha256`](MODELS.sha256) lists the SHA-256 of every model file and ready-made library in the apps, so anyone can check that a
+download carries exactly these files. Model files are data (numbers and tables); the app does not run code from them.
 
 ## Software
 

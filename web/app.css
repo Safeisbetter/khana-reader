@@ -291,3 +291,14 @@ input[type="text"], input[type="search"], select, textarea { border-radius: var(
 }
 /* the paragraph being typed in, in edit mode: a clear frame */
 .text.editing p[data-i]:focus { outline: 3px solid var(--lapis); outline-offset: 3px; }
+
+/* saving a file: the percent large, with its sign at the number's right («۳۵%»), and when the file will be ready */
+.pctline { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+.pctline .pct { font-size: 34px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--ink); }
+.pctline .pct:empty, .pctline .eta:empty { display: none; }
+.pctline .eta { font-size: 16px; color: var(--ink); }
+#mp3Status .progress { height: 16px; }
+#mp3Status .hint { display: block; margin-top: 8px; font-size: 15px; }
+
+/* the thanks at the foot of the first page, in a hand of its own (a nastaliq or naskh face of the system, where there is one) */
+.thanks { margin-top: 28px; text-align: center; font-family: "Noto Nastaliq Urdu", "DecoType Naskh", "Nadeem", "Noto Naskh Arabic", serif; font-size: 20px; line-height: 2.4; color: var(--muted); }

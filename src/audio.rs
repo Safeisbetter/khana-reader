@@ -211,3 +211,99 @@ pub fn fade_edges(mut audio: Vec<f32>, rate: usize, ms: usize) -> Vec<f32> {
     audio
 }
 
+
+
+fn biquad(x: &mut [f32], b: [f64; 3], a: [f64; 3]) {
+    let (b0, b1, b2, a1, a2) = (b[0] / a[0], b[1] / a[0], b[2] / a[0], a[1] / a[0], a[2] / a[0]);
+    let (mut x1, mut x2, mut y1, mut y2) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
+    for v in x.iter_mut() {
+        let x0 = *v as f64;
+        let y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+        x2 = x1;
+        x1 = x0;
+        y2 = y1;
+        y1 = y0;
+        *v = y0 as f32;
+    }
+}
+
+fn notch(x: &mut [f32], rate: usize, f: f64, q: f64) {
+    let w = 2.0 * std::f64::consts::PI * f / rate as f64;
+    let alpha = w.sin() / (2.0 * q);
+    biquad(x, [1.0, -2.0 * w.cos(), 1.0], [1.0 + alpha, -2.0 * w.cos(), 1.0 - alpha]);
+}
+
+pub fn high_pass(x: &[f32], rate: usize, f: f64) -> Vec<f32> {
+    let w = 2.0 * std::f64::consts::PI * f / rate as f64;
+    let alpha = w.sin() / (2.0 * std::f64::consts::FRAC_1_SQRT_2);
+    let c = w.cos();
+    let mut y = x.to_vec();
+    biquad(&mut y, [(1.0 + c) / 2.0, -(1.0 + c), (1.0 + c) / 2.0], [1.0 + alpha, -2.0 * c, 1.0 - alpha]);
+    y
+}
+
+fn tone_power(x: &[f32], rate: usize, f: f64) -> f64 {
+    let c = 2.0 * (2.0 * std::f64::consts::PI * f / rate as f64).cos();
+    let (mut s1, mut s2) = (0.0f64, 0.0f64);
+    for v in x {
+        let s0 = *v as f64 + c * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+    }
+    (s1 * s1 + s2 * s2 - c * s1 * s2).max(0.0)
+}
+
+pub fn tone_level(x: &[f32], rate: usize, f: f64) -> f64 {
+    tone_power(x, rate, f)
+}
+
+pub fn mains_hum(x: &[f32], rate: usize) -> Option<f64> {
+    if x.len() < rate {
+        return None;
+    }
+    [50.0f64, 60.0].into_iter().find(|&f| {
+        let around = (tone_power(x, rate, f - 8.0) + tone_power(x, rate, f + 8.0)) / 2.0;
+        tone_power(x, rate, f) > 12.0 * around.max(1e-12) && tone_power(x, rate, f) > 1e-7 * x.len() as f64 * x.len() as f64
+    })
+}
+
+pub fn dehum(x: Vec<f32>, rate: usize) -> Vec<f32> {
+    let cut = voice_pitch(&x, rate).map(|p| (0.7 * p).clamp(50.0, 80.0)).unwrap_or(60.0);
+    let hum = mains_hum(&x, rate);
+    let mut x = high_pass(&high_pass(&x, rate, cut), rate, cut);
+    if let Some(f) = hum {
+        for k in 1..=3 {
+            notch(&mut x, rate, f * k as f64, 16.0);
+        }
+    }
+    x
+}
+
+pub fn settle_tail(mut a: Vec<f32>, rate: usize) -> Vec<f32> {
+    let f = (rate / 100).max(1);
+    if a.len() < 30 * f {
+        return a;
+    }
+    let hp = high_pass(&a, rate, 150.0);
+    let env: Vec<f64> = hp.chunks(f).map(rms).collect();
+    let mut sorted = env.clone();
+    sorted.sort_by(|p, q| p.partial_cmp(q).unwrap_or(std::cmp::Ordering::Equal));
+    let level = sorted[sorted.len() * 9 / 10];
+    if !(level > 1e-6) {
+        return a;
+    }
+    let Some(last) = env.iter().rposition(|e| *e >= 0.045 * level) else { return a };
+    let keep = ((last + 1) * f + rate * 12 / 100).min(a.len());
+    if a.len() - keep < 4 * f {
+        return a;
+    }
+    a.truncate(keep);
+    let n = (6 * f).min(a.len());
+    let start = a.len() - n;
+    for i in 0..n {
+        let g = 0.5 + 0.5 * (std::f64::consts::PI * i as f64 / n as f64).cos();
+        a[start + i] *= g as f32;
+    }
+    a
+}
+

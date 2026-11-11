@@ -53,7 +53,7 @@
       <button id="editBtn" type="button" title="تغییر یا حذف یک بند یا کلمه‌ی متن؛ برای خواندن، ذخیره‌ی MP3 و PDF هم اثر می‌کند">✎ ویرایش متن</button>
     </div>
     <div class="row" id="editBar" hidden>
-      <span class="editnote">هر بند را می‌شود انتخاب کرد و همان‌جا نوشت یا با کلید Delete پاک کرد (بیرون از بند بزنید تا ذخیره شود؛ همه‌ی متن پاک شود، بند حذف می‌شود). یک کلمه را انتخاب کنید و «عوض کردن کلمه…» را بزنید تا در همه‌ی کتاب‌ها عوض یا حذف شود.</span>
+      <span class="editnote">هر بند را می‌شود انتخاب کرد و همان‌جا نوشت یا با کلید Delete پاک کرد (بیرون از بند بزنید تا ذخیره شود؛ همه‌ی متن یک بند را پاک کنید تا آن بند حذف شود). یک کلمه را انتخاب کنید و «عوض کردن کلمه…» را بزنید تا در همه‌ی کتاب‌ها عوض یا حذف شود.</span>
       <button id="edWordBtn" type="button">عوض کردن کلمه…</button>
       <button id="edReset" type="button" title="همه‌ی ویرایش‌های این کتاب و کلمه‌های اصلاح‌شده‌ی همه‌ی کتاب‌ها را پاک می‌کند">بازگرداندن همه</button>
       <span id="edInfo" class="editnote"></span>
@@ -78,6 +78,7 @@
       </div>
       <p class="note">طراحی این برنامه براین اساس انجام شده است که برای افراد دارای محدودیت دیداری و خواندن، قابل استفاده باشد: دکمه‌ها و نوشته‌ها بزرگ و قابل تمایز هستند، قلم و رنگ‌ها قابل تنظیم‌اند، با صفحه‌خوان کار می‌کند و کارهای اصلی را می‌توان با صدا انجام داد.</p>
       <p class="hint">کلیدها: <kbd>Space</kbd> خواندن / مکث · <kbd>← →</kbd> صفحه‌ی بعد / قبل · <kbd>⌘[</kbd> <kbd>⌘]</kbd> سرعت · <kbd>⌘0</kbd> سرعت عادی · <kbd>⌘,</kbd> تنظیمات</p>
+      <p class="thanks">با تشکر از مهرزاد و الهام، برای کمک 🙂</p>
     </section>
     <div class="note" id="note" role="status" aria-live="polite" hidden></div>
     <div id="textView" class="text" hidden></div>
@@ -318,7 +319,8 @@
       <button type="button" id="mp3Cancel" hidden>لغو</button>
     </div>
     <div id="mp3Status" hidden class="field">
-      <div class="progress"><div id="mp3Bar"></div></div>
+      <div class="pctline"><bdi id="mp3Pct" class="pct" dir="ltr"></bdi><span id="mp3Eta" class="eta"></span></div>
+      <div class="progress" id="mp3Prog" role="progressbar" aria-label="پیشرفت ساختن فایل" aria-valuemin="0" aria-valuemax="100"><div id="mp3Bar"></div></div>
       <span class="hint" id="mp3Text"></span>
       <button type="button" class="primary" id="mp3Reveal" hidden>نمایش فایل</button>
     </div>

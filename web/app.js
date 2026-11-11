@@ -1038,25 +1038,45 @@ $("mp3Start").onclick = async () => {
       format: document.querySelector("input[name=afmt]:checked").value, fast: $("fastExport").checked,
       bitrate: S.settings.bitrate, reversed: S.settings.reversed, persianYeh: S.settings.persianYeh, translate: translating() });
     $("mp3Status").hidden = false; $("mp3Reveal").hidden = true;
+    $("mp3Pct").textContent = fa(0) + "%"; $("mp3Eta").textContent = "";
     $("mp3Start").disabled = true; $("mp3Cancel").hidden = false;
     poll();
   } catch (e) { toast(e.message); }
 };
 $("mp3Reveal").onclick = () => { if (job) jpost("/api/reveal?id=" + job.id, {}).catch(e => toast(e.message)); };
 $("mp3Cancel").onclick =() => { if (job) jpost("/api/cancel?id=" + job.id, {}).catch(() => {}); };
+// how long is left, from how fast the work has gone so far: «حدود ۵ دقیقه مانده · حدود ساعت ۲۱:۴۵ آماده است»
+let jobClock = { id: null, t0: 0 };
+function timeLeft(progress) {
+  const spent = (Date.now() - jobClock.t0) / 1000;
+  if (!(progress >= 0.02) || spent < 8) return "در حال برآورد زمان…";
+  const left = spent * (1 - progress) / progress;
+  const ready = new Date(Date.now() + left * 1000);
+  const clock = fa(ready.getHours()) + ":" + fa(String(ready.getMinutes()).padStart(2, "0"));
+  const h = Math.floor(left / 3600), m = Math.round((left % 3600) / 60);
+  const span = left < 50 ? "کمتر از یک دقیقه" : h ? `حدود ${fa(h)} ساعت${m ? " و " + fa(m) + " دقیقه" : ""}` : `حدود ${fa(Math.max(1, m))} دقیقه`;
+  return `${span} مانده · حدود ساعت ${clock} آماده است`;
+}
 async function poll() {
   clearTimeout(pollT);
   try { job = await jget("/api/job?id=" + job.id); } catch (e) { toast(e.message); return; }
+  if (jobClock.id !== job.id) jobClock = { id: job.id, t0: Date.now() };
   const pct = Math.round(job.progress * 100);
   $("mp3Bar").style.width = pct + "%";
+  $("mp3Prog").setAttribute("aria-valuenow", pct);
   const mins = Math.floor(job.seconds / 60), secs = job.seconds % 60;
   const len = fa(mins) + " دقیقه و " + fa(secs) + " ثانیه";
   const pdf = saveKind === "pdf";
   if (job.status === "running") {
-    $("mp3Text").textContent = pdf ? `در حال ترجمه… ${fa(pct)}٪` : (pct === 0 ? "در حال آماده کردن نخستین بخش… (ممکن است چند ثانیه تا چند دقیقه طول بکشد)" : `در حال ساختن… ${fa(pct)}٪ · ${len} صدا`);
+    // (the sign at the number's right, close to it: «۳۵%», whatever the direction of the line around it)
+    $("mp3Pct").textContent = fa(pct) + "%";
+    $("mp3Eta").textContent = timeLeft(job.progress);
+    $("mp3Text").textContent = pdf ? "در حال ترجمه…" : (pct === 0 ? "در حال آماده کردن نخستین بخش… (ممکن است چند ثانیه تا چند دقیقه طول بکشد)" : `در حال ساختن… تا این‌جا ${len} صدا`);
     pollT = setTimeout(poll, 700); return;
   }
   $("mp3Start").disabled = false; $("mp3Cancel").hidden = true;
+  $("mp3Eta").textContent = "";
+  $("mp3Pct").textContent = job.status === "done" ? fa(100) + "%" : "";
   if (job.status === "done") {
     $("mp3Text").textContent = `فایل در پوشه‌ی دانلودها ذخیره شد: «${job.saved}»` + (pdf ? "" : ` · ${len}`);
     $("mp3Reveal").hidden = false;
@@ -1138,8 +1158,9 @@ $("textView").addEventListener("focusout", async e => {
   const text = p.innerText.replace(/\u00a0/g, " ").trim();
   p.dataset.shown = text;
   if (text === shown.trim()) return;
-  if (!text && !confirm("این بند حذف شود؟")) return renderText();
-  if (await sendEdit({ kind: "paragraph", shown, text })) toast(text ? "بند ذخیره شد." : "بند حذف شد.");
+  // (all its text erased: the paragraph is taken out at once. No question is asked here: a question put while the focus
+  // leaves the paragraph was answered «no» by the window itself, and the text came back)
+  if (await sendEdit({ kind: "paragraph", shown, text })) toast(text ? "بند ذخیره شد." : "بند حذف شد. («بازگرداندن همه» آن را برمی‌گرداند)");
 });
 $("textView").addEventListener("keydown", e => {
   const p = e.target.closest && e.target.closest("p[data-i]");
