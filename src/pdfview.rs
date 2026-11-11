@@ -52,6 +52,9 @@ impl Bridge {
             let mut g = self.lock();
             let job = match op {
                 "open" => {
+                    if body.len() > 300 * 1024 * 1024 {
+                        return plain(413, "too large");
+                    }
                     if let Some(mut old) = g.bytes.replace(body.to_vec()) {
                         crate::ffi::wipe::vec_u8(&mut old);
                     }

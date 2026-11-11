@@ -49,6 +49,14 @@ addEventListener("load", () => setTimeout(async () => {
     }
     await new Promise(r => setTimeout(r, 3000));
     await say("opened: pages " + document.getElementById("pageCount").textContent + ", paragraphs on screen " + document.querySelectorAll("#text p, .para, p").length);
+    try {
+      // the layout: the player at the foot of the window, inside it, not over the top bar; nothing wider than the window
+      const box = e => { const r = e.getBoundingClientRect(); return Math.round(r.left) + "," + Math.round(r.top) + " " + Math.round(r.width) + "x" + Math.round(r.height); };
+      const dock = $("docTools"), bar = document.querySelector(".bar");
+      const wide = [...document.querySelectorAll("body *")].filter(e => e.offsetParent && e.getBoundingClientRect().right > innerWidth + 1 || e.offsetParent && e.getBoundingClientRect().left < -1).map(e => e.id || e.className).slice(0, 5);
+      const seen = id => { const e = $(id); return !!(e && e.offsetParent); };
+      await say(`layout: window ${innerWidth}x${innerHeight}; top bar ${box(bar)}; player ${box(dock)}, position ${getComputedStyle(dock).position}, body has-doc ${document.body.classList.contains("has-doc")}; in sight: play ${seen("play")}, pages ${seen("pageInput")}, speed ${seen("speedChip")}, search ${seen("q")}, edit ${seen("editBtn")}, save ${seen("mp3Btn")}, settings ${seen("settingsBtn")}, view ${seen("viewText")}; wider than the window: ${JSON.stringify(wide)}`);
+    } catch (e) { await say("layout: ERROR " + e); }
     // KHANA_SELFTEST_SCREEN: reading aloud and saving an MP3 while the screen is switched off (the tester puts the display to
     // sleep): every 5 s, whether the page is shown, how far the voice is, how far the file is.
     if ((await jget("/api/init")).screenTest === true) {

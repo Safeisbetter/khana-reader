@@ -186,7 +186,8 @@ impl Engine {
         let f = |k: &str| c[k].as_f64().unwrap();
         let w = load_npz(&dir.join("weights.npz"))?;
         let get = |k: &str| f32s(&w.iter().find(|x| x.0 == k).unwrap().1).to_vec();
-        let opts = |p: &Path| onnx::session(p, Some(2)).map_err(|e| e.to_string());
+        let threads = std::env::var("KHANA_TTS_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(2usize);
+        let opts = |p: &Path| onnx::session(p, Some(threads)).map_err(|e| e.to_string());
         let s_dec = opts(&dir.join("mimi_decoder_step_kv.onnx"))?;
         let dec_in: Vec<String> = s_dec.inputs.iter().map(|i| i.name.clone()).collect();
         let dec_out: Vec<String> = s_dec.outputs.iter().map(|o| o.name.clone()).collect();

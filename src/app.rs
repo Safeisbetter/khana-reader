@@ -126,13 +126,13 @@ fn lexicon_pairs(s: &Map<String, Value>) -> Vec<(String, String)> {
 
 pub struct Speech {
     engine: Mutex<Option<Arc<Engine>>>,
-    busy: Mutex<()>,
+    busy: (Mutex<usize>, std::sync::Condvar),
     last_play: Mutex<Option<Instant>>,
 }
 
 pub fn speech() -> &'static Speech {
     static S: OnceLock<Speech> = OnceLock::new();
-    S.get_or_init(|| Speech { engine: Mutex::new(None), busy: Mutex::new(()), last_play: Mutex::new(None) })
+    S.get_or_init(|| Speech { engine: Mutex::new(None), busy: (Mutex::new(0), std::sync::Condvar::new()), last_play: Mutex::new(None) })
 }
 
 impl Speech {
@@ -159,7 +159,8 @@ impl Speech {
         let speed = (speed.clamp(0.5, 2.0) * tempo).clamp(0.5, 2.0);
         let eng = self.engine()?;
         let text = tts::speech_clean(text);
-        let _g = self.busy.lock().unwrap();
+        let _turn = Turn::take(&self.busy);
+        let started = Instant::now();
         let settings = load_settings();
         eng.g2p.set_lexicon(&lexicon_pairs(&settings));
         eng.natural.store(settings.get("naturalTone").and_then(|v| v.as_bool()).unwrap_or(true), Ordering::Relaxed);
@@ -170,7 +171,32 @@ impl Speech {
         if (speed - 1.0).abs() >= 0.008 && !a.is_empty() {
             a = crate::stretch::stretch(&a, speed, tts::RATE);
         }
+        note_reading_speed(a.len() as f64 * speed / tts::RATE as f64, started.elapsed().as_secs_f64());
         Ok((audio::fade_edges(a, tts::RATE, 8), tts::RATE))
+    }
+}
+
+struct Turn<'a>(&'a (Mutex<usize>, std::sync::Condvar));
+
+impl<'a> Turn<'a> {
+    fn room() -> usize {
+        (std::thread::available_parallelism().map_or(4, |n| n.get()) / 2).clamp(1, 3)
+    }
+
+    fn take(gate: &'a (Mutex<usize>, std::sync::Condvar)) -> Turn<'a> {
+        let mut n = gate.0.lock().unwrap_or_else(|e| e.into_inner());
+        while *n >= Turn::room() {
+            n = gate.1.wait(n).unwrap_or_else(|e| e.into_inner());
+        }
+        *n += 1;
+        Turn(gate)
+    }
+}
+
+impl Drop for Turn<'_> {
+    fn drop(&mut self) {
+        *self.0 .0.lock().unwrap_or_else(|e| e.into_inner()) -= 1;
+        self.0 .1.notify_one();
     }
 }
 
@@ -1088,9 +1114,7 @@ impl App {
                 let speed = req.get("speed").and_then(|v| v.as_f64()).unwrap_or(1.0);
                 speech().mark_play();
                 adapt_to_device_speed();
-                let t0 = Instant::now();
                 let (a, rate) = speech().synthesize(&text, &voice, speed, &|| false).map_err(ApiError::Internal)?;
-                note_reading_speed(a.len() as f64 / rate as f64, t0.elapsed().as_secs_f64());
                 speech().mark_play();
                 Ok(Reply { status: 200, ctype: "audio/wav", body: audio::wav_bytes(&a, rate as u32), headers: Vec::new() })
             }

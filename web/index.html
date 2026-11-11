@@ -10,47 +10,39 @@
 <body>
 <header class="bar">
   <div class="bar-inner">
-    <div class="row">
+    <!-- the app's own row: its name, the open book, and what is always at hand -->
+    <div class="row top">
       <div class="brand">
         <span class="logo">خوانا</span>
         <span class="file" id="fileName"></span>
       </div>
+      <div class="search needs-text">
+        <input id="q" type="search" placeholder="جستجو در این صفحه…" title="کلید ورود: مورد بعدی" aria-label="جستجو">
+        <span class="count" id="count"></span>
+      </div>
       <label class="btn primary" for="fileInput">بازکردن فایل</label>
       <button type="button" id="typeBtn" title="متن را بنویسید یا بچسبانید تا خوانده شود و به صورت فایل صدا ذخیره شود">✎ نوشتن متن</button>
+      <button id="settingsBtn" type="button" aria-label="تنظیمات">⚙︎ تنظیمات</button>
       <input id="fileInput" type="file" hidden multiple accept=".pdf,.doc,.docx,.pptx,.epub,.rtf,.odt,.txt,.md,.html,.htm,.fb2,.png,.jpg,.jpeg,.webp,.gif,.bmp,.heic,image/*">
     </div>
-    <div class="row" id="docTools">
-      <div class="seg" role="group" aria-label="نما">
+    <!-- the open book's tools, in three groups: how it is shown, working on its text, saving it -->
+    <div class="row tools needs-doc">
+      <div class="group" role="group" aria-label="نمایش">
+        <div class="seg" role="group" aria-label="نما">
         <button id="viewText" class="on" type="button">متن</button>
         <button id="viewPage" type="button">صفحه</button>
       </div>
-      <div class="pager">
-        <button id="prev" type="button" aria-label="صفحه قبل">←</button>
-        <input id="pageInput" type="text" inputmode="numeric" value="۱" aria-label="شماره صفحه">
-        <span>از <span id="pageCount">۰</span></span>
-        <button id="next" type="button" aria-label="صفحه بعد">→</button>
+        <button id="trBtn" type="button" hidden title="ترجمه‌ی ماشینی و آفلاین (انگلیسی، هلندی، آلمانی، فرانسوی، اسپانیایی، ایتالیایی، پرتغالی، ترکی، لهستانی)">ترجمه به فارسی</button>
       </div>
-      <button id="trBtn" type="button" hidden title="ترجمه‌ی ماشینی و آفلاین (انگلیسی، هلندی، آلمانی، فرانسوی، اسپانیایی، ایتالیایی، پرتغالی، ترکی، لهستانی)">ترجمه به فارسی</button>
-      <button id="play" type="button" class="primary">▶ خواندن</button>
-      <button id="stop" type="button" disabled>■ توقف</button>
-      <div class="speedctl" role="group" aria-label="سرعت خواندن">
-        <button id="slower" type="button" aria-label="آهسته‌تر" title="آهسته‌تر (⌘[)">−</button>
-        <button id="speedChip" type="button" aria-label="سرعت خواندن؛ با زدن به ۱۰۰٪ برمی‌گردد" title="برگرداندن سرعت به ۱۰۰٪ (⌘0)"></button>
-        <button id="faster" type="button" aria-label="تندتر" title="تندتر (⌘])">+</button>
+      <div class="group" id="searchRow" role="group" aria-label="کار روی متن">
+        <button id="editBtn" type="button" title="تغییر یا حذف یک بند یا کلمه‌ی متن؛ برای خواندن، ذخیره‌ی MP3 و PDF هم اثر می‌کند">✎ ویرایش متن</button>
+        <button id="voiceBtn" type="button" hidden title="با صدای خودتان یک کلمه را عوض یا حذف کنید، یا بندی را که می‌شنوید حذف کنید">🎤 ویرایش با صدا</button>
+        <button id="copy" type="button" class="hide-sm">کپی متن صفحه</button>
       </div>
-      <span class="spacer"></span>
-      <button id="pdfBtn" type="button" hidden title="ترجمه‌ی فارسی سند را به صورت PDF ذخیره می‌کند (⇧⌘S)">ذخیره PDF ترجمه</button>
-      <button id="mp3Btn" type="button">ذخیره‌ی صدا</button>
-      <button id="settingsBtn" type="button" aria-label="تنظیمات">⚙︎ تنظیمات</button>
-    </div>
-    <div class="row" id="searchRow">
-      <div class="search">
-        <input id="q" type="search" placeholder="جستجو در این صفحه… (کلید ورود: مورد بعدی)" aria-label="جستجو">
-        <span class="count" id="count"></span>
+      <div class="group" role="group" aria-label="ذخیره">
+        <button id="mp3Btn" type="button">ذخیره‌ی صدا</button>
+        <button id="pdfBtn" type="button" hidden title="ترجمه‌ی فارسی سند را به صورت PDF ذخیره می‌کند (⇧⌘S)">ذخیره PDF ترجمه</button>
       </div>
-      <button id="copy" type="button" class="hide-sm">کپی متن صفحه</button>
-      <button id="voiceBtn" type="button" hidden title="با صدای خودتان یک کلمه را عوض یا حذف کنید، یا بندی را که می‌شنوید حذف کنید">🎤 ویرایش با صدا</button>
-      <button id="editBtn" type="button" title="تغییر یا حذف یک بند یا کلمه‌ی متن؛ برای خواندن، ذخیره‌ی MP3 و PDF هم اثر می‌کند">✎ ویرایش متن</button>
     </div>
     <div class="row" id="editBar" hidden>
       <span class="editnote">هر بند را می‌شود انتخاب کرد و همان‌جا نوشت یا با کلید Delete پاک کرد (بیرون از بند بزنید تا ذخیره شود؛ همه‌ی متن یک بند را پاک کنید تا آن بند حذف شود). یک کلمه را انتخاب کنید و «عوض کردن کلمه…» را بزنید تا در همه‌ی کتاب‌ها عوض یا حذف شود.</span>
@@ -85,6 +77,24 @@
     <div id="pageView" hidden><img id="pageImg" class="pageimg" alt="تصویر صفحه"></div>
   </div>
 </main>
+
+<nav class="dock" id="docTools" aria-label="خواندن، صفحه و سرعت" hidden>
+  <div class="pager">
+        <button id="prev" type="button" aria-label="صفحه قبل">←</button>
+        <input id="pageInput" type="text" inputmode="numeric" value="۱" aria-label="شماره صفحه">
+        <span>از <span id="pageCount">۰</span></span>
+        <button id="next" type="button" aria-label="صفحه بعد">→</button>
+      </div>
+  <div class="transport">
+    <button id="play" type="button" class="primary">▶ خواندن</button>
+    <button id="stop" type="button" disabled>■ توقف</button>
+  </div>
+  <div class="speedctl" role="group" aria-label="سرعت خواندن">
+        <button id="slower" type="button" aria-label="آهسته‌تر" title="آهسته‌تر (⌘[)">−</button>
+        <button id="speedChip" type="button" aria-label="سرعت خواندن؛ با زدن به ۱۰۰٪ برمی‌گردد" title="برگرداندن سرعت به ۱۰۰٪ (⌘0)"></button>
+        <button id="faster" type="button" aria-label="تندتر" title="تندتر (⌘])">+</button>
+      </div>
+</nav>
 
 <!-- Settings -->
 <div class="panel" id="settings" hidden>

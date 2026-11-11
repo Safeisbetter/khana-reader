@@ -302,3 +302,115 @@ input[type="text"], input[type="search"], select, textarea { border-radius: var(
 
 /* the thanks at the foot of the first page, in a hand of its own (a nastaliq or naskh face of the system, where there is one) */
 .thanks { margin-top: 28px; text-align: center; font-family: "Noto Nastaliq Urdu", "DecoType Naskh", "Nadeem", "Noto Naskh Arabic", serif; font-size: 20px; line-height: 2.4; color: var(--muted); }
+
+/* ================================================================================================================
+   The look of 2026: a quiet top bar, the book's tools in three named groups, and a player at the foot of the window
+   (reading, pages, speed) where the hand rests. Quiet buttons without frames, one filled button for the main action,
+   round shapes, cards in the side windows. Nothing here costs time: no blur, no pictures, no animation beyond a fade.
+   Sizes for touch (44 px and more), the large type, the themes and the strong focus ring are kept.
+   ================================================================================================================ */
+:root {
+  --r-s: 10px; --r-m: 14px; --r-l: 22px;
+  --tone: color-mix(in srgb, var(--ink) 6%, var(--surface));
+  --tone-2: color-mix(in srgb, var(--ink) 11%, var(--surface));
+  --elev: 0 1px 2px rgba(16, 24, 40, .06), 0 10px 30px rgba(16, 24, 40, .14);
+}
+body { background: var(--paper); }
+body:not(.has-doc) .needs-doc { display: none; }
+body:not(.view-text) .needs-text { display: none; }
+
+/* the top bar */
+.bar { padding: 10px 16px; box-shadow: none; border-bottom: 1px solid var(--line); }
+.bar-inner { max-width: 1120px; gap: 10px; }
+.logo { font-size: 28px; }
+.file { background: var(--tone); padding: 4px 14px; border-radius: 99px; max-width: min(46vw, 420px); color: var(--ink); }
+.file:empty { display: none; }
+
+/* buttons: quiet by default, one filled */
+button, .btn { border: 1px solid transparent; background: var(--tone); box-shadow: none; border-radius: var(--r-m); font-weight: 500; }
+button:active:not(:disabled), .btn:active { background: var(--tone-2); }
+.primary, button.primary:active:not(:disabled) { background: var(--lapis); border-color: var(--lapis); color: var(--lapis-ink); box-shadow: none; font-weight: 700; }
+.on { background: color-mix(in srgb, var(--lapis) 18%, var(--surface)); color: var(--lapis); border-color: transparent; font-weight: 700; }
+input[type="text"], input[type="search"], input[type="password"], select, textarea { border-radius: var(--r-m); }
+
+/* the book's tools: three groups in one row */
+.tools { gap: 10px; align-items: stretch; }
+.group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.group + .group { padding-inline-start: 10px; border-inline-start: 1px solid var(--line); }
+.search { flex: 1 1 180px; max-width: 380px; }
+.tools { justify-content: space-between; }
+.search input { background: var(--tone); border-color: transparent; border-radius: 99px; padding-inline: 18px; }
+.search input:focus { background: var(--surface); border-color: var(--lapis); }
+.seg { border: 0; background: var(--tone); padding: 3px; gap: 2px; border-radius: var(--r-m); box-shadow: none; }
+.seg button { border-radius: 11px; min-height: 38px; background: transparent; }
+.seg button + button { border-inline-start: 0; }
+.seg button.on { background: var(--surface); box-shadow: 0 1px 3px rgba(16, 24, 40, .18); }
+#editBar { background: color-mix(in srgb, var(--lapis) 8%, var(--surface)); border-radius: var(--r-m); padding: 8px 12px; }
+
+/* the player, at the foot of the window */
+.dock {
+  position: fixed; z-index: 6; inset-inline: 0; bottom: 14px; margin-inline: auto; width: max-content; max-width: calc(100% - 20px);
+  display: flex; align-items: center; justify-content: center; gap: 8px 16px; flex-wrap: wrap; padding: 10px 16px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 30px; box-shadow: var(--elev);
+  font-family: var(--ui-font); word-spacing: .25em;
+}
+.dock .transport { display: flex; align-items: center; gap: 8px; }
+#play { min-height: 56px; min-width: 156px; justify-content: center; font-size: 19px; border-radius: 99px; }
+#stop { min-height: 48px; border-radius: 99px; }
+.pager button { border-radius: 99px; min-width: 46px; justify-content: center; }
+.pager input { border-radius: 12px; background: var(--tone); border-color: transparent; }
+.speedctl { border: 0; background: var(--tone); border-radius: 99px; padding: 3px; box-shadow: none; }
+.speedctl button { border-radius: 99px; min-width: 44px; justify-content: center; background: transparent; }
+.speedctl button + button { border-inline-start: 0; }
+body.has-doc main { padding-bottom: 130px; }
+body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: 108px; }
+.toast { border-radius: var(--r-m); padding: 10px 18px; box-shadow: var(--elev); }
+
+/* the first page */
+.welcome { border: 0; background: var(--surface); border-radius: 28px; box-shadow: var(--elev); outline: 2px dashed color-mix(in srgb, var(--lapis) 28%, var(--line)); outline-offset: -14px; }
+.formats span { background: var(--tone); border: 0; padding: 3px 14px; }
+
+/* the side windows: a calm ground with each setting on a card of its own, the title always in sight */
+.panel-body { width: min(440px, 100%); background: var(--paper); border-inline-end: 0; border-start-end-radius: 26px; border-end-end-radius: 26px; padding: 0 18px 24px; gap: 14px; }
+.panel-head { position: sticky; top: 0; z-index: 2; background: var(--paper); padding: 16px 2px 10px; }
+.panel-head h2 { font-size: 22px; }
+.panel-body > .field { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 14px 16px; }
+.myvoice { border: 0; background: var(--tone); border-radius: var(--r-m); }
+.lexrow { border-radius: var(--r-m); }
+.progress { border: 0; background: var(--tone-2); }
+
+/* small screens: the top bar goes with the page, the player stays; its main button on a row of its own */
+@media (max-width: 640px) {
+  .bar { position: static; }
+  .group + .group { padding-inline-start: 0; border-inline-start: 0; }
+  .tools { gap: 8px; }
+  .dock { inset-inline: 8px; width: auto; max-width: none; bottom: max(8px, env(safe-area-inset-bottom)); border-radius: 24px; padding: 8px 10px; gap: 8px; }
+  .dock .transport { flex: 1 1 100%; order: -1; }
+  #play { flex: 1; min-width: 0; }
+  /* (pages and speed share the second row) */
+  .dock { gap: 6px 8px; }
+  .pager { gap: 4px; }
+  .pager input { width: 3.3em; }
+  .pager button { min-width: 42px; padding-inline: 8px; }
+  .speedctl button { min-width: 38px; padding: 6px 8px; }
+  #speedChip { min-width: 3.7em; }
+  body.has-doc main { padding-bottom: 160px; }
+  body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: 150px; }
+  .panel-body { border-radius: 0; }
+}
+
+/* the two black themes and «increase contrast»: frames instead of tones, so every control has a clear edge */
+:root[data-theme="black"] button, :root[data-theme="black"] .btn, :root[data-theme="blackyellow"] button, :root[data-theme="blackyellow"] .btn,
+:root[data-theme="black"] .seg, :root[data-theme="blackyellow"] .seg, :root[data-theme="black"] .speedctl, :root[data-theme="blackyellow"] .speedctl,
+:root[data-theme="black"] .search input, :root[data-theme="blackyellow"] .search input, :root[data-theme="black"] .pager input, :root[data-theme="blackyellow"] .pager input {
+  background: #000; border: 2px solid var(--line);
+}
+:root[data-theme="black"] .seg button, :root[data-theme="blackyellow"] .seg button, :root[data-theme="black"] .speedctl button, :root[data-theme="blackyellow"] .speedctl button { border: 0; }
+:root[data-theme="black"] .primary, :root[data-theme="blackyellow"] .primary { background: var(--lapis); border-color: var(--lapis); color: var(--lapis-ink); }
+:root[data-theme="black"] .on, :root[data-theme="blackyellow"] .on, :root[data-theme="black"] .seg button.on, :root[data-theme="blackyellow"] .seg button.on { background: var(--reading); color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); }
+:root[data-theme="black"] .dock, :root[data-theme="blackyellow"] .dock, :root[data-theme="black"] .welcome, :root[data-theme="blackyellow"] .welcome { box-shadow: none; border: 2px solid var(--line); }
+:root[data-theme="black"] .file, :root[data-theme="blackyellow"] .file, :root[data-theme="black"] .formats span, :root[data-theme="blackyellow"] .formats span { background: #000; border: 1px solid var(--line); }
+@media (prefers-contrast: more) {
+  button, .btn, .seg, .speedctl, .search input, .pager input, .dock { border: 2px solid var(--ink); }
+  .seg button, .speedctl button { border: 0; }
+}

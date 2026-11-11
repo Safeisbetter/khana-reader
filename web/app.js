@@ -462,6 +462,7 @@ async function pdfCall(msg, transfer) {
   });
 }
 async function openWithPdfjs(file) {
+  if (file.size > 300 * 1024 * 1024) throw new Error("فایل خیلی بزرگ است (بیشتر از ۳۰۰ مگابایت).");
   const buf = await file.arrayBuffer();
   let pages;
   try {
@@ -649,6 +650,9 @@ function renderPageImage() {
 }
 function syncChrome() {
   const has = !!S.doc;
+  // (the book's tools and the player show only with a book open, the search only over its text: app.css)
+  document.body.classList.toggle("has-doc", has);
+  document.body.classList.toggle("view-text", has && S.view === "text");
   $("docTools").hidden = !has; $("searchRow").hidden = !has || S.view !== "text";
   if (!has) return;
   $("pageInput").value = fa(S.page);
@@ -1161,6 +1165,7 @@ $("textView").addEventListener("focusout", async e => {
   // (all its text erased: the paragraph is taken out at once. No question is asked here: a question put while the focus
   // leaves the paragraph was answered «no» by the window itself, and the text came back)
   if (await sendEdit({ kind: "paragraph", shown, text })) toast(text ? "بند ذخیره شد." : "بند حذف شد. («بازگرداندن همه» آن را برمی‌گرداند)");
+  else renderText();   // (not saved: the page shows what is kept, not what was typed)
 });
 $("textView").addEventListener("keydown", e => {
   const p = e.target.closest && e.target.closest("p[data-i]");
