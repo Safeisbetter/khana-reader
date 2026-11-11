@@ -187,6 +187,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
                 Exporter.unsaved(out);
             }
         }
+        maybeBench(getIntent());
     }
 
     private void showPage() {
@@ -357,14 +358,46 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         }
     }
 
+    /** A developer's speed test (Bench), only when it is asked for over USB with USB debugging switched on. */
+    private void maybeBench(Intent it) {
+        if (it == null || !it.getBooleanExtra("khana_bench", false)) return;
+        if (android.provider.Settings.Global.getInt(getContentResolver(), android.provider.Settings.Global.ADB_ENABLED, 0) != 1) return;
+        it.removeExtra("khana_bench");
+        new Thread(Bench::run, "khana-bench").start();
+    }
+
+    @Override
+    protected void onNewIntent(Intent it) {
+        super.onNewIntent(it);
+        if (server != null) maybeBench(it);
+    }
+
+    // While a file is being made, or the book is being read aloud, the screen stays on. Not for the look of it: Android gives
+    // the app on the screen every processor core, but an app behind another, or with the screen off, only the four small ones
+    // (seen on one tablet: cores 0-3 of 8), where making speech is several times slower: a 20-page MP3 took two hours.
+    // (The reader can still switch the screen off with the power button; the work then goes on, slowly.)
+    private final android.os.Handler awake = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable keepAwake = new Runnable() {
+        @Override
+        public void run() {
+            boolean working = Native.busy() || android.os.SystemClock.elapsedRealtime() - Server.lastSpeech < 20000 && Server.lastSpeech != 0;
+            if (working) getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            else getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            awake.postDelayed(this, 3000);
+        }
+    };
+
     @Override
     protected void onResume() {
         super.onResume();
         if (server != null) Exporter.setAsker(this);
+        awake.removeCallbacks(keepAwake);
+        awake.post(keepAwake);
     }
 
     @Override
     protected void onPause() {
+        awake.removeCallbacks(keepAwake);
         if (saving == null) Exporter.setAsker(null); // (the «save as» screen itself pauses this window)
         super.onPause();
     }

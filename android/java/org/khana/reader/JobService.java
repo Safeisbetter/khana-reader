@@ -40,7 +40,7 @@ public final class JobService extends Service {
         Notification n = new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setContentTitle("خوانا")
-                .setContentText("در حال ساختن فایل… (گوشی بیدار می‌ماند)")
+                .setContentText("در حال ساختن فایل… برای سرعت، خوانا را روی صفحه نگه دارید.")
                 .setContentIntent(open)
                 .setOngoing(true)
                 .build();

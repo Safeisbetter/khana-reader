@@ -24,6 +24,8 @@ const jpost = async (p, body) => (await api(p, { method: "POST", headers: { "Con
 const S = { settings: {}, voices: [], doc: null, page: 1, view: "text", paras: [], loadSeq: 0 };
 
 /* ---------------- settings ---------------- */
+// (the looks to choose from; anything else follows the system: light or dark)
+const THEMES = ["light", "dark", "night", "black", "blackyellow", "glass", "glassdark"];
 function applySettings() {
   const s = S.settings;
   document.documentElement.style.setProperty("--fs", s.fontSize + "px");
@@ -31,9 +33,9 @@ function applySettings() {
   $("speedChip").textContent = pct(s.speed);
   $("speedChip").classList.toggle("changed", Number(s.speed) !== 1);
   $("speedChip").setAttribute("aria-label", "سرعت " + pct(s.speed) + "؛ برای سرعت عادی بزنید");
-  document.documentElement.dataset.theme = ["light", "dark", "black", "blackyellow"].includes(s.theme) ? s.theme : "auto";
+  document.documentElement.dataset.theme = THEMES.includes(s.theme) ? s.theme : "auto";
   document.querySelectorAll("input[name=comma]").forEach(r => r.checked = r.value === (s.commaPause || "normal"));
-  document.querySelectorAll("input[name=theme]").forEach(r => r.checked = r.value === (["light", "dark", "black", "blackyellow"].includes(s.theme) ? s.theme : "auto"));
+  document.querySelectorAll("input[name=theme]").forEach(r => r.checked = r.value === (THEMES.includes(s.theme) ? s.theme : "auto"));
   document.querySelectorAll("[data-speed]").forEach(b => b.classList.toggle("on", Number(b.dataset.speed) === Number(s.speed) && b.id !== "speedReset"));
   $("fontSize").value = s.fontSize; $("fontVal").textContent = fa(s.fontSize);
   $("voice").value = s.voice;

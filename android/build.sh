@@ -62,6 +62,11 @@ rm -rf "$A/app/models/translate/nllb-200-1.3B"  # (the Mac's larger model: too h
 if [ -n "${KHANA_LITE:-}" ]; then rm -rf "$A/app/models/translate"; fi
 rm -rf "$A/app/models/asr/vosk-model-small-fa-0.5/test"
 rm -rf "$A/app/models/whisper"  # (speech to text is on the Mac only: 1.6 GB)
+# The voice model's 8-bit copy (android/prebuilt/voice8, made from the 32-bit one by dynamic quantization of its matrices) in
+# place of the 32-bit one: a quarter of its size (341 MB -> 86 MB of download) and, measured on one tablet, speech made
+# about half again as fast. Two listeners heard no difference in what is said. KHANA_LM32=1 keeps the 32-bit model.
+LM8="$HERE/prebuilt/voice8/flow_lm_step.onnx"
+if [ -z "${KHANA_LM32:-}" ] && [ -f "$LM8" ]; then cp "$LM8" "$A/app/models/parsigo/model/onnx/flow_lm_step.onnx"; rm -f "$A/app/models/parsigo/model/onnx/flow_lm_step.onnx.data"; fi
 [ -f "$OUT/fonts/Vazirmatn.ttf" ] || { mkdir -p "$OUT/fonts"; swift "$HERE/tools/woff2_to_ttf.swift" "$ROOT/web/Vazirmatn.woff2" "$OUT/fonts/Vazirmatn.ttf"; }
 cp "$OUT/fonts/Vazirmatn.ttf" "$A/fonts/"
 (cd "$A/app" && find . -type f | sed 's|^\./||' | LC_ALL=C sort | while IFS= read -r f; do printf '%s\t%s\n' "$f" "$(stat -f %z "$f")"; done) > "$A/app.files"

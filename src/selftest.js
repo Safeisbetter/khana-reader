@@ -50,6 +50,17 @@ addEventListener("load", () => setTimeout(async () => {
     await new Promise(r => setTimeout(r, 3000));
     await say("opened: pages " + document.getElementById("pageCount").textContent + ", paragraphs on screen " + document.querySelectorAll("#text p, .para, p").length);
     try {
+      // the looks: each can be chosen, colours the page, and the glass ones frost the bar
+      const seen = [];
+      for (const th of THEMES) {
+        await setSetting("theme", th);
+        const cs = getComputedStyle(document.querySelector(".bar"));
+        seen.push(th + ": page " + getComputedStyle(document.body).backgroundColor + ", ink " + getComputedStyle(document.body).color + ", frost " + ((cs.backdropFilter || cs.webkitBackdropFilter || "none").slice(0, 10)) + ", radio " + !!document.querySelector(`input[name=theme][value=${th}]:checked`));
+      }
+      await setSetting("theme", "auto");
+      await say("looks: " + seen.join(" | "));
+    } catch (e) { await say("looks: ERROR " + e); }
+    try {
       // the layout: the player at the foot of the window, inside it, not over the top bar; nothing wider than the window
       const box = e => { const r = e.getBoundingClientRect(); return Math.round(r.left) + "," + Math.round(r.top) + " " + Math.round(r.width) + "x" + Math.round(r.height); };
       const dock = $("docTools"), bar = document.querySelector(".bar");

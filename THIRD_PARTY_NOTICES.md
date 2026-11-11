@@ -57,6 +57,8 @@ Each file was compared with its publisher's own copy (November 2026):
 - **Voice and pronunciation models:** these are our own conversions to ONNX, so no published checksum exists for them. Their
   weights were compared number by number with the published originals (`mehdi-hf/pocket-tts-farsi-v2`,
   `mehdi-hf/Homo-GE2PE-Persian-HF`) and are equal; the files contain only standard ONNX operations, no custom code.
+- **The voice model on Android and Windows** is an 8-bit copy of the same file (its weight matrices stored as 8-bit numbers,
+  made with ONNX Runtime's own quantization tool): a quarter of the size and faster on a phone. The Mac keeps the 32-bit file.
 - **ONNX Runtime and Vosk libraries (Mac):** the program body is identical to the publisher's download (only the code signature differs).
 
 [`MODELS.sha256`](MODELS.sha256) lists the SHA-256 of every model file and ready-made library in the apps, so anyone can check that a

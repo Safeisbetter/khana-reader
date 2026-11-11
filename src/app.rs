@@ -381,6 +381,11 @@ static JOB_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBoo
 static READ_SPEED: Mutex<Option<f64>> = Mutex::new(None);
 
 fn adapt_to_device_speed() {
+    if std::env::var("KHANA_NO_LISTEN").is_ok() {
+        tts::LISTEN.store(false, Ordering::Relaxed);
+        tts::set_max_tries(2);
+        return;
+    }
     if JOB_RUNNING.load(Ordering::Relaxed) || std::env::var("KHANA_FIXED_LISTEN").is_ok() {
         return;
     }
@@ -1101,6 +1106,11 @@ impl App {
             "title_get" => {
                 let d = self.doc(q)?;
                 Ok(reply_json(&json!({"title": d.spoken_title(self.opts(q))})))
+            }
+            "profile_get" | "profile_post" => {
+                let p: Vec<f64> = tts::PROFILE.iter().map(|x| if route == "profile_post" { x.swap(0, Ordering::Relaxed) } else { x.load(Ordering::Relaxed) } as f64 / 1e9).collect();
+                Ok(reply_json(&json!({"voice_model": p[0], "sound_decoder": p[1], "checks": p[2], "listening": p[3], "listen_now": tts::LISTEN.load(Ordering::Relaxed),
+                                     "speed_seen": *READ_SPEED.lock().unwrap()})))
             }
             "tts_post" => {
                 let req = body_json()?;

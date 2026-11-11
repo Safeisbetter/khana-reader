@@ -63,6 +63,14 @@
   document.querySelectorAll(".hint").forEach(el => { if (el.querySelector("kbd")) el.hidden = true; });
   say(document.querySelector(".privacy"), "با بستن برنامه پاک می‌شوند.",
     "با بستن برنامه پاک می‌شوند. هر فایل MP3 و PDF را خودتان جایی که می‌خواهید ذخیره می‌کنید (صفحه‌ی «ذخیره» گوشی).");
+  // (why a saved file can take hours: with the app behind another one, or the screen off, Android leaves it only the slow cores)
+  const st = $("mp3Status");
+  if (st) {
+    const tip = document.createElement("p");
+    tip.className = "hint";
+    tip.textContent = "تا پایان کار، خوانا را روی صفحه نگه دارید (صفحه خودش روشن می‌ماند). اگر برنامه‌ی دیگری را باز کنید یا صفحه را خاموش کنید، کار ادامه دارد اما چند برابر کندتر.";
+    st.appendChild(tip);
+  }
   const reveal = $("mp3Reveal");
   if (reveal) reveal.textContent = "ذخیره / باز کردن";
 })();

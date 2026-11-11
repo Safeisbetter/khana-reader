@@ -414,3 +414,67 @@ body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: 108p
   button, .btn, .seg, .speedctl, .search input, .pager input, .dock { border: 2px solid var(--ink); }
   .seg button, .speedctl button { border: 0; }
 }
+
+/* ---- the dark look, blacker: a neutral near-black (no blue cast), as dark apps are today; the reading page darkest ---- */
+@media (prefers-color-scheme: dark) {
+  /* (only when no look was chosen: a chosen look keeps its own colours) */
+  :root:not([data-theme]), :root[data-theme="auto"] {
+    --paper: #0E0E10; --surface: #17171A; --ink: #ECECEE; --muted: #A2A2AA; --line: #2B2B31; --reading: #1E2532; --page: #131315; --page-edge: #27272C;
+  }
+}
+:root[data-theme="dark"] { --paper: #0E0E10; --surface: #17171A; --ink: #ECECEE; --muted: #A2A2AA; --line: #2B2B31; --reading: #1E2532; --page: #131315; --page-edge: #27272C; }
+
+/* ---- «نور شب»: for reading at night. Dark and warm: amber writing on a brown-black ground, almost no blue light, low contrast that
+   does not glare (the word being read keeps its strong mark) ---- */
+:root[data-theme="night"] {
+  --paper: #100B06; --surface: #19120A; --ink: #F0D7AE; --muted: #B4976E; --line: #382A18; --lapis: #E9A758; --lapis-ink: #1A1105; --turq: #D8A067;
+  --mark: #5B3E12; --mark-ink: #FFE9C4; --reading: #2A1D0D; --danger: #F0896C; --shade: rgba(0, 0, 0, .7); --page: #150F08; --page-edge: #33261A;
+  --hl-bg: #F2B24A; --hl-ink: #1A1105; --hl-ring: #F2B24A; --sent-bg: rgba(242, 178, 74, .16); color-scheme: dark;
+}
+:root[data-theme="night"] body { background: var(--paper); }
+
+/* ---- the glass looks: bars, the player and the side windows are frosted glass over a soft coloured ground (as on a new Mac).
+   The frosting is the one thing in the app that asks more of the device: on a slow phone choose another look. The page being
+   read stays almost solid, so the writing is as clear as ever. ---- */
+:root[data-theme="glass"] {
+  --paper: #E9EEF7; --surface: #FFFFFF; --ink: #141A26; --muted: #4E5869; --line: rgba(20, 26, 38, .14); --page: #FFFFFF; --page-edge: rgba(20, 26, 38, .12);
+  --glass: rgba(255, 255, 255, .56); --glass-edge: rgba(255, 255, 255, .85); --glass-btn: rgba(255, 255, 255, .5); color-scheme: light;
+  --lapis: #1F4FA0; --lapis-ink: #FFFFFF; --turq: #0E7F7B; --mark: #FFE08A; --mark-ink: #1A2130; --reading: #E3ECFB; --danger: #B3261E; --shade: rgba(16, 24, 40, .28);
+}
+:root[data-theme="glassdark"] {
+  --paper: #0B0D14; --surface: #171A22; --ink: #EEF0F5; --muted: #A9AFBD; --line: rgba(255, 255, 255, .14); --page: #12141B; --page-edge: rgba(255, 255, 255, .12);
+  --glass: rgba(30, 33, 44, .52); --glass-edge: rgba(255, 255, 255, .18); --glass-btn: rgba(255, 255, 255, .09); color-scheme: dark;
+  --lapis: #8FB4F7; --lapis-ink: #0B1220; --turq: #4CC2BC; --mark: #7A6418; --mark-ink: #FFF6D8; --reading: #1F2C44; --danger: #F2827A; --shade: rgba(0, 0, 0, .5);
+}
+:root[data-theme="glass"] body {
+  background: radial-gradient(900px 600px at 12% -10%, #BFD4FF 0%, transparent 60%), radial-gradient(800px 600px at 95% 10%, #FFD6E8 0%, transparent 55%),
+    radial-gradient(900px 700px at 50% 110%, #C9F1E4 0%, transparent 60%), var(--paper);
+  background-attachment: fixed;
+}
+:root[data-theme="glassdark"] body {
+  background: radial-gradient(900px 600px at 12% -10%, #253B7A 0%, transparent 60%), radial-gradient(800px 600px at 95% 10%, #5A2450 0%, transparent 55%),
+    radial-gradient(900px 700px at 50% 110%, #134A44 0%, transparent 60%), var(--paper);
+  background-attachment: fixed;
+}
+:root[data-theme^="glass"] .bar, :root[data-theme^="glass"] .dock, :root[data-theme^="glass"] .panel-body, :root[data-theme^="glass"] .welcome,
+:root[data-theme^="glass"] .toast, :root[data-theme^="glass"] .panel-body > .field {
+  background: var(--glass); -webkit-backdrop-filter: blur(24px) saturate(170%); backdrop-filter: blur(24px) saturate(170%);
+  border: 1px solid var(--glass-edge); box-shadow: inset 0 1px 0 var(--glass-edge), 0 10px 34px rgba(8, 12, 24, .18);
+}
+:root[data-theme^="glass"] .bar { border-width: 0 0 1px; }
+:root[data-theme^="glass"] .panel-head { background: transparent; }
+:root[data-theme^="glass"] .panel-body > .field { -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
+:root[data-theme^="glass"] .toast { color: var(--ink); }
+:root[data-theme^="glass"] button, :root[data-theme^="glass"] .btn, :root[data-theme^="glass"] .seg, :root[data-theme^="glass"] .speedctl,
+:root[data-theme^="glass"] .search input, :root[data-theme^="glass"] .pager input, :root[data-theme^="glass"] .file, :root[data-theme^="glass"] .formats span {
+  background: var(--glass-btn); border: 1px solid var(--glass-edge);
+}
+:root[data-theme^="glass"] .seg button, :root[data-theme^="glass"] .speedctl button { border: 0; background: transparent; }
+:root[data-theme^="glass"] .seg button.on { background: var(--glass-edge); }
+:root[data-theme^="glass"] .primary { background: var(--lapis); border-color: transparent; color: var(--lapis-ink); box-shadow: 0 6px 18px color-mix(in srgb, var(--lapis) 40%, transparent); }
+:root[data-theme^="glass"] .text { background: color-mix(in srgb, var(--page) 86%, transparent); border-color: var(--glass-edge); box-shadow: 0 14px 40px rgba(8, 12, 24, .16); }
+:root[data-theme^="glass"] .welcome { outline-color: var(--glass-edge); }
+/* (under «increase contrast» the glass turns solid) */
+@media (prefers-contrast: more) {
+  :root[data-theme^="glass"] .bar, :root[data-theme^="glass"] .dock, :root[data-theme^="glass"] .panel-body, :root[data-theme^="glass"] .welcome { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

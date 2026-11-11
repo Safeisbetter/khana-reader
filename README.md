@@ -18,18 +18,21 @@ many readers every megabyte is expensive. **If your connection is slow or costly
 
 | Device | File | Size | What it has |
 |---|---|---|---|
-| Android, light | `KhanaReader-Android-lite.apk` | about 0.55 GB | Reads Farsi books, pictures and typed text aloud; saves sound. **No translation.** |
-| Android, full | `KhanaReader-Android.apk` | about 1.15 GB | The same, and translates foreign books into Farsi. |
+| Android, light | `KhanaReader-Android-lite.apk` | about 0.26 GB | Reads Farsi books, pictures and typed text aloud; saves sound. **No translation.** |
+| Android, full | `KhanaReader-Android.apk` | about 0.86 GB | The same, and translates foreign books into Farsi. |
 | Mac, light | `KhanaReader-Mac-lite.dmg` | about 0.45 GB, one file | Reads Farsi aloud, saves sound, reads scanned pages. **No translation, no dictation.** |
 | Mac, medium | `KhanaReader-Mac-medium.dmg` | about 1 GB, one file | The same, and translates with the smaller model (the one the phone uses). |
 | Mac, full | `KhanaReader-Mac.dmg` **and** every `KhanaReader-Mac.00x.dmgpart` | about 5 GB, three files | The best translation model and dictation (speech to text). |
-| Windows, light (experimental) | `KhanaReader-Windows-light-experimental.zip` | about 0.4 GB | No translation. |
-| Windows, full (experimental) | `KhanaReader-Windows-full-experimental.zip` | about 1 GB | With translation (the smaller model). |
+| Windows, light (experimental) | `KhanaReader-Windows-light-experimental.zip` | about 0.2 GB | No translation. |
+| Windows, full (experimental) | `KhanaReader-Windows-full-experimental.zip` | about 0.75 GB | With translation (the smaller model). |
 
 **Mac:** an Apple Silicon Mac (M1 or newer) with macOS 13 or newer. For the full download put all three files in one folder, then
 open the `.dmg`. Drag the app to Applications. The first time, macOS warns you, because this free app is not signed with a paid
 Apple Developer ID: try to open the app, then go to **System Settings → Privacy & Security** and choose **Open Anyway**.
 The full version needs about 7 GB of disk and 16 GB of memory is recommended; the light one runs on any Apple Silicon Mac.
+
+**Android, for speed:** keep Khana on the screen while it reads or saves a file (the screen stays on by itself). Behind another app, or with
+the screen off, Android leaves it only the slow processor cores and the work takes several times longer.
 
 **Android:** an arm64 phone with Android 8 or newer and Android System WebView 133 or newer. Open the file and allow installing
 from this source when Android asks. Both versions are signed with the same key, so one can be installed over the other.
@@ -38,7 +41,7 @@ from this source when Android asks. Both versions are signed with the same key, 
 `KhanaReader.exe`. It saves WAV instead of MP3 and has no translated PDF yet.
 
 > **Please note, honestly:** the Mac app is the only one used every day by a person. The Android app has not yet been tried on a
-> real phone, and the Windows app has only been run by GitHub's own build computers. If something goes wrong, please open an
+> real phone (it has been run and timed on one tablet), and the Windows app has only been run by GitHub's own build computers. If something goes wrong, please open an
 > [issue](../../issues). Don't attach books you would not like to make public.
 
 ## Check that your download is the real one
@@ -111,7 +114,7 @@ can follow this repository's releases (we did not make or audit it). The Farsi g
 
 ## Made to be usable without good eyesight
 
-- Large buttons and text; text size up to 72; light, dark, black and black-and-yellow themes; follows the system's
+- Large buttons and text; text size up to 72; seven looks to choose from (light, dark, a warm night light, black, black-and-yellow, and two glass looks); follows the system's
   "increase contrast" and "reduce motion" settings.
 - Everything works from the keyboard: <kbd>Space</kbd> read or pause, <kbd>←</kbd> <kbd>→</kbd> pages, <kbd>⌘[</kbd> <kbd>⌘]</kbd> speed, <kbd>⌘,</kbd> settings.
 - Built for screen readers (VoiceOver, TalkBack): buttons are named, messages and page changes are announced, and a window that
@@ -169,15 +172,16 @@ Everything runs on your device; nothing is sent anywhere.
 
 | دستگاه | فایل | حجم | چه دارد |
 |---|---|---|---|
-| اندروید، سبک | `KhanaReader-Android-lite.apk` | حدود ۰٫۵۵ گیگابایت | کتاب فارسی، عکس و متن تایپ‌شده را می‌خواند و صدا ذخیره می‌کند. **بدون ترجمه.** |
-| اندروید، کامل | `KhanaReader-Android.apk` | حدود ۱٫۱۵ گیگابایت | همان، به‌اضافه‌ی ترجمه‌ی کتاب‌های خارجی به فارسی. |
+| اندروید، سبک | `KhanaReader-Android-lite.apk` | حدود ۰٫۲۶ گیگابایت | کتاب فارسی، عکس و متن تایپ‌شده را می‌خواند و صدا ذخیره می‌کند. **بدون ترجمه.** |
+| اندروید، کامل | `KhanaReader-Android.apk` | حدود ۰٫۸۶ گیگابایت | همان، به‌اضافه‌ی ترجمه‌ی کتاب‌های خارجی به فارسی. |
 | مک، سبک | `KhanaReader-Mac-lite.dmg` | حدود ۰٫۴۵ گیگابایت، یک فایل | فارسی را می‌خواند، صدا ذخیره می‌کند، صفحه‌ی اسکن‌شده را می‌خواند. **بدون ترجمه و بدون تبدیل گفتار به نوشته.** |
 | مک، متوسط | `KhanaReader-Mac-medium.dmg` | حدود ۱ گیگابایت، یک فایل | همان، به‌اضافه‌ی ترجمه با مدل کوچک‌تر (همان مدل گوشی). |
 | مک، کامل | `KhanaReader-Mac.dmg` **و** همه‌ی فایل‌های `KhanaReader-Mac.00x.dmgpart` | حدود ۵ گیگابایت، سه فایل | بهترین مدل ترجمه و تبدیل گفتار به نوشته. |
-| ویندوز، سبک (آزمایشی) | `KhanaReader-Windows-light-experimental.zip` | حدود ۰٫۴ گیگابایت | بدون ترجمه. |
-| ویندوز، کامل (آزمایشی) | `KhanaReader-Windows-full-experimental.zip` | حدود ۱ گیگابایت | با ترجمه (مدل کوچک‌تر). |
+| ویندوز، سبک (آزمایشی) | `KhanaReader-Windows-light-experimental.zip` | حدود ۰٫۲ گیگابایت | بدون ترجمه. |
+| ویندوز، کامل (آزمایشی) | `KhanaReader-Windows-full-experimental.zip` | حدود ۰٫۷۵ گیگابایت | با ترجمه (مدل کوچک‌تر). |
 
 - **مک:** مک با تراشه‌ی اپل (M1 یا جدیدتر) و macOS 13 یا جدیدتر. برای نسخه‌ی کامل هر سه فایل را در یک پوشه بگذارید و بعد `.dmg` را باز کنید. بار اول macOS هشدار می‌دهد، چون این برنامه‌ی رایگان امضای پولی اپل ندارد: برنامه را باز کنید، بعد در **System Settings → Privacy & Security** گزینه‌ی **Open Anyway** را بزنید.
+- **اندروید، برای سرعت:** تا وقتی خوانا می‌خواند یا فایل می‌سازد، آن را روی صفحه نگه دارید (صفحه خودش روشن می‌ماند). اگر برنامه‌ی دیگری باز کنید یا صفحه خاموش شود، اندروید فقط هسته‌های کُند پردازنده را به آن می‌دهد و کار چند برابر طول می‌کشد.
 - **اندروید:** گوشی ۶۴ بیتی (arm64) با اندروید ۸ یا بالاتر و «Android System WebView» نسخه‌ی ۱۳۳ یا جدیدتر. هنگام نصب، اندروید اجازه‌ی «نصب از این منبع» را می‌خواهد.
 - **ویندوز:** ویندوز ۱۰ یا ۱۱ (۶۴ بیتی). پوشه را کامل از حالت فشرده درآورید و `KhanaReader.exe` را باز کنید.
 
@@ -250,7 +254,7 @@ Everything runs on your device; nothing is sent anywhere.
 
 ### برای کسانی که خوب نمی‌بینند
 
-- دکمه‌ها و نوشته‌های بزرگ؛ اندازه‌ی قلم تا ۷۲؛ پوسته‌ی روشن، تیره، سیاه و سیاه‌وزرد؛ از تنظیم «تضاد بیشتر» و «حرکت کمتر» سیستم پیروی می‌کند.
+- دکمه‌ها و نوشته‌های بزرگ؛ اندازه‌ی قلم تا ۷۲؛ هفت پوسته: روشن، تیره، «نور شب» (گرم، برای شب)، سیاه، سیاه‌وزرد و دو پوسته‌ی شیشه‌ای؛ از تنظیم «تضاد بیشتر» و «حرکت کمتر» سیستم پیروی می‌کند.
 - همه‌چیز با صفحه‌کلید کار می‌کند: <kbd>Space</kbd> خواندن یا مکث، <kbd>←</kbd> <kbd>→</kbd> صفحه‌ی بعد و قبل.
 - برای صفحه‌خوان‌ها (VoiceOver، TalkBack) ساخته شده: دکمه‌ها نام دارند، پیام‌ها و عوض شدن صفحه گفته می‌شود. هنوز یک کاربر نابینا آن را نیازموده است؛ اگر جایی کار نکرد به ما بگویید.
 - کلمه‌ای که خوانده می‌شود نشان‌دار است و می‌شود خواندن را از هر جمله شروع کرد.
