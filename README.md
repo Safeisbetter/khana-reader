@@ -85,6 +85,15 @@ from this source when Android asks. Both versions are signed with the same key, 
   yourself if they should not be found.
 - Use a screen lock and your device's encryption. On Android, [GrapheneOS](https://grapheneos.org) gives the strongest protection we know of.
 
+**Cafe Bazaar and other Iranian app stores.** Khana is **not** published on Cafe Bazaar, Myket or any other store; this GitHub page
+is its only official source, and a copy found elsewhere is not ours. We chose this because of what Bazaar's own documents say (read
+November 2026): an account is tied to a phone number or email; its [privacy policy](https://cafebazaar.ir/privacy?l=en) lists the
+device ID, advertising ID, **the list of installed apps**, searches and IP address among what it collects, and says information may be
+shared where the law requires or permits, including under court orders; and apps must comply with the law of the Islamic Republic.
+We found no independent, recent evidence that Bazaar has tampered with apps or handed over a particular user's data, and we do not
+repeat claims we could not source. For automatic updates without a store account, [Obtainium](https://github.com/ImranR98/Obtainium)
+can follow this repository's releases (we did not make or audit it). The Farsi guide below says more.
+
 ## What it does
 
 - **Reads aloud** in Farsi with a natural-sounding voice (three to choose from; two were donated to the public domain by their owners), and saves the reading as **MP3** or **WAV** (on the Mac also **M4A**).
@@ -209,6 +218,26 @@ Everything runs on your device; nothing is sent anywhere.
 - **تنظیمات ← «پاک کردن همه‌ی ردها»** همه‌ی این‌ها را یک‌جا پاک می‌کند. برنامه هر بار که باز می‌شود فایل‌های صوتی نیمه‌کاره‌ی موقت خودش را هم پاک می‌کند.
 - **فایل‌های MP3، WAV و PDF که ذخیره کرده‌اید، و خودِ کتاب‌ها، فایل‌های خود شما هستند:** برنامه آن‌ها را پاک نمی‌کند. اگر نباید پیدا شوند، خودتان پاکشان کنید.
 - قفل صفحه و رمزگذاری دستگاه را روشن نگه دارید. در اندروید، [GrapheneOS](https://grapheneos.org) قوی‌ترین محافظتی است که می‌شناسیم. (GrapheneOS این برنامه را تأیید یا پشتیبانی نمی‌کند.)
+
+### کافه‌بازار و فروشگاه‌های داخلی
+
+**خوانا در کافه‌بازار، مایکت یا هیچ فروشگاه دیگری منتشر نشده است.** تنها جای رسمی آن همین صفحه‌ی GitHub است. اگر جایی برنامه‌ای با این نام دیدید، از ما نیست؛ ممکن است دست‌کاری شده باشد. پیش از نصب، اثر انگشت امضا را که بالاتر آمده مقایسه کنید.
+
+چرا خوانا را در بازار نگذاشته‌ایم؟ این‌ها را از نوشته‌های خودِ بازار برداشته‌ایم (نوامبر ۲۰۲۶)، نه از شنیده‌ها:
+
+- **ورود با شماره‌ی تلفن یا ایمیل است.** طبق [سیاست حریم خصوصی بازار](https://cafebazaar.ir/privacy?l=en) برای ساختن حساب شماره‌ی موبایل یا ایمیل لازم است و ورود با رمز یک‌بارمصرف انجام می‌شود. اگر سیم‌کارت به نام شما ثبت شده باشد، حسابی که با آن شماره ساخته می‌شود می‌تواند به هویت شما وصل شود.
+- **بازار می‌داند چه برنامه‌هایی دارید.** همان سیاست می‌گوید این‌ها جمع‌آوری می‌شود: شناسه‌ی دستگاه، شناسه‌ی تبلیغاتی، **فهرست برنامه‌های نصب‌شده**، جستجوها، نشانی IP و زمان استفاده.
+- **داده‌ها می‌تواند به مراجع قانونی داده شود.** همان سیاست می‌گوید بازار ممکن است اطلاعات را هر جا قانون لازم بداند یا اجازه دهد، از جمله با حکم دادگاه، در اختیار بگذارد. مدت نگهداری داده‌ها در آن نیامده است.
+- **برنامه‌ها باید با قانون جمهوری اسلامی سازگار باشند** ([شرایط بازار](https://cafebazaar.ir/press/agreement?l=en)). برنامه‌ای که کتاب‌های هر کس را، هر چه باشد، می‌خواند و ترجمه می‌کند، ممکن است برداشته شود یا از ما بخواهند آن را محدود کنیم.
+- **ما کنترلی بر فایل نخواهیم داشت.** در یک فروشگاه، فایل و به‌روزرسانی از سرور آن فروشگاه می‌آید. در GitHub می‌توانید کد SHA-256 و امضای فایل را خودتان با آنچه ما منتشر کرده‌ایم مقایسه کنید.
+
+**آنچه نمی‌دانیم، صادقانه:** مدرک مستقل و تازه‌ای پیدا نکردیم که نشان دهد بازار برنامه‌ها را دست‌کاری کرده یا داده‌ی کاربری مشخصی را به کسی داده است. بعضی راهنماهای امنیت دیجیتال چنین چیزی می‌گویند اما منبعی برایش نیاورده‌اند، پس ما آن را تکرار نمی‌کنیم. نگرانی ما از چیزهایی است که خود بازار نوشته: شماره‌ی تلفن، فهرست برنامه‌ها، و تحویل داده به حکم قانون.
+
+**توصیه برای کسی که امنیتش مهم است:**
+
+- خوانا را فقط از همین صفحه بگیرید و امضا و SHA-256 را بررسی کنید.
+- اگر به‌روزرسانی خودکار می‌خواهید، برنامه‌ی آزاد [Obtainium](https://github.com/ImranR98/Obtainium) نسخه‌های تازه را مستقیم از GitHub می‌گیرد: نشانی `github.com/Safeisbetter/khana-reader` را در آن وارد کنید. (Obtainium را ما نساخته‌ایم و بررسی نکرده‌ایم.)
+- فهرست برنامه‌های گوشی می‌تواند درباره‌ی شما چیزهایی بگوید. هر فروشگاهی که روی گوشی نصب است، چه داخلی چه خارجی، معمولاً این فهرست را می‌بیند.
 
 ### برنامه چه می‌کند؟
 
