@@ -25,10 +25,17 @@ const S = { settings: {}, voices: [], doc: null, page: 1, view: "text", paras: [
 
 /* ---------------- settings ---------------- */
 // (the looks to choose from; anything else follows the system: light or dark)
-const THEMES = ["light", "dark", "night", "black", "blackyellow", "glass", "glassdark"];
+const THEMES = ["light", "dark", "night", "black", "blackyellow", "glass", "glassdark", "depth", "depthdark"];
 function applySettings() {
   const s = S.settings;
   document.documentElement.style.setProperty("--fs", s.fontSize + "px");
+  // (the text's own page: its width in letters' widths, 100 is the whole window; the room round the text, 100 is as it was made)
+  const pw = Math.min(100, Math.max(26, Number(s.pageWidth) || 46)), pm = Math.min(200, Math.max(20, Number(s.pageMargin) || 100));
+  document.documentElement.style.setProperty("--pw", pw >= 100 ? "100%" : pw + "em");
+  document.documentElement.style.setProperty("--pm", String(pm / 100));
+  $("pageWidth").value = pw; $("pageWidthVal").textContent = pw >= 100 ? "تمام پهنا" : fa(pw);
+  $("pageMargin").value = pm; $("pageMarginVal").textContent = fa(pm) + "٪";
+  $("clickSound").checked = !!s.clickSound;
   $("speed").value = s.speed; $("speedVal").textContent = pct(s.speed);
   $("speedChip").textContent = pct(s.speed);
   $("speedChip").classList.toggle("changed", Number(s.speed) !== 1);
@@ -118,6 +125,46 @@ document.querySelectorAll("input[name=hl]").forEach(r => r.onchange = () => setS
 document.querySelectorAll("input[name=fc]").forEach(r => r.onchange = () => setSetting("frameColor", r.value));
 document.querySelectorAll("input[name=comma]").forEach(r => r.onchange = () => { setSetting("commaPause", r.value); ttsCache.clear(); restartReading(); });
 document.querySelectorAll("input[name=theme]").forEach(r => r.onchange = () => setSetting("theme", r.value));
+$("pageWidth").oninput = e => setSetting("pageWidth", Number(e.target.value));
+$("pageMargin").oninput = e => setSetting("pageMargin", Number(e.target.value));
+$("clickSound").onchange = e => { setSetting("clickSound", e.target.checked); if (e.target.checked) clickTone(true); };
+
+/* ---------------- a sound for every tap (Settings; off unless chosen): a short tick, higher when something is switched on, lower when off ---------------- */
+// (its own little sound engine: the reader's is paused and resumed with the reading)
+let clickCtx = null;
+function clickTone(on) {
+  try {
+    clickCtx = clickCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (clickCtx.state === "suspended") clickCtx.resume();
+    const t = clickCtx.currentTime, o = clickCtx.createOscillator(), g = clickCtx.createGain();
+    o.type = "sine"; o.frequency.value = on === true ? 1320 : on === false ? 520 : 880;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.18, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    o.connect(g); g.connect(clickCtx.destination); o.start(t); o.stop(t + 0.07);
+  } catch (e) {}
+}
+addEventListener("click", e => {
+  if (!S.settings || !S.settings.clickSound) return;
+  const el = e.target.closest && e.target.closest("button, .btn, input[type=checkbox], input[type=radio], summary, select");
+  if (!el || el.disabled) return;
+  // (a label's click comes again on its box: that one is the one heard)
+  if (el.matches("input[type=checkbox]")) return clickTone(el.checked);
+  if (el.matches("input[type=radio]")) return clickTone(true);
+  if (el.hasAttribute("aria-pressed") || el.classList.contains("on")) return clickTone(el.classList.contains("on") || el.getAttribute("aria-pressed") === "true");
+  clickTone();
+}, true);
+
+/* ---------------- finding a setting by a word of its name ---------------- */
+$("setFind").oninput = () => {
+  const q = $("setFind").value.trim().replace(/ي/g, "ی").replace(/ك/g, "ک");
+  let shown = 0;
+  document.querySelectorAll("#settings .panel-body > .field").forEach(f => {
+    const hit = !q || f.textContent.replace(/\u200c/g, " ").includes(q) || f.textContent.includes(q);
+    f.hidden = !hit; f.classList.toggle("found", !!q && hit);
+    if (hit) shown++;
+  });
+  $("setNone").hidden = shown > 0;
+};
+new MutationObserver(() => { if ($("settings").hidden && $("setFind").value) { $("setFind").value = ""; $("setFind").oninput(); } }).observe($("settings"), { attributes: true, attributeFilter: ["hidden"] });
 $("persianYeh").onchange = e => setSetting("persianYeh", e.target.checked, true);
 $("reversed").onchange = e => setSetting("reversed", e.target.checked, true);
 $("bitrate").onchange = e => setSetting("bitrate", +e.target.value);
@@ -1049,7 +1096,11 @@ $("mp3Start").onclick = async () => {
     poll();
   } catch (e) { toast(e.message); }
 };
-$("mp3Reveal").onclick = () => { if (job) jpost("/api/reveal?id=" + job.id, {}).catch(e => toast(e.message)); };
+$("mp3Reveal").onclick = () => {
+  // (where sound files stay inside the app: its own list is shown)
+  if (S.library && saveKind !== "pdf") { $("mp3").hidden = true; openPanel("libPanel"); return libShow(); }
+  if (job) jpost("/api/reveal?id=" + job.id, {}).catch(e => toast(e.message));
+};
 $("mp3Cancel").onclick =() => { if (job) jpost("/api/cancel?id=" + job.id, {}).catch(() => {}); };
 // how long is left, from how fast the work has gone so far: «حدود ۵ دقیقه مانده · حدود ساعت ۲۱:۴۵ آماده است»
 let jobClock = { id: null, t0: 0 };
@@ -1076,19 +1127,72 @@ async function poll() {
   if (job.status === "running") {
     // (the sign at the number's right, close to it: «۳۵%», whatever the direction of the line around it)
     $("mp3Pct").textContent = fa(pct) + "%";
-    $("mp3Eta").textContent = timeLeft(job.progress);
-    $("mp3Text").textContent = pdf ? "در حال ترجمه…" : (pct === 0 ? "در حال آماده کردن نخستین بخش… (ممکن است چند ثانیه تا چند دقیقه طول بکشد)" : `در حال ساختن… تا این‌جا ${len} صدا`);
+    $("mp3Eta").textContent = job.lowBattery ? "" : timeLeft(job.progress);
+    $("mp3Text").classList.toggle("hot", job.heat >= 2 || !!job.lowBattery);
+    $("mp3Text").textContent = job.lowBattery ? "باتری کم است (۲۰٪ یا کمتر). کار نگه داشته شده و با وصل کردن شارژر خودش ادامه پیدا می‌کند." : job.heat >= 2 ? (job.heat >= 3 ? "دستگاه خیلی داغ شده است. کار تا خنک شدن آن ایستاده و خودش ادامه پیدا می‌کند." : "دستگاه داغ شده است. برای سلامت آن، کار آهسته‌تر پیش می‌رود.") : pdf ? "در حال ترجمه…" : (pct === 0 ? "در حال آماده کردن نخستین بخش… (ممکن است چند ثانیه تا چند دقیقه طول بکشد)" : `در حال ساختن… تا این‌جا ${len} صدا`);
     pollT = setTimeout(poll, 700); return;
   }
   $("mp3Start").disabled = false; $("mp3Cancel").hidden = true;
   $("mp3Eta").textContent = "";
+  $("mp3Text").classList.remove("hot");
   $("mp3Pct").textContent = job.status === "done" ? fa(100) + "%" : "";
   if (job.status === "done") {
-    $("mp3Text").textContent = `فایل در پوشه‌ی دانلودها ذخیره شد: «${job.saved}»` + (pdf ? "" : ` · ${len}`);
+    $("mp3Text").textContent = (S.library && !pdf ? `فایل ساخته شد و در «فایل‌های من» است: «${job.saved}»` : `فایل در پوشه‌ی دانلودها ذخیره شد: «${job.saved}»`) + (pdf ? "" : ` · ${len}`);
     $("mp3Reveal").hidden = false;
   } else if (job.status === "cancelled") $("mp3Text").textContent = "لغو شد.";
   else $("mp3Text").textContent = "ساخته نشد: " + job.error;
 }
+
+/* ---------------- «فایل‌های من»: the sound files kept inside the app (a phone), played here ---------------- */
+let libUrl = null;
+function libStop() {
+  const au = $("libAudio");
+  au.pause(); au.removeAttribute("src"); au.load();
+  if (libUrl) { URL.revokeObjectURL(libUrl); libUrl = null; }
+  $("libPlayer").hidden = true;
+}
+async function libShow() {
+  let r;
+  try { r = await jget("/api/library"); } catch (e) { return toast(e.message); }
+  const list = $("libList");
+  list.textContent = "";
+  $("libEmpty").hidden = r.files.length > 0;
+  for (const f of r.files) {
+    const row = document.createElement("div"); row.className = "librow";
+    const name = document.createElement("div"); name.className = "name"; name.textContent = f.name;
+    const acts = document.createElement("div"); acts.className = "acts";
+    const size = document.createElement("span"); size.className = "size";
+    size.textContent = f.bytes >= 1048576 ? fa((f.bytes / 1048576).toFixed(1)) + " مگابایت" : fa(Math.max(1, Math.round(f.bytes / 1024))) + " کیلوبایت";
+    const q = "name=" + encodeURIComponent(f.name);
+    const play = document.createElement("button"); play.type = "button"; play.className = "primary"; play.textContent = "▶ پخش";
+    play.onclick = async () => {
+      try {
+        stopReading(); libStop();
+        play.disabled = true;
+        const blob = await (await api("/api/library_file?" + q)).blob();
+        libUrl = URL.createObjectURL(blob);
+        $("libNow").textContent = f.name;
+        $("libPlayer").hidden = false;
+        $("libAudio").src = libUrl;
+        await $("libAudio").play();
+      } catch (e) { toast(e.message); } finally { play.disabled = false; }
+    };
+    const out = document.createElement("button"); out.type = "button"; out.textContent = "ذخیره در گوشی…";
+    out.onclick = () => jpost("/api/library_export?" + q, {}).catch(e => toast(e.message));
+    const del = document.createElement("button"); del.type = "button"; del.textContent = "حذف";
+    let sure = false;
+    del.onclick = async () => {
+      // (asked by a second tap, not by a question window)
+      if (!sure) { sure = true; del.textContent = "حذف شود؟ دوباره بزنید"; setTimeout(() => { sure = false; del.textContent = "حذف"; }, 4000); return; }
+      try { if ($("libNow").textContent === f.name) libStop(); await jpost("/api/library_delete?" + q, {}); toast("حذف شد."); libShow(); } catch (e) { toast(e.message); }
+    };
+    acts.append(size, play, out, del);
+    row.append(name, acts);
+    list.append(row);
+  }
+}
+$("libBtn").onclick = () => { openPanel("libPanel"); libShow(); };
+new MutationObserver(() => { if ($("libPanel").hidden) libStop(); }).observe($("libPanel"), { attributes: true, attributeFilter: ["hidden"] });
 
 /* ---------------- misc ---------------- */
 let toastT;
@@ -1099,6 +1203,7 @@ let resizeT; addEventListener("resize", () => { clearTimeout(resizeT); resizeT =
   try {
     const r = await jget("/api/init");
     S.settings = r.settings; S.voices = r.voices;
+    S.library = !!r.library; $("libBtn").hidden = !S.library;
     // (editing by voice needs the recognizer, which the Mac and Android apps have, and the microphone)
     $("voiceBtn").hidden = !(r.canListen && navigator.mediaDevices && !window.KHANA_NO_MIC);
     // (speech to text: the Mac app carries the model; a live recording also needs the microphone)

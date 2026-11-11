@@ -22,7 +22,7 @@ permissions:
 env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: "v1.5"
+  MODELS_RELEASE: "v1.6"
 
 jobs:
   build:
@@ -160,6 +160,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v1.5"
+          tag="v1.6"
           ls -la zips
           gh release upload "$tag" zips/*.zip --clobber

@@ -55,6 +55,7 @@ public final class JobService extends Service {
 
     private void check() {
         new Thread(() -> {
+            tellBattery();
             Exporter.drain(this);
             if (Native.busy()) {
                 handler.postDelayed(this::check, CHECK_MS);
@@ -63,6 +64,21 @@ public final class JobService extends Service {
                 handler.post(this::stopSelf);
             }
         }, "khana-job-check").start();
+    }
+
+    /** The battery's state for the core: a long job waits while it is at 20 % or less and not charging (tts::wait_for_power). */
+    private void tellBattery() {
+        try {
+            Intent b = registerReceiver(null, new android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            if (b == null) return;
+            int level = b.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1), scale = b.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100);
+            if (level < 0 || scale <= 0) return;
+            boolean charging = b.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0;
+            Native.handle(Native.utf8("POST"), Native.utf8("/api/power"), Native.utf8("percent=" + (100 * level / scale) + "&charging=" + (charging ? 1 : 0)),
+                    Native.token(), Native.utf8("{}"));
+        } catch (Throwable e) {
+            // (no battery state: the job goes on)
+        }
     }
 
     @Override

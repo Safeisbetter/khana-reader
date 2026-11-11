@@ -91,6 +91,8 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        // (secure from the first moment; applyScreenGuard lifts it only if the reader chose so)
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
         outer.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
@@ -187,6 +189,9 @@ public final class MainActivity extends Activity implements Exporter.Asker {
                 Exporter.unsaved(out);
             }
         }
+        current = this;
+        applyScreenGuard();
+        watchHeat();
         maybeBench(getIntent());
     }
 
@@ -213,6 +218,8 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         s.setMediaPlaybackRequiresUserGesture(false); // (reading aloud plays page after page)
         s.setTextZoom(100);
+        // (nothing typed in the page, the password of a PDF least of all, is offered to the phone's «autofill» service)
+        web.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         web.setWebViewClient(new Client());
         web.setWebChromeClient(new Chrome());
         web.setDownloadListener((url, ua, cd, mime, len) -> { }); // (nothing is downloaded)
@@ -358,12 +365,68 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         }
     }
 
+    /**
+     * The phone's own word on how hot it is (Android 10 and newer) is passed to the core, which slows its heavy work when the
+     * phone is hot and waits when it is very hot (tts::cool_down): a phone that overheats shuts apps down, or itself.
+     */
+    private void watchHeat() {
+        if (android.os.Build.VERSION.SDK_INT < 29) return;
+        try {
+            android.os.PowerManager pm = getSystemService(android.os.PowerManager.class);
+            pm.addThermalStatusListener(getMainExecutor(), status -> {
+                // (Android: 0 none, 1 light, 2 moderate, 3 severe, 4 critical and more)
+                final int level = status >= 4 ? 3 : status == 3 ? 2 : status == 2 ? 1 : 0;
+                new Thread(() -> {
+                    try {
+                        Native.handle(Native.utf8("POST"), Native.utf8("/api/heat"), Native.utf8("level=" + level), Native.token(), Native.utf8("{}"));
+                    } catch (Throwable e) {
+                        // (the core is not ready yet: the next change tells it)
+                    }
+                }, "khana-heat").start();
+            });
+        } catch (Throwable e) {
+            // (no thermal service on this phone: the work goes on as usual)
+        }
+    }
+
+    private static volatile MainActivity current;
+
+    /**
+     * The screen guard: unless the reader allows screenshots in Settings, the window is marked secure. Then no other app can
+     * photograph or record this screen (a screen recorder, a «screen sharing» app), and the list of recent apps shows a blank
+     * card instead of the page being read. Asked again whenever the settings are saved (Server).
+     */
+    static void applyScreenGuard() {
+        final MainActivity a = current;
+        if (a == null) return;
+        boolean allow = false;
+        try {
+            Native.Reply r = new Native.Reply(Native.handle(Native.utf8("GET"), Native.utf8("/api/init"), Native.utf8(""), Native.token(), null));
+            allow = Native.text(r.body).replace(" ", "").contains("\"allowScreenshots\":true");
+        } catch (Throwable e) {
+            allow = false;
+        }
+        final boolean secure = !allow;
+        a.runOnUiThread(() -> {
+            if (secure) a.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+            else a.getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+        });
+    }
+
     /** A developer's speed test (Bench), only when it is asked for over USB with USB debugging switched on. */
+    /** The developer's tests (Bench) exist only in a developer's own build: the public download is built with this false (android/build.sh). */
+    static final boolean DEV_TOOLS = true;
+
     private void maybeBench(Intent it) {
-        if (it == null || !it.getBooleanExtra("khana_bench", false)) return;
+        if (!DEV_TOOLS || it == null) return;
+        boolean bench = it.getBooleanExtra("khana_bench", false);
+        String test = it.getStringExtra("khana_test");
+        if (!bench && test == null) return;
         if (android.provider.Settings.Global.getInt(getContentResolver(), android.provider.Settings.Global.ADB_ENABLED, 0) != 1) return;
         it.removeExtra("khana_bench");
-        new Thread(Bench::run, "khana-bench").start();
+        it.removeExtra("khana_test");
+        if (bench) new Thread(Bench::run, "khana-bench").start();
+        else if ("library".equals(test)) new Thread(Bench::library, "khana-bench").start();
     }
 
     @Override

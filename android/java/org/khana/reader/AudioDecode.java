@@ -86,7 +86,7 @@ final class AudioDecode {
             }
             return wav(pcm.toByteArray(), rate, channels);
         } catch (Exception e) {
-            Log.w("Khana", "decoding the voice sample: " + e);
+            Log.w("Khana", "decoding the voice sample failed: " + e.getClass().getSimpleName());
             return null;
         } finally {
             if (codec != null) {

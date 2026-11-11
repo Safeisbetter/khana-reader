@@ -71,8 +71,31 @@
     tip.textContent = "تا پایان کار، خوانا را روی صفحه نگه دارید (صفحه خودش روشن می‌ماند). اگر برنامه‌ی دیگری را باز کنید یا صفحه را خاموش کنید، کار ادامه دارد اما چند برابر کندتر.";
     st.appendChild(tip);
   }
+  // The screen guard (MainActivity.applyScreenGuard): on unless the reader switches it off here.
+  const forget = $("forgetField");
+  if (forget) {
+    const f = document.createElement("div");
+    f.className = "field";
+    const lab = document.createElement("label");
+    lab.className = "check";
+    const box = document.createElement("input");
+    box.type = "checkbox"; box.id = "allowShots";
+    box.checked = !!(S.settings && S.settings.allowScreenshots);
+    box.onchange = () => setSetting("allowScreenshots", box.checked);
+    const txt = document.createElement("span");
+    txt.textContent = "اجازه‌ی عکس و فیلم گرفتن از صفحه‌ی خوانا";
+    lab.append(box, txt);
+    const tip = document.createElement("p");
+    tip.className = "editnote";
+    tip.textContent = "خاموش (پیش‌فرض، امن‌تر): هیچ برنامه‌ی دیگری نمی‌تواند از صفحه‌ی خوانا عکس یا فیلم بگیرد و در فهرست برنامه‌های اخیر هم متن دیده نمی‌شود. خودتان هم نمی‌توانید اسکرین‌شات بگیرید؛ برای آن، این را روشن کنید.";
+    f.append(lab, tip);
+    forget.parentNode.insertBefore(f, forget);
+    // (the settings come after this page is built: the box follows them whenever they are applied)
+    const applied = window.applySettings;
+    window.applySettings = function () { applied.apply(this, arguments); box.checked = !!(S.settings && S.settings.allowScreenshots); };
+  }
   const reveal = $("mp3Reveal");
-  if (reveal) reveal.textContent = "ذخیره / باز کردن";
+  if (reveal) reveal.textContent = "فایل‌های من / ذخیره";
 })();
 
 /* The public download has no microphone permission (window.KHANA_NO_MIC, set when it is built): recording is hidden, a voice

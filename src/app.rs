@@ -45,6 +45,21 @@ pub fn save_dir() -> PathBuf {
     crate::platform::save_dir()
 }
 
+fn library_dir() -> Option<PathBuf> {
+    if let Ok(d) = std::env::var("KHANA_LIBRARY_DIR") {
+        return Some(PathBuf::from(d));
+    }
+    if cfg!(shell) { Some(save_dir()) } else { None }
+}
+
+fn library_file(name: &str) -> Option<PathBuf> {
+    let dir = library_dir()?;
+    let plain = !name.is_empty() && !name.contains('/') && !name.contains('\\') && !name.starts_with('.') && name.chars().count() <= 200;
+    let sound = name.ends_with(".mp3") || name.ends_with(".wav");
+    let p = dir.join(name);
+    (plain && sound && p.is_file()).then_some(p)
+}
+
 fn has_engine() -> bool {
     models_dir().join("parsigo/model/onnx/flow_lm_step.onnx").is_file()
 }
@@ -68,7 +83,7 @@ fn all_voices() -> Vec<(String, String, String, String)> {
 fn default_settings() -> Map<String, Value> {
     let first = voices().first().map(|v| v.id).unwrap_or("");
     let v = json!({"voice": first, "speed": 1.0, "fontSize": 21, "reversed": false, "persianYeh": true, "autoNext": true,
-                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "commaPause": "normal", "cursor": "large"});
+                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "commaPause": "normal", "cursor": "large"});
     v.as_object().unwrap().clone()
 }
 
@@ -336,7 +351,7 @@ impl Job {
         let done = *self.done_chars.lock().unwrap() as f64;
         let total = (*self.total_chars.lock().unwrap()).max(1) as f64;
         json!({"id": self.id, "status": *self.status.lock().unwrap(), "error": *self.error.lock().unwrap(),
-               "progress": (done / total).min(1.0), "seconds": self.seconds.lock().unwrap().round() as i64,
+               "heat": tts::heat(), "lowBattery": tts::low_battery(), "progress": (done / total).min(1.0), "seconds": self.seconds.lock().unwrap().round() as i64,
                "filename": self.filename,
                "saved": self.saved.lock().unwrap().as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()})
     }
@@ -460,6 +475,7 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
         }
         let cancel = || job.cancelled.load(Ordering::SeqCst);
         for group in groups {
+            tts::wait_for_power(&cancel);
             if cancel() {
                 return Err("cancelled".into());
             }
@@ -552,6 +568,8 @@ fn run_pdf_job(job: Arc<Job>, doc: Arc<Document>, first: usize, last: usize, opt
             if job.cancelled.load(Ordering::SeqCst) {
                 return Err("cancelled".into());
             }
+            tts::wait_for_power(&|| job.cancelled.load(Ordering::SeqCst));
+            tts::cool_down();
             let paras: Vec<String> = doc.page_text(n, opts).into_iter().filter(|p| p != crate::doc::PICTURE_PAGE).collect();
             if !paras.is_empty() {
                 pages.push((format!("صفحه {}", fa_digits(n)), paras));
@@ -809,6 +827,7 @@ impl App {
             "init_get" => {
                 let voices: Vec<Value> = all_voices().into_iter().map(|(id, name, gender, group)| json!({"id": id, "name": name, "gender": gender, "group": group})).collect();
                 let mut v = json!({"settings": load_settings(), "voices": voices, "canListen": crate::asr::ready(), "canWrite": crate::stt::available()});
+                v["library"] = json!(library_dir().is_some());
                 if std::env::var("KHANA_SELFTEST").is_ok() {
                     v["testData"] = json!(!data_dir().to_string_lossy().contains("/Containers/"));
                     v["screenTest"] = json!(std::env::var("KHANA_SELFTEST_SCREEN").is_ok());
@@ -847,6 +866,15 @@ impl App {
                 let _ = std::fs::remove_dir_all(data_dir().join("edits"));
                 let _ = std::fs::remove_file(my_voice());
                 let _ = std::fs::remove_file(settings_file());
+                if let Some(dir) = library_dir() {
+                    if let Ok(d) = std::fs::read_dir(&dir) {
+                        for e in d.flatten() {
+                            if library_file(&e.file_name().to_string_lossy()).is_some() {
+                                let _ = std::fs::remove_file(e.path());
+                            }
+                        }
+                    }
+                }
                 sweep_temp(true);
                 Ok(reply_json(&json!({"ok": true})))
             }
@@ -1112,6 +1140,15 @@ impl App {
                 Ok(reply_json(&json!({"voice_model": p[0], "sound_decoder": p[1], "checks": p[2], "listening": p[3], "listen_now": tts::LISTEN.load(Ordering::Relaxed),
                                      "speed_seen": *READ_SPEED.lock().unwrap()})))
             }
+            "power_post" => {
+                let pct = q.get("percent").and_then(|v| v.parse::<u8>().ok()).unwrap_or(100);
+                tts::set_power(pct, q.get("charging").is_some_and(|v| v == "1"));
+                Ok(reply_json(&json!({"lowBattery": tts::low_battery()})))
+            }
+            "heat_post" => {
+                tts::set_heat(q.get("level").and_then(|v| v.parse::<u8>().ok()).unwrap_or(0));
+                Ok(reply_json(&json!({"heat": tts::heat()})))
+            }
             "tts_post" => {
                 let req = body_json()?;
                 let text: String = strip(req.get("text").and_then(|v| v.as_str()).unwrap_or("")).chars().take(5000).collect();
@@ -1198,6 +1235,37 @@ impl App {
                 if let Some(j) = self.jobs.lock().unwrap().get(q.get("id").map(|s| s.as_str()).unwrap_or("")) {
                     j.cancelled.store(true, Ordering::SeqCst);
                 }
+                Ok(reply_json(&json!({"ok": true})))
+            }
+            "library_get" => {
+                let mut files: Vec<Value> = Vec::new();
+                if let Some(dir) = library_dir() {
+                    let mut all: Vec<(std::time::SystemTime, String, u64)> = std::fs::read_dir(&dir).map(|d| d.flatten().filter_map(|e| {
+                        let name = e.file_name().to_string_lossy().into_owned();
+                        let m = e.metadata().ok()?;
+                        library_file(&name).map(|_| (m.modified().unwrap_or(std::time::UNIX_EPOCH), name, m.len()))
+                    }).collect()).unwrap_or_default();
+                    all.sort_by(|a, b| b.0.cmp(&a.0));
+                    files = all.into_iter().take(500).map(|(_, name, bytes)| json!({"name": name, "bytes": bytes})).collect();
+                }
+                Ok(reply_json(&json!({"enabled": library_dir().is_some(), "files": files})))
+            }
+            "library_file_get" => {
+                let p = library_file(q.get("name").map(|s| s.as_str()).unwrap_or("")).ok_or_else(|| ApiError::NotFound("فایل پیدا نشد.".into()))?;
+                if p.metadata().map(|m| m.len()).unwrap_or(0) > 200 * 1024 * 1024 {
+                    return Err(bad("این فایل برای پخش در خودِ برنامه خیلی بزرگ است (بیشتر از ۲۰۰ مگابایت). آن را با «ذخیره در گوشی…» بیرون ببرید."));
+                }
+                let data = std::fs::read(&p).map_err(|e| ApiError::Internal(e.to_string()))?;
+                Ok(Reply { status: 200, ctype: if p.extension().is_some_and(|e| e == "wav") { "audio/wav" } else { "audio/mpeg" }, body: data, headers: Vec::new() })
+            }
+            "library_delete_post" => {
+                let p = library_file(q.get("name").map(|s| s.as_str()).unwrap_or("")).ok_or_else(|| ApiError::NotFound("فایل پیدا نشد.".into()))?;
+                std::fs::remove_file(&p).map_err(|e| ApiError::Internal(e.to_string()))?;
+                Ok(reply_json(&json!({"ok": true})))
+            }
+            "library_export_post" => {
+                let p = library_file(q.get("name").map(|s| s.as_str()).unwrap_or("")).ok_or_else(|| ApiError::NotFound("فایل پیدا نشد.".into()))?;
+                crate::platform::reveal(&p);
                 Ok(reply_json(&json!({"ok": true})))
             }
             "reveal_post" => {

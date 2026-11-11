@@ -25,6 +25,50 @@ fn lap(slot: usize, t: std::time::Instant) {
     PROFILE[slot].fetch_add(t.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
 }
 
+static HEAT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+pub fn set_heat(level: u8) {
+    HEAT.store(level.min(3), std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn heat() -> u8 {
+    HEAT.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub fn cool_down() {
+    match heat() {
+        0 => {}
+        1 => std::thread::sleep(std::time::Duration::from_millis(300)),
+        2 => std::thread::sleep(std::time::Duration::from_millis(1500)),
+        _ => {
+            for _ in 0..150 {
+                if heat() < 3 {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_secs(2));
+            }
+        }
+    }
+}
+
+static LOW_BATTERY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_power(percent: u8, charging: bool) {
+    let low = LOW_BATTERY.load(std::sync::atomic::Ordering::Relaxed);
+    let now = !charging && (percent <= 20 || low && percent <= 25);
+    LOW_BATTERY.store(now, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn low_battery() -> bool {
+    LOW_BATTERY.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub fn wait_for_power(cancelled: &dyn Fn() -> bool) {
+    while low_battery() && !cancelled() {
+        std::thread::sleep(std::time::Duration::from_secs(2));
+    }
+}
+
 pub fn set_max_tries(n: usize) {
     MAX_TRIES.store(n.clamp(1, PACE_TRIES), std::sync::atomic::Ordering::Relaxed);
 }
@@ -459,7 +503,8 @@ impl Engine {
         if n == 0 {
             return 1.0;
         }
-        (0..n).filter(|i| rms(&speech[i * w..(i + 1) * w]) >= 0.05).count() as f64 / n as f64
+        let floor = 0.05f64.min(0.5 * rms(speech));
+        (0..n).filter(|i| rms(&speech[i * w..(i + 1) * w]) >= floor).count() as f64 / n as f64
     }
 
     fn speech_bounds(&self, p: &[f32]) -> (usize, usize) {
@@ -580,6 +625,7 @@ impl Engine {
                 PROFILE[4].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
             let t = std::time::Instant::now();
+            cool_down();
             let latents = self.generate_chunk(voice, chunk, rng)?;
             lap(0, t);
             let t = std::time::Instant::now();
@@ -623,7 +669,12 @@ impl Engine {
             if heard_clean {
                 dur_ok = solid <= 1.6 * expected_loose;
             }
-            if loud_ok && same_voice && words_ok && dur_ok && (pace_ok || heard_clean) && frac >= 0.55 && dead <= 0.35 {
+            if std::env::var("KHANA_TAKES").is_ok() {
+                eprintln!("TAKE {} {}: loud {} same_voice {} words {} dur {} pace {} (ratio {:.2}) solid {:.2} dead {:.2} heard {:?} missing {} len {:.1}s",
+                          voice.id, take, loud_ok, same_voice, words_ok, dur_ok, pace_ok, ratio, frac, dead, heard.map(|h| (h * 100.0).round()), missing.len(), dur);
+            }
+            let solid_ok = frac >= 0.55 || heard_clean && frac >= 0.40;
+            if loud_ok && same_voice && words_ok && dur_ok && (pace_ok || heard_clean) && solid_ok && dead <= 0.35 {
                 if pace_ok && tokens >= 6 && solid > 0.2 {
                     let mut p = self.pace.lock().unwrap();
                     let v = p.entry(voice.id.to_string()).or_default();
@@ -885,4 +936,5 @@ pub fn speech_clean(text: &str) -> String {
     let t = sub(r"(?<![\w\x{200c}])ص(?:\.\s*|\s+)(?=[\d۰-۹])", "صفحه\u{200c}ی ", &t);
     sub(r"(?<!\S)[^\w\s«»()]+(?!\S)", " ", &t)
 }
+
 

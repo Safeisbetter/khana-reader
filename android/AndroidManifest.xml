@@ -28,6 +28,7 @@
         android:largeHeap="true"
         android:extractNativeLibs="true"
         android:usesCleartextTraffic="false"
+        android:allowAudioPlaybackCapture="false"
         android:memtagMode="async"
         android:supportsRtl="true"
         android:enableOnBackInvokedCallback="true"

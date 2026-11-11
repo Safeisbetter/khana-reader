@@ -59,6 +59,22 @@ addEventListener("load", () => setTimeout(async () => {
       }
       await setSetting("theme", "auto");
       await say("looks: " + seen.join(" | "));
+      // the page's width and margin, the search in the settings, the click sound, the heat message
+      const tv = $("textView");
+      const w0 = Math.round(tv.getBoundingClientRect().width), p0 = parseFloat(getComputedStyle(tv).paddingLeft);
+      await setSetting("pageWidth", 30); const w1 = Math.round(tv.getBoundingClientRect().width);
+      await setSetting("pageWidth", 100); const w2 = Math.round(tv.getBoundingClientRect().width);
+      await setSetting("pageMargin", 20); const p1 = parseFloat(getComputedStyle(tv).paddingLeft);
+      await setSetting("pageWidth", 46); await setSetting("pageMargin", 100);
+      $("setFind").value = "قلم"; $("setFind").oninput();
+      const fields = [...document.querySelectorAll("#settings .panel-body > .field")], shown = fields.filter(f => !f.hidden).length;
+      $("setFind").value = "zzzz"; $("setFind").oninput(); const none = !$("setNone").hidden;
+      $("setFind").value = ""; $("setFind").oninput();
+      let tone = "no";
+      try { await setSetting("clickSound", true); clickTone(true); tone = clickCtx ? clickCtx.state : "no engine"; await setSetting("clickSound", false); } catch (e) { tone = "ERROR " + e; }
+      const fileFs = getComputedStyle($("fileName")).fontSize;
+      const heat = await jpost("/api/heat?level=2", {}); const back = await jpost("/api/heat?level=0", {});
+      await say(`page: width ${w0} -> ${w1} (narrow) -> ${w2} (whole window, window ${innerWidth}); side margin ${p0} -> ${p1} (small); settings search «قلم»: ${shown} of ${fields.length} shown, a wrong word says «not found» ${none}; click sound engine ${tone}; book name ${fileFs}; heat told ${heat.heat} then ${back.heat}`);
     } catch (e) { await say("looks: ERROR " + e); }
     try {
       // the layout: the player at the foot of the window, inside it, not over the top bar; nothing wider than the window
@@ -229,6 +245,19 @@ addEventListener("load", () => setTimeout(async () => {
     while (mjob.status === "running" && Date.now() - t0 < 300000) { await new Promise(r => setTimeout(r, 2000)); mjob = await jget("/api/job?id=" + mjob.id); }
     await say("mp3: " + mjob.status + " " + (mjob.error || "") + " saved as " + mjob.saved + " (" + mjob.seconds + " s) in " + Math.round((Date.now() - t0) / 1000) + " s");
     try {
+      // a low battery holds a saving job, the charger lets it go on
+      await jpost("/api/power?percent=10&charging=0", {});
+      const lj = await jpost("/api/mp3", { doc: S.doc.id, first: Math.min(2, S.doc.pages), last: Math.min(2, S.doc.pages), voice: "khabari", speed: 1.0, bitrate: 64 });
+      await new Promise(r => setTimeout(r, 5000));
+      const held = await jget("/api/job?id=" + lj.id);
+      job = lj; saveKind = "mp3"; await poll(); clearTimeout(pollT);
+      const said = $("mp3Text").textContent;
+      await jpost("/api/power?percent=10&charging=1", {});
+      let after = held;
+      for (let k = 0; k < 120 && after.status === "running"; k++) { await new Promise(r => setTimeout(r, 500)); after = await jget("/api/job?id=" + lj.id); }
+      await say("low battery: job held " + held.lowBattery + " at " + Math.round(held.progress * 100) + "% (" + held.status + "), window says «" + said.slice(0, 40) + "…»; with the charger: " + after.status + ", low " + after.lowBattery);
+    } catch (e) { await say("low battery: ERROR " + e); }
+    try {
       // the saving window's numbers: the percent with its sign at the right, and the time left from a made-up half-done job
       job = mjob; saveKind = "mp3"; await poll();
       jobClock = { id: "x", t0: Date.now() - 600000 };
@@ -255,14 +284,34 @@ addEventListener("load", () => setTimeout(async () => {
   const d = document.createElement("div"); d.setAttribute("style", "color: red"); document.body.appendChild(d);
   await new Promise(r => setTimeout(r, 300));
   await say("inline script ran " + !!window.__inlineRan + ", inline style applied " + (getComputedStyle(d).color === "rgb(255, 0, 0)") + ", refusals " + (cspViolations.length - before));
+  // «فایل‌های من» (only where the app has such a folder; on the Mac with KHANA_LIBRARY_DIR for this test): listed, played, a copy asked for, deleted
+  try {
+    if (S.library) {
+      $("libBtn").click();
+      await new Promise(r => setTimeout(r, 800));
+      const rows = () => document.querySelectorAll("#libList .librow").length;
+      const n0 = rows();
+      const first = document.querySelector("#libList .librow");
+      first.querySelector("button.primary").click();
+      await new Promise(r => setTimeout(r, 2500));
+      const au = $("libAudio");
+      const playing = !au.paused, dur = au.duration, from = (au.src || "").slice(0, 5);
+      const dels = [...first.querySelectorAll("button")].pop();
+      dels.click(); const asked = dels.textContent; dels.click();
+      await new Promise(r => setTimeout(r, 1200));
+      await say("my files: button shown " + !$("libBtn").hidden + ", listed " + n0 + ", first «" + first.querySelector(".name").textContent + "», playing " + playing + " (" + (dur || 0).toFixed(1) + " s, from " + from + "), delete asks «" + asked + "», after it " + rows() + " left, player hidden " + $("libPlayer").hidden);
+      $("libPanel").hidden = true;
+    } else await say("my files: this build has no such folder (button hidden " + $("libBtn").hidden + ")");
+  } catch (e) { await say("my files: ERROR " + e); }
   // «پاک کردن همه‌ی ردها»: only where the test's own data folder is used (the program run from its build folder, not the app)
   try {
     if ((await jget("/api/init")).testData === true) {
+      const libBefore = S.library ? (await jget("/api/library")).files.length : -1;
       await jpost("/api/settings", { speed: 1.25 });
       const before = (await jget("/api/init")).settings.speed;
       const r = await jpost("/api/forget", {});
       const after = (await jget("/api/init")).settings.speed;
-      await say("forget: button there " + !!$("forgetAll") + ", answered " + JSON.stringify(r) + ", speed setting " + before + " -> " + after);
+      await say("forget: button there " + !!$("forgetAll") + ", answered " + JSON.stringify(r) + ", speed setting " + before + " -> " + after + (S.library ? ", my files " + libBefore + " -> " + (await jget("/api/library")).files.length : ""));
     } else await say("forget: not run on the app's real data");
   } catch (e) { await say("forget: ERROR " + e); }
   await say("DONE");

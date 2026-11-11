@@ -478,3 +478,75 @@ body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: 108p
 @media (prefers-contrast: more) {
   :root[data-theme^="glass"] .bar, :root[data-theme^="glass"] .dock, :root[data-theme^="glass"] .panel-body, :root[data-theme^="glass"] .welcome { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
+
+/* «فایل‌های من»: the sound files kept inside the app */
+#libAudio { width: 100%; }
+.librow { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--surface); }
+.librow .name { font-weight: 600; overflow-wrap: anywhere; unicode-bidi: plaintext; }
+.librow .acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.librow .size { color: var(--muted); font-size: 14px; margin-inline-end: auto; }
+
+/* ---- the reader's own page: how wide the text runs and how much room is left round it (Settings) ---- */
+.text { max-width: min(100%, var(--pw, 46em)); padding: calc(clamp(26px, 6vw, 72px) * var(--pm, 1)) calc(clamp(20px, 6vw, 84px) * var(--pm, 1)); }
+#note { max-width: min(100%, var(--pw, 46em)); }
+.sheet { max-width: max(980px, calc(var(--pw, 46em) + 40px)); }
+@media (max-width: 600px) { .text { padding: calc(26px * var(--pm, 1)) calc(18px * var(--pm, 1)); } }
+
+/* the open book's name: small, out of the way */
+.file { font-size: 13px; padding: 2px 10px; max-width: min(26vw, 220px); opacity: .85; }
+@media (max-width: 640px) { .file { max-width: 44vw; } }
+
+/* finding a setting: a search box that stays in sight under the title */
+.setfind { position: sticky; top: 62px; z-index: 2; background: var(--paper); padding-bottom: 8px; margin-bottom: -6px; }
+.setfind input { width: 100%; border-radius: 99px; padding-inline: 18px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+:root[data-theme^="glass"] .setfind { background: transparent; }
+.field.found { outline: 3px solid var(--lapis); outline-offset: 2px; }
+
+/* ---- the 3-D looks: every control stands out of the page, lit from above, and goes down when pressed (as the icons of a phone's
+   home screen look). Gradients and shadows only: nothing that costs the device time. ---- */
+:root[data-theme="depth"] {
+  --paper: #E4E8F0; --surface: #F7F9FC; --ink: #151B28; --muted: #515B6C; --line: #C3CAD8; --lapis: #2458B8; --lapis-ink: #FFFFFF; --turq: #0E7F7B;
+  --mark: #FFE08A; --mark-ink: #1A2130; --reading: #DCE7FB; --danger: #B3261E; --shade: rgba(16, 24, 40, .35); --page: #FFFDF7; --page-edge: #D9D2BF;
+  --up-top: #FFFFFF; --up-bot: #DDE3EE; --up-edge: #AEB7C7; --up-drop: rgba(16, 24, 40, .22); color-scheme: light;
+}
+:root[data-theme="depthdark"] {
+  --paper: #0F1116; --surface: #1B1F28; --ink: #EDEFF4; --muted: #A4ABB9; --line: #333A48; --lapis: #86ADF5; --lapis-ink: #0B1220; --turq: #4CC2BC;
+  --mark: #7A6418; --mark-ink: #FFF6D8; --reading: #1F2C44; --danger: #F2827A; --shade: rgba(0, 0, 0, .6); --page: #15181F; --page-edge: #2B313D;
+  --up-top: #343B4A; --up-bot: #1E232D; --up-edge: #0A0C10; --up-drop: rgba(0, 0, 0, .55); color-scheme: dark;
+}
+:root[data-theme^="depth"] body { background: linear-gradient(var(--surface), var(--paper) 420px), var(--paper); background-attachment: fixed; }
+:root[data-theme^="depth"] button, :root[data-theme^="depth"] .btn, :root[data-theme^="depth"] .seg, :root[data-theme^="depth"] .speedctl {
+  background: linear-gradient(var(--up-top), var(--up-bot)); border: 1px solid var(--up-edge); border-radius: 16px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent), inset 0 -2px 0 color-mix(in srgb, #000 8%, transparent), 0 3px 0 var(--up-edge), 0 7px 14px var(--up-drop);
+  transition: transform .06s, box-shadow .06s;
+}
+:root[data-theme^="depth"] button:active:not(:disabled), :root[data-theme^="depth"] .btn:active {
+  transform: translateY(3px); background: linear-gradient(var(--up-bot), var(--up-top));
+  box-shadow: inset 0 2px 5px color-mix(in srgb, #000 25%, transparent), 0 0 0 var(--up-edge), 0 2px 4px var(--up-drop);
+}
+:root[data-theme^="depth"] .seg button, :root[data-theme^="depth"] .speedctl button { background: transparent; border: 0; box-shadow: none; border-radius: 12px; }
+:root[data-theme^="depth"] .seg button.on, :root[data-theme^="depth"] .on:not(.seg button) {
+  background: linear-gradient(color-mix(in srgb, var(--lapis) 26%, var(--up-bot)), color-mix(in srgb, var(--lapis) 14%, var(--up-top)));
+  box-shadow: inset 0 2px 5px color-mix(in srgb, #000 22%, transparent); color: var(--lapis);
+}
+:root[data-theme^="depth"] .primary, :root[data-theme^="depth"] button.primary:active:not(:disabled) {
+  background: linear-gradient(color-mix(in srgb, var(--lapis) 78%, #fff), var(--lapis) 55%, color-mix(in srgb, var(--lapis) 78%, #000));
+  border-color: color-mix(in srgb, var(--lapis) 60%, #000); color: var(--lapis-ink);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent), 0 3px 0 color-mix(in srgb, var(--lapis) 55%, #000), 0 9px 18px color-mix(in srgb, var(--lapis) 40%, transparent);
+  text-shadow: 0 1px 0 color-mix(in srgb, #000 30%, transparent);
+}
+:root[data-theme^="depth"] button.primary:active:not(:disabled) { box-shadow: inset 0 3px 6px color-mix(in srgb, #000 35%, transparent); }
+:root[data-theme^="depth"] .bar, :root[data-theme^="depth"] .dock, :root[data-theme^="depth"] .welcome, :root[data-theme^="depth"] .panel-body > .field {
+  background: linear-gradient(var(--surface), color-mix(in srgb, var(--surface) 88%, var(--paper))); border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 45%, transparent), 0 8px 22px var(--up-drop);
+}
+:root[data-theme^="depth"] .bar { border-width: 0 0 1px; }
+:root[data-theme^="depth"] .search input, :root[data-theme^="depth"] .pager input, :root[data-theme^="depth"] input[type="text"], :root[data-theme^="depth"] select, :root[data-theme^="depth"] .setfind input {
+  background: var(--surface); border: 1px solid var(--up-edge); box-shadow: inset 0 2px 4px color-mix(in srgb, #000 16%, transparent);
+}
+:root[data-theme^="depth"] .text { box-shadow: 0 1px 0 var(--page-edge), 0 3px 0 color-mix(in srgb, var(--page-edge) 70%, transparent), 0 18px 40px var(--up-drop); }
+:root[data-theme^="depth"] .file, :root[data-theme^="depth"] .formats span { background: var(--surface); border: 1px solid var(--line); box-shadow: inset 0 1px 3px color-mix(in srgb, #000 14%, transparent); }
+@media (prefers-reduced-motion: reduce) { :root[data-theme^="depth"] button:active:not(:disabled), :root[data-theme^="depth"] .btn:active { transform: none; } }
+
+/* the device is hot: said in the saving window */
+.hot { color: var(--danger); font-weight: 600; }

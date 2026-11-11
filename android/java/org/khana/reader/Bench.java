@@ -31,6 +31,48 @@ final class Bench {
         return r.status == 200 ? Math.max(0, r.body.length - 44) / 2.0 / 24000.0 : -1;
     }
 
+    private static Native.Reply callq(String method, String path, String query, byte[] body) {
+        return new Native.Reply(Native.handle(Native.utf8(method), Native.utf8(path), Native.utf8(query), Native.token(), body));
+    }
+
+    private static String field(String json, String key) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"" + key + "\"\\s*:\\s*\"?([^\",}]*)").matcher(json);
+        return m.find() ? m.group(1) : "";
+    }
+
+    /**
+     * «فایل‌های من», checked on the device (`--es khana_test library`): a short text is opened, made into an MP3 as the save window
+     * does, and the file must then be in the app's own folder, readable through the app, and gone after it is deleted.
+     */
+    static void library() {
+        try {
+            String text = "این یک آزمایش کوتاه است. فایل باید داخل برنامه بماند.";
+            String doc = Native.text(callq("POST", "/api/open", "name=test.txt", Native.utf8(text)).body);
+            String id = field(doc, "id");
+            String job = Native.text(callq("POST", "/api/mp3", "", Native.utf8("{\"doc\":\"" + id + "\",\"first\":1,\"last\":1,\"voice\":\"khabari\",\"speed\":1.0,\"bitrate\":64}")).body);
+            String jid = field(job, "id");
+            String st = "";
+            for (int k = 0; k < 240; k++) {
+                Thread.sleep(500);
+                st = Native.text(callq("GET", "/api/job", "id=" + jid, null).body);
+                if (!field(st, "status").equals("running")) break;
+            }
+            String events = Native.text(Native.takeEvents()).replaceAll("\t.*/", " <app folder>/");
+            String list = Native.text(callq("GET", "/api/library", "", null).body);
+            String name = field(list, "name");
+            Native.Reply file = callq("GET", "/api/library_file", "name=" + java.net.URLEncoder.encode(name, "UTF-8"), null);
+            // (only the test's own file is ever deleted: never a file of the reader's, should the test's file be missing)
+            Native.Reply del = name.startsWith("test - ") ? callq("POST", "/api/library_delete", "name=" + java.net.URLEncoder.encode(name, "UTF-8"), Native.utf8("{}"))
+                    : callq("GET", "/api/library", "", null);
+            String after = Native.text(callq("GET", "/api/library", "", null).body);
+            Log.i("KhanaBench", "library: document opened " + !id.isEmpty() + "; job " + field(st, "status") + " " + field(st, "error") + "; core told the shell: " + events.trim()
+                    + "; listed " + list.length() + " chars, first file «" + name + "»; read back " + file.status + " " + file.body.length + " bytes; deleted " + del.status
+                    + "; list after: " + after);
+        } catch (Throwable e) {
+            Log.e("KhanaBench", "library test failed", e);
+        }
+    }
+
     static void run() {
         try {
             Log.i("KhanaBench", "start; cores " + Runtime.getRuntime().availableProcessors());

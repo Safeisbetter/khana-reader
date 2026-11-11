@@ -59,7 +59,9 @@ final class Exporter {
         for (File f : fs) {
             String n = f.getName();
             if (byPath.containsKey(f.getPath())) continue;
-            if (n.endsWith(".mp3") || n.endsWith(".wav") || n.endsWith(".pdf")) add(new Saved(f, n.endsWith(".mp3") ? "mp3" : n.endsWith(".wav") ? "wav" : "pdf"));
+            // (a sound file stays in the app, in «فایل‌های من»: only a PDF, which is made at the moment it is saved, is offered again)
+            if (n.endsWith(".mp3") || n.endsWith(".wav")) byPath.put(f.getPath(), new Saved(f, n.endsWith(".mp3") ? "mp3" : "wav"));
+            else if (n.endsWith(".pdf")) add(new Saved(f, "pdf"));
         }
     }
 
@@ -75,12 +77,22 @@ final class Exporter {
             if (tab < 0) continue;
             String kind = line.substring(0, tab);
             File f = new File(line.substring(tab + 1));
-            if (kind.equals("mp3") || kind.equals("wav") || kind.equals("pdf")) {
+            if (kind.equals("mp3") || kind.equals("wav")) {
+                // (kept inside the app: no «save as» screen until the reader asks for a copy, «ذخیره در گوشی…»)
+                byPath.put(f.getPath(), new Saved(f, kind));
+            } else if (kind.equals("pdf")) {
                 add(new Saved(f, kind));
             } else if (kind.equals("reveal")) {
                 Saved s = byPath.get(f.getPath());
+                if (s == null && f.isFile() && (f.getName().endsWith(".mp3") || f.getName().endsWith(".wav"))) {
+                    s = new Saved(f, f.getName().endsWith(".mp3") ? "mp3" : "wav");
+                    byPath.put(f.getPath(), s);
+                }
                 if (s == null) continue;
-                if (s.uri != null) {
+                if (!s.kind.equals("pdf")) {
+                    // (a sound file of the library: a copy may be saved as often as the reader likes)
+                    if (!waiting.contains(s)) waiting.addFirst(s);
+                } else if (s.uri != null) {
                     // (saved already: not handed to another app; it is in the place chosen, for the Files app)
                     main.post(() -> Toast.makeText(ctx.getApplicationContext(), "این فایل ذخیره شده است. آن را در برنامه‌ی «فایل‌ها» باز کنید.", Toast.LENGTH_LONG).show());
                 }
@@ -111,7 +123,7 @@ final class Exporter {
             asking = false;
         }
         if (u == null) {
-            Toast.makeText(ctx, "فایل ذخیره نشد. با «ذخیره / بازکردن» دوباره می‌توانید.", Toast.LENGTH_LONG).show();
+            Toast.makeText(ctx, s.kind.equals("pdf") ? "فایل ذخیره نشد. با «ذخیره / بازکردن» دوباره می‌توانید." : "رونوشتی ذخیره نشد. فایل در «فایل‌های من» می‌ماند.", Toast.LENGTH_LONG).show();
             return;
         }
         Context app = ctx.getApplicationContext();
@@ -119,14 +131,19 @@ final class Exporter {
             String msg;
             try {
                 write(app, s, u);
-                synchronized (Exporter.class) {
-                    s.uri = u;
+                if (s.kind.equals("pdf")) {
+                    synchronized (Exporter.class) {
+                        s.uri = u;
+                    }
+                    //noinspection ResultOfMethodCallIgnored
+                    s.file.delete();
+                    msg = "ذخیره شد.";
+                } else {
+                    // (the app keeps its own copy, in «فایل‌های من», until the reader deletes it there)
+                    msg = "یک رونوشت ذخیره شد. فایل در «فایل‌های من» هم می‌ماند.";
                 }
-                //noinspection ResultOfMethodCallIgnored
-                s.file.delete();
-                msg = "ذخیره شد.";
             } catch (Exception e) {
-                Log.w("Khana", "saving: " + e);
+                Log.w("Khana", "saving failed: " + e.getClass().getSimpleName()); // (not the message: it can hold the file's name)
                 msg = "ذخیره نشد: " + e.getMessage();
             }
             final String m = msg;

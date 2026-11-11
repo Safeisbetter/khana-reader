@@ -40,7 +40,16 @@ export CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=$ROOT=/khana"$'\x1f'"--remap
 # 3. the Java shell
 rm -rf "$OUT/classes" "$OUT/dex"
 mkdir -p "$OUT/classes" "$OUT/dex"
-javac -source 11 -target 11 -Xlint:-options -encoding UTF-8 -classpath "$JAR" -d "$OUT/classes" "$HERE"/java/org/khana/reader/*.java
+JAVA_SRC="$HERE/java/org/khana/reader"
+if [ -n "${KHANA_PUBLIC:-}" ]; then
+  # (the public download: the developer's USB tests are compiled out, so no other app on the phone can start them)
+  JAVA_SRC="$OUT/java-public"
+  rm -rf "$JAVA_SRC"; mkdir -p "$JAVA_SRC"
+  cp "$HERE"/java/org/khana/reader/*.java "$JAVA_SRC/"
+  sed -i '' 's/static final boolean DEV_TOOLS = true;/static final boolean DEV_TOOLS = false;/' "$JAVA_SRC/MainActivity.java"
+  grep -q 'DEV_TOOLS = false;' "$JAVA_SRC/MainActivity.java" || { echo "DEV_TOOLS switch not found"; exit 1; }
+fi
+javac -source 11 -target 11 -Xlint:-options -encoding UTF-8 -classpath "$JAR" -d "$OUT/classes" "$JAVA_SRC"/*.java
 jar cf "$OUT/classes.jar" -C "$OUT/classes" .
 
 # 4. the assets: the reader page (as on the Mac, plus android.js), the models, the PDF font

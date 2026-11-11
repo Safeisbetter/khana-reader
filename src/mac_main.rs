@@ -75,6 +75,17 @@ enum UserEvent {
 
 pub fn run() {
     khana::ffi::lower_priority();
+    std::thread::spawn(|| loop {
+        khana::tts::set_heat(khana::mac::heat_level());
+        if std::env::var("KHANA_SELFTEST").is_ok() {
+            std::thread::sleep(std::time::Duration::from_secs(15));
+            continue;
+        }
+        if let Some((percent, charging)) = khana::mac::battery() {
+            khana::tts::set_power(percent, charging);
+        }
+        std::thread::sleep(std::time::Duration::from_secs(15));
+    });
     let app = Arc::new(App::new(khana::engines::engines()));
     let web = khana::vocab::web_dir();
 

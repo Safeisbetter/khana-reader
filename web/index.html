@@ -21,6 +21,7 @@
         <span class="count" id="count"></span>
       </div>
       <label class="btn primary" for="fileInput">بازکردن فایل</label>
+      <button type="button" id="libBtn" hidden title="فایل‌های صدایی که ساخته‌اید، داخل خودِ برنامه">🎧 فایل‌های من</button>
       <button type="button" id="typeBtn" title="متن را بنویسید یا بچسبانید تا خوانده شود و به صورت فایل صدا ذخیره شود">✎ نوشتن متن</button>
       <button id="settingsBtn" type="button" aria-label="تنظیمات">⚙︎ تنظیمات</button>
       <input id="fileInput" type="file" hidden multiple accept=".pdf,.doc,.docx,.pptx,.epub,.rtf,.odt,.txt,.md,.html,.htm,.fb2,.png,.jpg,.jpeg,.webp,.gif,.bmp,.heic,image/*">
@@ -100,6 +101,10 @@
 <div class="panel" id="settings" hidden>
   <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="setTitle">
     <div class="panel-head"><h2 id="setTitle">تنظیمات</h2><button type="button" data-close>بستن</button></div>
+    <div class="setfind">
+      <input id="setFind" type="search" placeholder="جستجو در تنظیمات… (مثلاً: صدا، رنگ، قلم)" aria-label="جستجو در تنظیمات" autocomplete="off">
+      <p class="hint" id="setNone" hidden>تنظیمی با این نام پیدا نشد.</p>
+    </div>
     <div class="field">
       <label for="voice">صدا</label>
       <div class="inline">
@@ -149,6 +154,14 @@
       <input id="fontSize" type="range" aria-label="اندازه‌ی قلم" min="14" max="72" step="1">
     </div>
     <div class="field">
+      <label for="pageWidth">پهنای صفحه‌ی متن: <span id="pageWidthVal"></span></label>
+      <input id="pageWidth" type="range" aria-label="پهنای صفحه‌ی متن" min="26" max="100" step="2">
+      <div class="scale"><span>باریک</span><span>تمام پهنای پنجره</span></div>
+      <label for="pageMargin">حاشیه‌ی دور متن: <span id="pageMarginVal"></span></label>
+      <input id="pageMargin" type="range" aria-label="حاشیه‌ی دور متن" min="20" max="200" step="10">
+      <div class="scale"><span>کم</span><span>زیاد</span></div>
+    </div>
+    <div class="field">
       <span class="lbl">رنگ پس‌زمینه</span>
       <span class="hint">«خودکار»: مثل حالت تاریک یا روشن دستگاه.</span>
       <div class="hlpick" role="radiogroup" aria-label="رنگ پس‌زمینه">
@@ -160,6 +173,8 @@
         <label><input type="radio" name="theme" value="blackyellow"><span>مشکی، نوشته‌ی زرد</span></label>
         <label><input type="radio" name="theme" value="glass"><span>شیشه‌ای روشن</span></label>
         <label><input type="radio" name="theme" value="glassdark"><span>شیشه‌ای تیره</span></label>
+        <label><input type="radio" name="theme" value="depth"><span>سه‌بعدی روشن (دکمه‌های برجسته)</span></label>
+        <label><input type="radio" name="theme" value="depthdark"><span>سه‌بعدی تیره</span></label>
       </div>
     </div>
     <div class="field">
@@ -196,6 +211,7 @@
         </div>
         <span class="hint">نشانگر بزرگ سیاه با لبه‌ی سفید است؛ روی دکمه‌ها و گزینه‌ها زرد می‌شود.</span>
       </div>
+      <label class="check"><input id="clickSound" type="checkbox"><span>صدای کلیک: با زدن هر دکمه یک صدای کوتاه شنیده شود<br><span class="hint">روشن شدن یک گزینه صدای زیرتر و خاموش شدنش صدای بم‌تر دارد.</span></span></label>
       <label class="check"><input id="naturalTone" type="checkbox"><span>خواندن طبیعی (لحن پرسش، پایان جمله و عنوان)</span></label>
       <label class="check"><input id="autoPlay" type="checkbox"><span>پس از بازکردن فایل، خواندن خودکار شروع شود</span></label>
       <label class="check"><input id="autoNext" type="checkbox"><span>پس از پایان هر صفحه، صفحه‌ی بعد هم خوانده شود</span></label>
@@ -337,6 +353,19 @@
       <span class="hint" id="mp3Text"></span>
       <button type="button" class="primary" id="mp3Reveal" hidden>نمایش فایل</button>
     </div>
+  </div>
+</div>
+
+<div class="panel" id="libPanel" role="dialog" aria-modal="true" aria-labelledby="libTitle" hidden>
+  <div class="panel-body">
+    <div class="panel-head"><h2 id="libTitle">فایل‌های من</h2><button type="button" data-close>بستن</button></div>
+    <p class="editnote">این فایل‌ها داخل خودِ خوانا نگه داشته می‌شوند و هیچ برنامه‌ی دیگری آن‌ها را نمی‌بیند. همین‌جا گوش کنید. «ذخیره در گوشی…» یک رونوشت را جایی که شما انتخاب کنید می‌گذارد؛ آن رونوشت را برنامه‌های دیگر هم می‌توانند ببینند.</p>
+    <div class="field" id="libPlayer" hidden>
+      <span class="lbl" id="libNow"></span>
+      <audio id="libAudio" controls preload="none"></audio>
+    </div>
+    <div class="lexlist" id="libList"></div>
+    <p class="hint" id="libEmpty" hidden>هنوز فایلی ساخته نشده است. با «ذخیره‌ی صدا» یک فایل بسازید.</p>
   </div>
 </div>
 

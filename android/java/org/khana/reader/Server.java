@@ -142,6 +142,7 @@ final class Server {
         Native.Reply r = new Native.Reply(Native.handle(Native.utf8(method), Native.utf8(path), Native.utf8(query), Native.utf8(tok), body));
         if (body != null) Arrays.fill(body, (byte) 0); // (the document's bytes: the core has its own copy now)
         if ("/api/tts".equals(path)) lastSpeech = android.os.SystemClock.elapsedRealtime();
+        if (r.status == 200 && "POST".equals(method) && ("/api/settings".equals(path) || "/api/forget".equals(path))) MainActivity.applyScreenGuard();
         if (r.status == 200 && "POST".equals(method) && ("/api/mp3".equals(path) || "/api/pdf".equals(path))) {
             JobService.start(ctx);
         }

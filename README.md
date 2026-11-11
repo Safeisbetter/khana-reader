@@ -88,6 +88,15 @@ from this source when Android asks. Both versions are signed with the same key, 
   yourself if they should not be found.
 - Use a screen lock and your device's encryption. On Android, [GrapheneOS](https://grapheneos.org) gives the strongest protection we know of.
 
+**What another app on the phone (a store app, for example) can see of Khana.** It cannot see what you read: the open book, your
+corrections, settings and recorded voice are in Khana's private folder; by default no app can photograph or record Khana's screen, and
+none may record the sound it plays. On Android a sound file Khana makes **stays inside the app** ("🎧 فایل‌های من"), is played there, and no
+other app can read it. Another app **can** see that Khana is installed, and it can read **a copy you export into shared storage, or a PDF
+you save there** (name and contents) if it holds the storage or audio permission, more widely on Android 10 and older; the
+suggested file name comes from the book's name, so rename it when saving. On Android 9 and older any app can read the clipboard, so
+avoid "copy page text" for sensitive text there. What you type passes through the phone's keyboard app, and an app you gave the
+Accessibility permission can read the screen. A phone that no longer gets security updates protects all of this less.
+
 **Cafe Bazaar and other Iranian app stores.** Khana is **not** published on Cafe Bazaar, Myket or any other store; this GitHub page
 is its only official source, and a copy found elsewhere is not ours. We chose this because of what Bazaar's own documents say (read
 November 2026): an account is tied to a phone number or email; its [privacy policy](https://cafebazaar.ir/privacy?l=en) lists the
@@ -242,6 +251,32 @@ Everything runs on your device; nothing is sent anywhere.
 - خوانا را فقط از همین صفحه بگیرید و امضا و SHA-256 را بررسی کنید.
 - اگر به‌روزرسانی خودکار می‌خواهید، برنامه‌ی آزاد [Obtainium](https://github.com/ImranR98/Obtainium) نسخه‌های تازه را مستقیم از GitHub می‌گیرد: نشانی `github.com/Safeisbetter/khana-reader` را در آن وارد کنید. (Obtainium را ما نساخته‌ایم و بررسی نکرده‌ایم.)
 - فهرست برنامه‌های گوشی می‌تواند درباره‌ی شما چیزهایی بگوید. هر فروشگاهی که روی گوشی نصب است، چه داخلی چه خارجی، معمولاً این فهرست را می‌بیند.
+
+### برنامه‌های دیگرِ گوشی (مثلاً یک فروشگاه) چه چیزی از خوانا می‌بینند؟
+
+کوتاه: **آنچه می‌خوانید را نمی‌بینند؛ اما فایل‌هایی را که در حافظه‌ی مشترک گوشی ذخیره می‌کنید ممکن است ببینند.** به‌ویژه روی گوشی‌های قدیمی.
+
+**آنچه برنامه‌ی دیگر نمی‌تواند ببیند** (مگر گوشی روت یا آلوده باشد):
+
+- کتابی که باز کرده‌اید، متن آن، ویرایش‌ها، تنظیمات و صدای ضبط‌شده‌ی شما. این‌ها در پوشه‌ی خصوصی خوانا هستند و اندروید دست برنامه‌های دیگر را از آن کوتاه می‌کند.
+- صفحه‌ی خوانا. به‌طور پیش‌فرض هیچ برنامه‌ای نمی‌تواند از آن عکس یا فیلم بگیرد و در فهرست برنامه‌های اخیر هم متن دیده نمی‌شود (در تنظیمات می‌شود این را برداشت).
+- صدایی که خوانا پخش می‌کند: برنامه‌های دیگر اجازه‌ی ضبط آن را ندارند.
+- خوانا اینترنت ندارد؛ پس خودش هم چیزی به جایی نمی‌فرستد.
+
+**آنچه برنامه‌ی دیگر می‌تواند ببیند:**
+
+- **این‌که خوانا روی گوشی نصب است.** هر فروشگاه و بسیاری از برنامه‌ها فهرست برنامه‌های نصب‌شده را می‌بینند. این را نمی‌شود پنهان کرد.
+- **رونوشتی که از فایل‌ها بیرون می‌برید.** در اندروید، فایل صدایی که خوانا می‌سازد داخل خودِ برنامه می‌ماند («🎧 فایل‌های من») و همان‌جا پخش می‌شود؛ هیچ برنامه‌ی دیگری آن را نمی‌بیند. اما اگر با «ذخیره در گوشی…» رونوشتی در حافظه‌ی مشترک (مثل پوشه‌ی Download یا Music) بگذارید، یا یک PDF ذخیره کنید: هر برنامه‌ای که «اجازه‌ی حافظه» یا «دسترسی به موسیقی و صدا» دارد می‌تواند **نام و محتوای** آن‌ها را بخواند. نام پیشنهادی فایل از نام کتاب ساخته می‌شود. روی اندروید ۱۰ و قدیمی‌تر این دسترسی گسترده‌تر است.
+- **متنی که با «کپی متن صفحه» کپی می‌کنید.** روی اندروید ۹ و قدیمی‌تر هر برنامه‌ای می‌تواند پنهانی حافظه‌ی کپی (کلیپ‌بورد) را بخواند.
+- **آنچه تایپ می‌کنید** (متنی که می‌نویسید، رمز PDF) از صفحه‌کلید گوشی می‌گذرد. صفحه‌کلیدی که خودتان نصب کرده‌اید می‌تواند آن را ببیند.
+- برنامه‌ای که به آن «دسترس‌پذیری» (Accessibility) داده‌اید می‌تواند هر چه روی صفحه است بخواند. این اجازه را به برنامه‌ای که نمی‌شناسید ندهید.
+
+**توصیه:**
+
+- فایل صدا را داخل خوانا نگه دارید و همان‌جا گوش کنید. اگر رونوشتی بیرون می‌برید، **نام فایل را عوض کنید** تا نام کتاب در آن نباشد، و بعد از شنیدن پاکش کنید.
+- اجازه‌ی حافظه، موسیقی و دسترس‌پذیری را از برنامه‌هایی که به آن‌ها اعتماد ندارید بگیرید (تنظیمات گوشی ← برنامه‌ها ← مجوزها).
+- روی گوشی قدیمی (اندروید ۹ و پایین‌تر) از «کپی متن صفحه» برای متن حساس استفاده نکنید.
+- گوشی‌ای که دیگر به‌روزرسانی امنیتی نمی‌گیرد در برابر برنامه‌ی بدخواه محافظت کمتری دارد. اگر امنیتتان در خطر است، گوشی به‌روز و، اگر می‌توانید، [GrapheneOS](https://grapheneos.org) بهتر است.
 
 ### برنامه چه می‌کند؟
 
