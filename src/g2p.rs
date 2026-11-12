@@ -73,6 +73,22 @@ fn g2p_windows(text: &str) -> Vec<String> {
     out
 }
 
+const SHORT_WINDOW_WORDS: usize = 3;
+
+fn input_pieces(w: &str) -> usize {
+    w.split(|c: char| c.is_whitespace() || c == '\u{200c}').filter(|p| p.chars().any(|c| c.is_alphabetic())).count()
+}
+
+fn repeated_short(w: &str, out: &str) -> bool {
+    let n = input_pieces(w);
+    (1..=SHORT_WINDOW_WORDS).contains(&n) && !w.chars().any(|c| c.is_numeric()) && split_ws(out).len() > n
+}
+
+fn without_final_marks(w: &str) -> Option<&str> {
+    let b = w.trim_end_matches(|c: char| c == '.' || c == '!' || c == '…' || c.is_whitespace());
+    (b.len() < w.len() && !b.is_empty()).then_some(b)
+}
+
 impl OnnxG2P {
     pub fn new(dir: &Path) -> ort::Result<Self> {
         Ok(OnnxG2P {
@@ -119,11 +135,24 @@ impl OnnxG2P {
         String::from_utf8_lossy(&bytes).into_owned()
     }
 
+    fn decode_window(&self, w: &str) -> String {
+        let out = self.decode_greedy(w);
+        if repeated_short(w, &out) {
+            if let Some(bare) = without_final_marks(w) {
+                let again = self.decode_greedy(bare);
+                if split_ws(&again).len() < split_ws(&out).len() {
+                    return again;
+                }
+            }
+        }
+        out
+    }
+
     pub fn phonemise(&self, text: &str, keep_ezafe: bool) -> Result<String, String> {
         let t = transliterate_text(text);
         let t = normalize_for_model(&t)?;
         let t = t.replace('؟', "").replace('?', "").replace(':', "");
-        let raw = g2p_windows(&t).iter().map(|w| self.decode_greedy(w)).collect::<Vec<_>>().join(" ");
+        let raw = g2p_windows(&t).iter().map(|w| self.decode_window(w)).collect::<Vec<_>>().join(" ");
         let out = translate_map(&raw, TO_PHONEMES);
         let out = split_ws(&out).iter().map(|w| lookup(G2P_PRON_FIX, w).unwrap_or(w).to_string()).collect::<Vec<_>>().join(" ");
         Ok(if keep_ezafe { out } else { out.replace('1', "") })
