@@ -26,7 +26,7 @@ final class AudioDecode {
         MediaExtractor ex = new MediaExtractor();
         MediaCodec codec = null;
         try {
-            tmp = File.createTempFile("voice", ".in", ctx.getCacheDir());
+            tmp = File.createTempFile("khana-voice", ".in", ctx.getCacheDir());
             try (FileOutputStream o = new FileOutputStream(tmp)) {
                 o.write(data);
             }
