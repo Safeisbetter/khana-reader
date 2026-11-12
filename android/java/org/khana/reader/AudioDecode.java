@@ -26,6 +26,8 @@ final class AudioDecode {
         MediaExtractor ex = new MediaExtractor();
         MediaCodec codec = null;
         try {
+            // («khana-»: if the app is stopped by force while decoding, the core's sweep of the cache at the next start, and «forget
+            // everything», remove this copy of the reader's voice too: app::sweep_temp takes every «khana-» file there)
             tmp = File.createTempFile("khana-voice", ".in", ctx.getCacheDir());
             try (FileOutputStream o = new FileOutputStream(tmp)) {
                 o.write(data);
