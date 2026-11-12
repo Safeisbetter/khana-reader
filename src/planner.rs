@@ -37,7 +37,7 @@ fn strong_end(p: &str) -> bool {
 }
 
 fn merge_short_phrases(phrases: Vec<String>, min_words: usize, keep: &mut dyn FnMut(&str) -> bool) -> Vec<String> {
-    let mut protected = |p: &str, keep: &mut dyn FnMut(&str) -> bool| strong_end(p) && keep(p);
+    let protected = |p: &str, keep: &mut dyn FnMut(&str) -> bool| strong_end(p) && keep(p);
     let mut out: Vec<String> = Vec::new();
     for p in phrases {
         let merge = match out.last() {

@@ -14,7 +14,7 @@ char *k_vision_ocr(const unsigned char *gray, int w, int h)
 		CGColorSpaceRef cs = CGColorSpaceCreateDeviceGray();
 		CFDataRef data = CFDataCreate(NULL, gray, (CFIndex)w * h);
 		CGDataProviderRef prov = CGDataProviderCreateWithCFData(data);
-		CGImageRef img = CGImageCreate(w, h, 8, 8, w, cs, kCGImageAlphaNone, prov, NULL, false, kCGRenderingIntentDefault);
+		CGImageRef img = CGImageCreate(w, h, 8, 8, w, cs, (CGBitmapInfo)kCGImageAlphaNone, prov, NULL, false, kCGRenderingIntentDefault);
 		CGDataProviderRelease(prov);
 		CFRelease(data);
 		CGColorSpaceRelease(cs);

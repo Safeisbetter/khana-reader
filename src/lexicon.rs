@@ -50,7 +50,7 @@ pub fn align_words(words: &[String], phw: &[String]) -> Vec<(usize, usize)> {
     let a: Vec<String> = words.iter().map(|w| skeleton(&pronounce_word(&sub(r"[^\w‌]", "", w)))).collect();
     let b: Vec<String> = phw.iter().map(|p| skeleton(p)).collect();
     let mut out: Vec<(usize, usize)> = Vec::new();
-    let mut set = |i: usize, j: usize, out: &mut Vec<(usize, usize)>| match out.iter_mut().find(|x| x.0 == i) {
+    let set = |i: usize, j: usize, out: &mut Vec<(usize, usize)>| match out.iter_mut().find(|x| x.0 == i) {
         Some(x) => x.1 = j,
         None => out.push((i, j)),
     };
