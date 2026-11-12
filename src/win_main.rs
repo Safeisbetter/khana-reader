@@ -8,7 +8,7 @@ use tao::event_loop::{ControlFlow, EventLoopBuilder};
 use tao::window::WindowBuilder;
 use wry::http::{header, Request, Response};
 use tao::platform::windows::WindowExtWindows;
-use wry::{WebContext, WebViewBuilder};
+use wry::{WebContext, WebViewBuilder, WebViewBuilderExtWindows};
 
 const START_URL: &str = "http://khana.localhost/";
 
@@ -92,8 +92,14 @@ pub fn run() {
         });
     };
     let selftest = if std::env::var("KHANA_SELFTEST").is_ok() { include_str!("selftest.js") } else { "" };
-    let mut web_context = WebContext::new(Some(khana::app::data_dir().join("webview")));
+    let mut web_context = WebContext::new(Some(khana::app::data_dir().join("webview-offline")));
     let webview = WebViewBuilder::new_with_web_context(&mut web_context)
+        .with_additional_browser_args(concat!(
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection ",
+            "--host-resolver-rules=\"MAP * ~NOTFOUND\" ",
+            "--proxy-server=\"http://0.0.0.0:1\" --proxy-bypass-list=\"<-loopback>\" ",
+            "--disable-background-networking --disable-component-update --disable-domain-reliability --no-pings"
+        ))
         .with_initialization_script(selftest)
         .with_asynchronous_custom_protocol("khana".into(), handler)
         .with_url(START_URL)
