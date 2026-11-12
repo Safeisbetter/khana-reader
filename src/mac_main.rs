@@ -73,6 +73,13 @@ enum UserEvent {
     PdfGone,
 }
 
+fn dead_end_proxy() -> Option<wry::ProxyConfig> {
+    let v = std::fs::read_to_string("/System/Library/CoreServices/SystemVersion.plist").unwrap_or_default();
+    let major: u32 = v.split("<key>ProductVersion</key>").nth(1).and_then(|r| r.split("<string>").nth(1))
+        .and_then(|r| r.split(['.', '<']).next()).and_then(|m| m.trim().parse().ok()).unwrap_or(0);
+    (major >= 14).then(|| wry::ProxyConfig::Http(wry::ProxyEndpoint { host: "127.0.0.1".into(), port: "1".into() }))
+}
+
 pub fn run() {
     khana::ffi::lower_priority();
     std::thread::spawn(|| loop {
@@ -164,7 +171,7 @@ pub fn run() {
     let selftest = if std::env::var("KHANA_SELFTEST").is_ok() { include_str!("selftest.js") } else { "" };
     let selftest = format!("window.KHANA_PDF_VIEW = true;\n{selftest}");
     let gone = event_loop.create_proxy();
-    let webview = WebViewBuilder::new()
+    let mut builder = WebViewBuilder::new()
         .with_initialization_script(selftest)
         .with_asynchronous_custom_protocol("khana".into(), handler)
         .with_url(START_URL)
@@ -181,11 +188,14 @@ pub fn run() {
         .with_on_web_content_process_terminate_handler(move || {
             let _ = gone.send_event(UserEvent::PageGone);
         })
-        .build(&window)
-        .expect("webview");
+        ;
+    if let Some(p) = dead_end_proxy() {
+        builder = builder.with_proxy_config(p);
+    }
+    let webview = builder.build(&window).expect("webview");
 
     let pdf_gone = event_loop.create_proxy();
-    let pdfview = WebViewBuilder::new()
+    let mut pdf_builder = WebViewBuilder::new()
         .with_asynchronous_custom_protocol("khanapdf".into(), pdf_handler)
         .with_url(PDF_URL)
         .with_incognito(true)
@@ -200,8 +210,11 @@ pub fn run() {
         .with_on_web_content_process_terminate_handler(move || {
             let _ = pdf_gone.send_event(UserEvent::PdfGone);
         })
-        .build_as_child(&window)
-        .expect("pdf view");
+        ;
+    if let Some(p) = dead_end_proxy() {
+        pdf_builder = pdf_builder.with_proxy_config(p);
+    }
+    let pdfview = pdf_builder.build_as_child(&window).expect("pdf view");
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
