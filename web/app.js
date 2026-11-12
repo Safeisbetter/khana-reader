@@ -36,6 +36,7 @@ function applySettings() {
   $("pageWidth").value = pw; $("pageWidthVal").textContent = pw >= 100 ? "تمام پهنا" : fa(pw);
   $("pageMargin").value = pm; $("pageMarginVal").textContent = fa(pm) + "٪";
   $("clickSound").checked = !!s.clickSound;
+  $("sentenceLines").checked = !!s.sentenceLines;
   $("speed").value = s.speed; $("speedVal").textContent = pct(s.speed);
   $("speedChip").textContent = pct(s.speed);
   $("speedChip").classList.toggle("changed", Number(s.speed) !== 1);
@@ -127,6 +128,7 @@ document.querySelectorAll("input[name=comma]").forEach(r => r.onchange = () => {
 document.querySelectorAll("input[name=theme]").forEach(r => r.onchange = () => setSetting("theme", r.value));
 $("pageWidth").oninput = e => setSetting("pageWidth", Number(e.target.value));
 $("pageMargin").oninput = e => setSetting("pageMargin", Number(e.target.value));
+$("sentenceLines").onchange = e => { setSetting("sentenceLines", e.target.checked); if (S.doc && !S.editing) renderText(); };
 $("clickSound").onchange = e => { setSetting("clickSound", e.target.checked); if (e.target.checked) clickTone(true); };
 
 /* ---------------- a sound for every tap (Settings; off unless chosen): a short tick, higher when something is switched on, lower when off ---------------- */
@@ -647,8 +649,13 @@ function showPage(n, paras, done = true) {  // switch the visible page while rea
 }
 // every word is its own span (data-s = its offset in the paragraph) so reading can light it up
 function paraHtml(p, i, re, found) {
+  // («هر جمله در خط تازه»: the space after a sentence's end becomes a line break; the words keep their places in the paragraph)
+  const lines = !!(S.settings && S.settings.sentenceLines);
+  let ended = false;
   const h = p.replace(/\S+|\s+/g, (tok, off) => {
-    if (/^\s/.test(tok)) return tok;
+    if (/^\s/.test(tok)) { const br = lines && ended; ended = false; return br ? "<br>" : tok; }
+    // (not after a number or a one-letter abbreviation, «ص.»)
+    ended = /[.!?؟…][»"”)\]]?$/.test(tok) && !/^[\d۰-۹.]+$/.test(tok) && tok.replace(/[.!?؟…»"”)\]]/g, "").length > 1;
     let w = esc(tok);
     if (re) w = w.replace(re, m => (found(), `<mark>${m}</mark>`));
     return `<span class="w" data-s="${off}">${w}</span>`;

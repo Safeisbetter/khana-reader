@@ -968,6 +968,8 @@ pub fn latin_only_paragraph(p: &str) -> bool {
     !rtl(p) && search(r"[A-Za-zÀ-ÿ]{3,}", p)
 }
 
+const PARAGRAPH_OPENER: &str = r"^\s*(?:و\s+اما|اما|ولی|و\s+برای|به\s+(?:این|همین)\s+دلیل|از\s+(?:این|همین)\s*\x{200c}?رو|بنابراین|با\s+این\s+(?:حال|همه)|از\s+(?:سوی|طرف)\s+دیگر)(?:[\s،,]|$)";
+
 pub fn price_line(p: &str) -> bool {
     const AMOUNT: &str = r"(?:US|CAN|CDN|UK|AUS|NZ|EUR)?\s*[$£€¥]\s*[\d۰-۹٠-٩]+(?:[.,٫٬][\d۰-۹٠-٩]+)?\s*(?:USA|USD|US|CAND|CAN|CAD|CDN|UK|GBP|AUS|AUD|NZ|EUR)?";
     fullmatch(&format!(r"\s*{AMOUNT}(?:\s*[/|،,;·\-–]?\s*{AMOUNT})*\s*[.،]?\s*"), p)
@@ -1714,7 +1716,8 @@ pub fn paragraphs_from_lines(lines: &[LLine]) -> Vec<String> {
             let same_size = (l.size - p.size).abs() <= 0.15 * p.size.max(l.size);
             let ended = (p.x1 - p.x0) < 0.75 * full && !same_edges && search(r"[.!?؟:»)\]…]$", &p.text);
             let label = search(r"^\s*(?:Keywords|Key words|Abstract|Title|کلیدواژه(?:\x{200c}?ها)?|کلید واژه(?:\x{200c}?ها)?|واژگان کلیدی|چکیده)\s*:", &l.text);
-            close && same_size && !ended && !label
+            let turn = search(r#"[.!?؟…]\s*[»"”)\]]?\s*$"#, &p.text) && search(PARAGRAPH_OPENER, &l.text);
+            close && same_size && !ended && !label && !turn
         });
         match (same_para, paras.last_mut()) {
             (true, Some(last)) => {

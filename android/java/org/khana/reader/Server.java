@@ -139,6 +139,15 @@ final class Server {
                 query = query.replaceAll("(^|&)name=[^&]*", "$1name=voice.wav");
             }
         }
+        // The page's «copy page text»: put on the clipboard here, not by the web view, so that it can be marked as sensitive
+        // (Android 13 and newer then keep it out of the clipboard preview) and taken off again after a minute and a half
+        // (on Android 9 and older any app can read the clipboard for as long as the text lies there).
+        if ("POST".equals(method) && "/api/clip".equals(path)) {
+            if (tok == null || !Arrays.equals(Native.utf8(tok), Native.token())) return json(403, "{}");
+            copySensitive(ctx, body == null ? "" : Native.text(body));
+            if (body != null) Arrays.fill(body, (byte) 0);
+            return json(200, "{\"ok\":true}");
+        }
         Native.Reply r = new Native.Reply(Native.handle(Native.utf8(method), Native.utf8(path), Native.utf8(query), Native.utf8(tok), body));
         if (body != null) Arrays.fill(body, (byte) 0); // (the document's bytes: the core has its own copy now)
         if ("/api/tts".equals(path)) lastSpeech = android.os.SystemClock.elapsedRealtime();
@@ -184,6 +193,35 @@ final class Server {
 
     private static WebResourceResponse text(int status, String msg) {
         return new WebResourceResponse("text/plain", "utf-8", status, reason(status), noStore(), new ByteArrayInputStream(Native.utf8(msg)));
+    }
+
+    private static final String CLIP_LABEL = "Khana";
+
+    private static void copySensitive(Context ctx, String text) {
+        final android.content.ClipboardManager cm = (android.content.ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+        if (cm == null) return;
+        android.content.ClipData clip = android.content.ClipData.newPlainText(CLIP_LABEL, text);
+        android.os.PersistableBundle extras = new android.os.PersistableBundle();
+        extras.putBoolean("android.content.extra.IS_SENSITIVE", true);
+        if (android.os.Build.VERSION.SDK_INT >= 24) clip.getDescription().setExtras(extras);
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+            try {
+                cm.setPrimaryClip(clip);
+            } catch (Throwable e) {
+                return;
+            }
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                try {
+                    // (only if it is still this app's text: what the reader copied elsewhere since is left alone)
+                    android.content.ClipDescription d = cm.getPrimaryClipDescription();
+                    if (d == null || d.getLabel() == null || !CLIP_LABEL.contentEquals(d.getLabel())) return;
+                    if (android.os.Build.VERSION.SDK_INT >= 28) cm.clearPrimaryClip();
+                    else cm.setPrimaryClip(android.content.ClipData.newPlainText("", ""));
+                } catch (Throwable e) {
+                    // (the clipboard cannot be read from the background on newer Android: the text stays until something else is copied)
+                }
+            }, 90_000);
+        });
     }
 
     private static WebResourceResponse json(int status, String body) {

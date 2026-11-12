@@ -69,9 +69,9 @@
         <label class="btn primary big" for="fileInput">بازکردن فایل</label>
         <button type="button" class="big" id="typeBtn2">✎ یا یک متن بنویسید</button>
       </div>
-      <p class="note">طراحی این برنامه براین اساس انجام شده است که برای افراد دارای محدودیت دیداری و خواندن، قابل استفاده باشد: دکمه‌ها و نوشته‌ها بزرگ و قابل تمایز هستند، قلم و رنگ‌ها قابل تنظیم‌اند، با صفحه‌خوان کار می‌کند و کارهای اصلی را می‌توان با صدا انجام داد.</p>
+      <p class="note">این برنامه طوری طراحی شده است که برای افرادی که کم می‌بینند یا در خواندن دشواری دارند قابل استفاده باشد: دکمه‌ها و نوشته‌ها بزرگ و واضح‌اند، قلم و رنگ‌ها را می‌توان تنظیم کرد، با صفحه‌خوان کار می‌کند و کارهای اصلی را می‌توان با صدا انجام داد.</p>
       <p class="hint">کلیدها: <kbd>Space</kbd> خواندن / مکث · <kbd>← →</kbd> صفحه‌ی بعد / قبل · <kbd>⌘[</kbd> <kbd>⌘]</kbd> سرعت · <kbd>⌘0</kbd> سرعت عادی · <kbd>⌘,</kbd> تنظیمات</p>
-      <p class="thanks">با تشکر از مهرزاد و الهام، برای کمک 🙂</p>
+      <p class="thanks">با تشکر از الف و میم، برای تست و ایده‌های سازنده</p>
     </section>
     <div class="note" id="note" role="status" aria-live="polite" hidden></div>
     <div id="textView" class="text" hidden></div>
@@ -211,6 +211,7 @@
         </div>
         <span class="hint">نشانگر بزرگ سیاه با لبه‌ی سفید است؛ روی دکمه‌ها و گزینه‌ها زرد می‌شود.</span>
       </div>
+      <label class="check"><input id="sentenceLines" type="checkbox"><span>هر جمله در خط تازه: پس از نقطه، جمله‌ی بعد از سر خط شروع شود<br><span class="hint">فقط نمایش متن عوض می‌شود؛ خواندن و فایل‌های ذخیره‌شده همان می‌مانند.</span></span></label>
       <label class="check"><input id="clickSound" type="checkbox"><span>صدای کلیک: با زدن هر دکمه یک صدای کوتاه شنیده شود<br><span class="hint">روشن شدن یک گزینه صدای زیرتر و خاموش شدنش صدای بم‌تر دارد.</span></span></label>
       <label class="check"><input id="naturalTone" type="checkbox"><span>خواندن طبیعی (لحن پرسش، پایان جمله و عنوان)</span></label>
       <label class="check"><input id="autoPlay" type="checkbox"><span>پس از بازکردن فایل، خواندن خودکار شروع شود</span></label>
@@ -273,7 +274,7 @@
     <div class="panel-head"><h2 id="wordTitle">عوض کردن یک کلمه در همه‌ی کتاب‌ها</h2><button type="button" data-close>بستن</button></div>
     <div class="field"><label for="edFrom">کلمه‌ی غلط</label><input id="edFrom" type="text" autocomplete="off"></div>
     <div class="field"><label for="edTo">کلمه‌ی درست (خالی: حذف کلمه)</label><input id="edTo" type="text" autocomplete="off"></div>
-    <span class="hint">فقط خود کلمه عوض می‌شود، نه وسط کلمه‌ی دیگر. روی خواندن، MP3 و PDF اثر می‌کند.</span>
+    <span class="hint">فقط همین کلمه عوض می‌شود، نه جایی که بخشی از کلمه‌ای دیگر است. روی خواندن، MP3 و PDF اثر می‌کند.</span>
     <div class="inline">
       <button type="button" class="primary" id="edWord">عوض کن</button>
       <button type="button" id="edEzafe" title="کلمه‌ی بالا در خواندن همیشه با «ـِ» (کسره‌ی اضافه) خوانده شود، مثل «کتابِ من». نوشته‌ی کتاب عوض نمی‌شود.">با کسره‌ی اضافه بخوان</button>
@@ -286,7 +287,7 @@
 <div class="panel" id="typePanel" hidden>
   <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="typeTitle">
     <div class="panel-head"><h2 id="typeTitle">نوشتن متن</h2><button type="button" data-close>بستن</button></div>
-    <p class="hint">متن را این جا بنویسید یا بچسبانید. با «خواندن» آن را می‌شنوید و با «ذخیره‌ی صدا» آن را به صورت فایل صدا (MP3 یا WAV) ذخیره می‌کنید.</p>
+    <p class="hint">متن را این‌جا بنویسید یا بچسبانید. با «خواندن» آن را می‌شنوید و با «ذخیره‌ی صدا» آن را به صورت فایل صدا (MP3 یا WAV) ذخیره می‌کنید.</p>
     <div class="field"><textarea id="typeText" dir="auto" rows="12" placeholder="متن شما…" aria-label="متن"></textarea></div>
     <div id="sttRow" hidden>
       <p class="hint">گفتار را به متن فارسی تبدیل کنید: یک فایل صدا (MP3، M4A، WAV…) انتخاب کنید یا مستقیم صحبت کنید. نوشته در بالا اضافه می‌شود و می‌توانید آن را ویرایش کنید. همه‌چیز روی همین دستگاه انجام می‌شود.</p>
@@ -340,7 +341,7 @@
     </div>
     <div class="field" id="fastField">
       <label><input type="checkbox" id="fastExport"> سریع‌تر (حدود دو برابر): صدا بعد از ساخته شدن دوباره بررسی نمی‌شود</label>
-      <span class="hint">ممکن است گاهی یک کلمه افتاده یا نامفهوم بماند. برای کیفیت بهتر، آن را خاموش بگذارید.</span>
+      <span class="hint">ممکن است گاهی کلمه‌ای جا بیفتد یا نامفهوم باشد. برای کیفیت بهتر، آن را خاموش بگذارید.</span>
     </div>
     <p class="hint" id="mp3Voice"></p>
     <div class="inline">
@@ -369,7 +370,7 @@
   </div>
 </div>
 
-<div class="drop" id="drop" hidden>فایل را این جا رها کنید</div>
+<div class="drop" id="drop" hidden>فایل را این‌جا رها کنید</div>
 <div class="voicebox" id="voiceStatus" role="status" aria-live="assertive" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 <div class="sr-only" id="srLive" role="status" aria-live="polite" aria-atomic="true"></div>

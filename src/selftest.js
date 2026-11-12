@@ -70,6 +70,13 @@ addEventListener("load", () => setTimeout(async () => {
       const fields = [...document.querySelectorAll("#settings .panel-body > .field")], shown = fields.filter(f => !f.hidden).length;
       $("setFind").value = "zzzz"; $("setFind").oninput(); const none = !$("setNone").hidden;
       $("setFind").value = ""; $("setFind").oninput();
+      const brs = () => document.querySelectorAll("#textView p[data-i] br").length;
+      const b0 = brs(); await setSetting("sentenceLines", true); renderText(); const b1 = brs();
+      const offsetsOk = [...document.querySelectorAll("#textView .w")].slice(0, 200).every(w => S.paras[+w.closest("p").dataset.i].startsWith(w.textContent, +w.dataset.s));
+      const sample = paraHtml("جمله‌ی اول. جمله‌ی دوم است؟ عدد ۳.۵ و ص. ۱۲ و پایان.", 0, null, () => {});
+      const sampleBr = (sample.match(/<br>/g) || []).length, plain = sample.replace(/<br>/g, " ").replace(/<[^>]+>/g, "");
+      await setSetting("sentenceLines", false); renderText();
+      await say(`sentence lines: line breaks ${b0} -> ${b1} with the setting, words still at their places ${offsetsOk}, off again ${brs()}; a sample of four sentences got ${sampleBr} breaks, text unchanged ${plain === "جمله‌ی اول. جمله‌ی دوم است؟ عدد ۳.۵ و ص. ۱۲ و پایان."}`);
       let tone = "no";
       try { await setSetting("clickSound", true); clickTone(true); tone = clickCtx ? clickCtx.state : "no engine"; await setSetting("clickSound", false); } catch (e) { tone = "ERROR " + e; }
       const fileFs = getComputedStyle($("fileName")).fontSize;

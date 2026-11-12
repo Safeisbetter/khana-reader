@@ -71,6 +71,15 @@
     tip.textContent = "تا پایان کار، خوانا را روی صفحه نگه دارید (صفحه خودش روشن می‌ماند). اگر برنامه‌ی دیگری را باز کنید یا صفحه را خاموش کنید، کار ادامه دارد اما چند برابر کندتر.";
     st.appendChild(tip);
   }
+  // «کپی متن صفحه»: through the shell (Server.copySensitive), which marks the text as sensitive and takes it off the clipboard
+  // again after a minute and a half
+  const copyBtn = $("copy");
+  if (copyBtn) copyBtn.onclick = () => {
+    const text = S.paras.join("\n\n");
+    if (!text) return toast("متنی برای کپی نیست.");
+    api("/api/clip", { method: "POST", body: text }).then(() => toast("متن صفحه کپی شد. پس از یک دقیقه و نیم از حافظه‌ی کپی پاک می‌شود."),
+      () => toast("کپی نشد؛ متن را انتخاب و کپی کنید."));
+  };
   // The screen guard (MainActivity.applyScreenGuard): on unless the reader switches it off here.
   const forget = $("forgetField");
   if (forget) {
