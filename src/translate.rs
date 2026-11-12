@@ -165,7 +165,29 @@ const FA_FIXES: &[(&str, &str)] = &[
 const TERM_FIXES: &[(&str, &str, &str)] = &[
 ];
 
+fn collapse_echo(src: &str, fa: &str) -> String {
+    let words: Vec<String> = findall(r"[\p{L}\p{N}]+", src).iter().map(|w| w.to_lowercase()).collect();
+    if words.is_empty() || words.len() > 2 || (words.len() == 2 && words[0] == words[1]) {
+        return fa.to_string();
+    }
+    let toks = findall(r"[\x{0621}-\x{064A}\x{0671}-\x{06D3}\x{200c}]+", fa);
+    let n = toks.len();
+    if n < 2 || n % 2 != 0 || n > 6 || toks[..n / 2] != toks[n / 2..] {
+        return fa.to_string();
+    }
+    let mark = match src.trim_end().chars().last() {
+        Some('?') | Some('؟') => "؟",
+        Some('!') => "!",
+        Some('.') => ".",
+        Some('…') => "…",
+        _ => "",
+    };
+    format!("{}{mark}", toks[..n / 2].join(" "))
+}
+
 fn tidy_farsi(src: &str, s: &str) -> String {
+    let once = collapse_echo(src, s);
+    let s = once.as_str();
     match strip(src) {
         "a." | "A." => return "الف.".to_string(),
         "b." | "B." => return "ب.".to_string(),
