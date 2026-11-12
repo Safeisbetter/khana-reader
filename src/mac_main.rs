@@ -139,7 +139,7 @@ pub fn run() {
             let path = req.uri().path().to_string();
             let qs = req.uri().query().unwrap_or("").to_string();
             let token = req.headers().get("X-Khana-Token").and_then(|v| v.to_str().ok()).map(|s| s.to_string());
-            let r = if method == "POST" && path == "/api/pdfview" && token.as_deref() == Some(a.token.as_str()) {
+            let r = if method == "POST" && path == "/api/pdfview" && khana::app::token_ok(token.as_deref(), &a.token) {
                 let (status, ctype, headers, body) = b.call(&khana::app::query(&qs), req.body());
                 khana::app::Reply { status, ctype, body, headers }
             } else {

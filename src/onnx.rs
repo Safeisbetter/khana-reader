@@ -21,7 +21,7 @@ fn dylib() -> PathBuf {
             return f;
         }
     }
-    PathBuf::from(".").join("vendor/lib/libonnxruntime.dylib")
+    crate::vocab::dev_root().join("vendor/lib/libonnxruntime.dylib")
 }
 
 #[cfg(shell)]

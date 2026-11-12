@@ -7,6 +7,14 @@ edition = "2024"
 # (staticlib: the iPhone app links the core as libkhana.a; the Mac and Android builds use the rlib / their own ways)
 crate-type = ["rlib", "staticlib"]
 
+# Release builds (every download): no debug information, symbol names stripped (the JNI and C entry points the shells call stay
+# exported). Panics still unwind: the FFI layer catches them (src/ffi). Debug assertions are off, so the web inspector is off too.
+[profile.release]
+debug = false
+strip = "symbols"
+debug-assertions = false
+overflow-checks = false
+
 [dependencies]
 fancy-regex = "0.16"
 hound = "3.5.1"

@@ -26,7 +26,17 @@ pub fn web_dir() -> PathBuf {
             return w;
         }
     }
-    PathBuf::from(".").join("web")
+    dev_root().join("web")
+}
+
+#[cfg(not(shell))]
+pub fn dev_root() -> PathBuf {
+    let exe = std::env::current_exe().unwrap_or_default();
+    exe.ancestors()
+        .find(|d| d.file_name().is_some_and(|n| n == "target"))
+        .and_then(|t| t.parent())
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
 }
 
 #[cfg(shell)]
@@ -53,7 +63,7 @@ pub fn models_dir() -> &'static PathBuf {
             }
         }
         #[cfg(not(shell))]
-        return PathBuf::from(".").join("models");
+        return dev_root().join("models");
         #[cfg(shell)]
         PathBuf::from("models")
     })

@@ -426,10 +426,12 @@ fn t_text(n: roxmltree::Node) -> String {
         .collect()
 }
 
+const ZIP_PART_LIMIT: u64 = 64 * 1024 * 1024;
+
 fn zip_read(z: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>, name: &str) -> Option<String> {
-    let mut f = z.by_name(name).ok()?;
+    let f = z.by_name(name).ok()?;
     let mut s = String::new();
-    f.read_to_string(&mut s).ok()?;
+    f.take(ZIP_PART_LIMIT).read_to_string(&mut s).ok()?;
     Some(s)
 }
 
@@ -648,4 +650,5 @@ pub fn open_pages(name: &str, pages: Vec<Vec<String>>, engines: Arc<Engines>) ->
 pub fn name_is_sayable(title: &str, lang: &str) -> bool {
     lang != "fa" || title.chars().any(|c| ('\u{600}'..='\u{6FF}').contains(&c))
 }
+
 

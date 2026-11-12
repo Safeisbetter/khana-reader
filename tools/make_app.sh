@@ -13,6 +13,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Framewor
 cp target/release/khana "$APP/Contents/MacOS/KhanaReaderRust"
 # only the app's own Frameworks folder: never the build folder's libraries
 install_name_tool -delete_rpath "$PWD/vendor/lib" "$APP/Contents/MacOS/KhanaReaderRust"
+# (checked: no folder name of this computer, which holds the user's name, is left inside the program)
+if LC_ALL=C grep -q -a "$HOME" "$APP/Contents/MacOS/KhanaReaderRust"; then echo "A PATH OF THIS COMPUTER IS IN THE PROGRAM"; exit 1; fi
 cp packaging/Info.plist "$APP/Contents/"
 cp packaging/AppIcon.icns "$APP/Contents/Resources/"
 cp -R web "$APP/Contents/Resources/web"

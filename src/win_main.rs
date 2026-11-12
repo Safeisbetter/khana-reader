@@ -98,7 +98,7 @@ pub fn run() {
         .with_asynchronous_custom_protocol("khana".into(), handler)
         .with_url(START_URL)
         .with_incognito(true)
-        .with_navigation_handler(|url| url.starts_with("http://khana.localhost"))
+        .with_navigation_handler(|url| url == "http://khana.localhost" || url.starts_with(START_URL))
         .with_new_window_req_handler(|_url, _features| wry::NewWindowResponse::Deny)
         .with_download_started_handler(|_url, _path| false)
         .with_drag_drop_handler(|_e| false)

@@ -129,8 +129,12 @@ final class Server {
             if (b == null) return text(400, "the request's body did not arrive");
             body = b.take();
         }
-        // a voice sample other than WAV is decoded by Android first (the Mac uses afconvert)
+        // a voice sample other than WAV is decoded by Android first (the Mac uses afconvert); only for the page itself
         if ("/api/myvoice".equals(path) && body != null) {
+            if (!tokenOk(tok)) {
+                Arrays.fill(body, (byte) 0);
+                return json(403, "{}");
+            }
             String name = u.getQueryParameter("name");
             if (name != null && !name.toLowerCase(Locale.ROOT).endsWith(".wav")) {
                 byte[] wav = AudioDecode.toWav(ctx, body);
@@ -143,7 +147,7 @@ final class Server {
         // (Android 13 and newer then keep it out of the clipboard preview) and taken off again after a minute and a half
         // (on Android 9 and older any app can read the clipboard for as long as the text lies there).
         if ("POST".equals(method) && "/api/clip".equals(path)) {
-            if (tok == null || !Arrays.equals(Native.utf8(tok), Native.token())) return json(403, "{}");
+            if (!tokenOk(tok)) return json(403, "{}");
             copySensitive(ctx, body == null ? "" : Native.text(body));
             if (body != null) Arrays.fill(body, (byte) 0);
             return json(200, "{\"ok\":true}");
@@ -157,6 +161,11 @@ final class Server {
         }
         if (path.startsWith("/api/")) Exporter.drain(ctx);
         return response(r);
+    }
+
+    /** The page's token, compared in constant time (MessageDigest.isEqual). */
+    private boolean tokenOk(String tok) {
+        return tok != null && !token.isEmpty() && java.security.MessageDigest.isEqual(Native.utf8(tok), Native.utf8(token));
     }
 
     private static String header(WebResourceRequest req, String name) {
