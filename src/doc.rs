@@ -440,7 +440,7 @@ pub fn docx_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
     let mut z = zip::ZipArchive::new(std::io::Cursor::new(data)).map_err(|_| bad())?;
     let mut main = "word/document.xml".to_string();
     if let Some(rels) = zip_read(&mut z, "_rels/.rels") {
-        if let Ok(x) = roxmltree::Document::parse(&rels) {
+        if let Ok(x) = roxmltree::Document::parse_with_options(&rels, crate::ebook::xml_options(false)) {
             for r in x.descendants().filter(|n| n.tag_name().name() == "Relationship") {
                 if r.attribute("Type").unwrap_or("").ends_with("/officeDocument") {
                     main = r.attribute("Target").unwrap_or("").trim_start_matches('/').to_string();
@@ -449,8 +449,11 @@ pub fn docx_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
         }
     }
     let xml = zip_read(&mut z, &main).ok_or_else(bad)?;
-    let opt = roxmltree::ParsingOptions { allow_dtd: true, ..Default::default() };
+    let opt = crate::ebook::xml_options(true);
     let x = roxmltree::Document::parse_with_options(&xml, opt).map_err(|_| bad())?;
+    if crate::ebook::too_deep(&x) {
+        return Err(bad());
+    }
     let body = x.descendants().find(|n| n.is_element() && n.tag_name().name() == "body").ok_or_else(bad)?;
     let mut out = Vec::new();
     for child in body.children().filter(|n| n.is_element()) {
@@ -502,8 +505,8 @@ pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
     (|| -> Option<()> {
         let rels_xml = zip_read(&mut z, "ppt/_rels/presentation.xml.rels")?;
         let pres_xml = zip_read(&mut z, "ppt/presentation.xml")?;
-        let rels = roxmltree::Document::parse(&rels_xml).ok()?;
-        let pres = roxmltree::Document::parse(&pres_xml).ok()?;
+        let rels = roxmltree::Document::parse_with_options(&rels_xml, crate::ebook::xml_options(false)).ok()?;
+        let pres = roxmltree::Document::parse_with_options(&pres_xml, crate::ebook::xml_options(false)).ok()?;
         let map: HashMap<String, String> = rels
             .root_element()
             .children()
@@ -531,6 +534,8 @@ pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
         s.sort();
         slides = s.into_iter().map(|x| x.1).collect();
     }
+    let mut once: HashSet<String> = HashSet::new();
+    slides.retain(|s| once.insert(s.clone()));
     let is = |n: &roxmltree::Node, tag: &str| n.is_element() && n.tag_name().name() == tag && n.tag_name().namespace() == Some(A);
     let ptext = |p: roxmltree::Node| -> String {
         p.descendants().filter(|t| is(t, "t")).map(|t| t.text().unwrap_or("")).collect()
@@ -538,9 +543,12 @@ pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
     let mut pages = Vec::new();
     for path in slides {
         let xml = zip_read(&mut z, &path).unwrap_or_default();
-        let Ok(root) = roxmltree::Document::parse(&xml) else {
+        let Ok(root) = roxmltree::Document::parse_with_options(&xml, crate::ebook::xml_options(false)) else {
             return Err("این فایل پاورپوینت باز نشد. شاید خراب باشد.".into());
         };
+        if crate::ebook::too_deep(&root) {
+            return Err("این فایل پاورپوینت باز نشد. شاید خراب باشد.".into());
+        }
         let mut rows = Vec::new();
         let mut in_table: HashSet<roxmltree::NodeId> = HashSet::new();
         for tr in root.descendants().filter(|n| is(n, "tr")) {

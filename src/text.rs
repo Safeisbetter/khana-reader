@@ -718,11 +718,41 @@ pub fn join_across_pages(mut pages: Vec<Vec<String>>) -> Vec<Vec<String>> {
     pages
 }
 
+pub const MAX_PARAGRAPH_CHARS_IN_PAGE: usize = 8000;
+
+fn split_long(p: String) -> Vec<String> {
+    let chars: Vec<char> = p.chars().collect();
+    if chars.len() <= MAX_PARAGRAPH_CHARS_IN_PAGE {
+        return vec![p];
+    }
+    let mut out = Vec::new();
+    let mut start = 0;
+    while start < chars.len() {
+        let end = (start + MAX_PARAGRAPH_CHARS_IN_PAGE).min(chars.len());
+        let mut cut = end;
+        if end < chars.len() {
+            let from = start + MAX_PARAGRAPH_CHARS_IN_PAGE / 2;
+            let sentence = (from..end).rev().find(|&i| matches!(chars[i], '.' | '!' | '?' | '؟' | '؛' | '…') && chars.get(i + 1).is_some_and(|c| c.is_whitespace()));
+            cut = match sentence {
+                Some(i) => i + 1,
+                None => (from..end).rev().find(|&i| chars[i].is_whitespace()).map_or(end, |i| i + 1),
+            };
+        }
+        let piece: String = chars[start..cut].iter().collect();
+        let piece = strip(&piece);
+        if !piece.is_empty() {
+            out.push(piece.to_string());
+        }
+        start = cut;
+    }
+    out
+}
+
 pub fn chunk_text_pages(paragraphs: Vec<String>) -> Vec<Vec<String>> {
     let mut pages = Vec::new();
     let mut cur = Vec::new();
     let mut size = 0;
-    for p in paragraphs {
+    for p in paragraphs.into_iter().flat_map(split_long) {
         size += len(&p);
         cur.push(p);
         if size >= CHARS_PER_TEXT_PAGE {
