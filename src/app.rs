@@ -693,6 +693,15 @@ pub fn random_bytes<const N: usize>() -> [u8; N] {
     b
 }
 
+pub fn token_ok(given: Option<&str>, want: &str) -> bool {
+    let Some(g) = given else { return false };
+    let (g, w) = (g.as_bytes(), want.as_bytes());
+    if g.len() != w.len() || w.is_empty() {
+        return false;
+    }
+    g.iter().zip(w).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0
+}
+
 pub fn new_token() -> String {
     random_bytes::<24>().iter().map(|x| format!("{x:02x}")).collect()
 }
@@ -797,7 +806,7 @@ impl App {
         if method == "GET" && path == "/Vazirmatn.woff2" {
             return Reply { status: 200, ctype: "font/woff2", body: VAZIRMATN.to_vec(), headers: Vec::new() };
         }
-        let authed = token == Some(self.token.as_str());
+        let authed = token_ok(token, &self.token);
         if !path.starts_with("/api/") || !authed {
             return Reply { status: if path.starts_with("/api/") { 403 } else { 404 }, ctype: "text/plain", body: Vec::new(), headers: Vec::new() };
         }
@@ -1323,3 +1332,4 @@ impl App {
         }
     }
 }
+

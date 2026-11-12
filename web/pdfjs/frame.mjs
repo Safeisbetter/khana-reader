@@ -25,6 +25,7 @@ async function open(bytes, requestId) {
     isEvalSupported: false, enableXfa: false, useWasm: false, useSystemFonts: false, disableFontFace: true,
     wasmUrl: BASE + "wasm/", standardFontDataUrl: BASE + "standard_fonts/", cMapUrl: BASE + "cmaps/", cMapPacked: true,
     maxImageSize: 64 * 1024 * 1024, stopAtErrors: false,
+    verbosity: 0, // (errors only: pdf.js's warnings, which can name a PDF's fonts or contents, are not written to the console)
   });
   let cancelled = false;
   // An encrypted PDF asks for its password (again, when it was wrong): the reader page shows the dialog and answers with

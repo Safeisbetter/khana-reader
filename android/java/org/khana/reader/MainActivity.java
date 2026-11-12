@@ -282,6 +282,13 @@ public final class MainActivity extends Activity implements Exporter.Asker {
 
     private final class Chrome extends WebChromeClient {
         @Override
+        public boolean onConsoleMessage(android.webkit.ConsoleMessage m) {
+            // (the page's and pdf.js's console lines are not passed to the system log, which would otherwise keep them, in the public
+            // download: true says «handled». A developer's own build lets them through.)
+            return !DEV_TOOLS;
+        }
+
+        @Override
         public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> cb, FileChooserParams params) {
             if (picking != null) picking.onReceiveValue(null);
             picking = cb;

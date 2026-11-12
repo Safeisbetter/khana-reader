@@ -93,10 +93,18 @@ fi
 # on its first start as before. resources.arsc stays uncompressed, as Android 11 and newer require)
 "$BT/aapt2" link -o "$OUT/unsigned.apk" --manifest "$MANIFEST" -I "$JAR" -A "$A" -0 .arsc \
   --proguard "$OUT/aapt-rules.pro" "$OUT/res.zip"
-# R8: the shell shrunk and its names shortened (release), keeping what the manifest and JNI name
+# R8: the shell shrunk and its names shortened (release), keeping what the manifest and JNI name; the public download also has
+# every log call taken out (proguard-public.pro)
+PG_PUBLIC=()
+[ -n "${KHANA_PUBLIC:-}" ] && PG_PUBLIC=(--pg-conf "$HERE/proguard-public.pro")
 java -cp "$BT/lib/d8.jar" com.android.tools.r8.R8 --release --min-api $API --lib "$JAR" \
-  --pg-conf "$OUT/aapt-rules.pro" --pg-conf "$HERE/proguard-rules.pro" --pg-map-output "$OUT/mapping.txt" \
+  --pg-conf "$OUT/aapt-rules.pro" --pg-conf "$HERE/proguard-rules.pro" ${PG_PUBLIC[@]+"${PG_PUBLIC[@]}"} --pg-map-output "$OUT/mapping.txt" \
   --output "$OUT/dex" "$OUT/classes.jar"
+if [ -n "${KHANA_PUBLIC:-}" ]; then
+  # (checked, not hoped: no reference to Android's log, nor to the developer's tests, is left in the public download's code)
+  if LC_ALL=C grep -q -a 'Landroid/util/Log;' "$OUT/dex/classes.dex"; then echo "PUBLIC BUILD STILL CALLS android.util.Log"; exit 1; fi
+  if LC_ALL=C grep -q -a 'KhanaBench' "$OUT/dex/classes.dex"; then echo "PUBLIC BUILD STILL HAS THE DEVELOPER TESTS"; exit 1; fi
+fi
 mkdir -p "$OUT/extra/lib"
 rm -rf "$OUT/extra/lib/arm64-v8a"
 cp -R "$OUT/jniLibs/arm64-v8a" "$OUT/extra/lib/"
@@ -120,5 +128,9 @@ if [ ! -f "$K/khana.jks" ]; then
 fi
 "$BT/apksigner" sign --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --ks "$K/khana.jks" --ks-pass "file:$K/password.txt" --ks-key-alias khana --out "$OUT/$APK" "$OUT/aligned.apk"
 "$BT/apksigner" verify -v --print-certs "$OUT/$APK" | grep -E "Verified using v[23] |Signer #1 certificate SHA-256"
+# (never a debuggable APK: any app could then be attached to it over USB and its memory, the open book, read)
+if "$BT/aapt2" dump badging "$OUT/$APK" 2>/dev/null | grep -q "application-debuggable"; then echo "APK IS DEBUGGABLE"; rm -f "$OUT/$APK"; exit 1; fi
+# (and no folder name of this computer inside the program: the user's own name is in it)
+if LC_ALL=C grep -q -a "$HOME" "$OUT/jniLibs/arm64-v8a/libkhana.so" "$OUT/dex/classes.dex"; then echo "A PATH OF THIS COMPUTER IS IN THE APP"; rm -f "$OUT/$APK"; exit 1; fi
 rm -f "$OUT/unsigned.apk" "$OUT/aligned.apk"
 ls -la "$OUT/$APK"
