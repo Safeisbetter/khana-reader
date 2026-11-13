@@ -146,6 +146,16 @@ final class Server {
         // The page's «copy page text»: put on the clipboard here, not by the web view, so that it can be marked as sensitive
         // (Android 13 and newer then keep it out of the clipboard preview) and taken off again after a minute and a half
         // (on Android 9 and older any app can read the clipboard for as long as the text lies there).
+        // The page's colours for the shell's own bar at the top («رنگ پس‌زمینه»): the bar is not part of the page, so the page says
+        // what it looks like now, «#rrggbb #rrggbb» (ground, writing). Only two colours are read, nothing else.
+        if ("POST".equals(method) && "/api/shellbar".equals(path)) {
+            if (!tokenOk(tok)) return json(403, "{}");
+            String t = body == null ? "" : Native.text(body);
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("^#([0-9a-fA-F]{6}) #([0-9a-fA-F]{6})$").matcher(t.trim());
+            if (!m.find()) return json(400, "{}");
+            MainActivity.paintBar(0xFF000000 | Integer.parseInt(m.group(1), 16), 0xFF000000 | Integer.parseInt(m.group(2), 16));
+            return json(200, "{\"ok\":true}");
+        }
         if ("POST".equals(method) && "/api/clip".equals(path)) {
             if (!tokenOk(tok)) return json(403, "{}");
             if (isLocked()) { // (the app lock: this request does not go through the core, so it asks)

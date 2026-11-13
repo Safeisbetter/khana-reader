@@ -117,3 +117,29 @@ if (window.KHANA_NO_MIC) {
     const hint = box.querySelector(".hint"); if (hint) hint.textContent = "خوانا می‌تواند با صدای خود شما بخواند. یک فایل صوتی کوتاه از صدای خودتان (۱۰ تا ۳۰ ثانیه، بی‌نویز) انتخاب کنید.";
   }
 }
+
+/* The bar at the top of the screen belongs to the Android shell, not to this page: it is told the page's own bar colours
+   (ground and writing) whenever the look changes («رنگ پس‌زمینه», or the device going dark), so the two match. A see-through
+   ground (the glass looks) is laid over the page's colour first. */
+(function () {
+  const rgb = s => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(s || ""); return m ? [+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]] : null; };
+  const hex = c => "#" + c.slice(0, 3).map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
+  let last = "";
+  function send() {
+    const barEl = document.querySelector(".bar");
+    if (!barEl) return;
+    const cs = getComputedStyle(barEl), page = rgb(getComputedStyle(document.body).backgroundColor) || [255, 255, 255, 1];
+    let g = rgb(cs.backgroundColor) || page;
+    if (g[3] < 1) g = [0, 1, 2].map(k => g[k] * g[3] + page[k] * (1 - g[3]));
+    const ink = rgb(cs.color) || [0, 0, 0, 1];
+    const msg = hex(g) + " " + hex(ink);
+    if (msg === last) return;
+    last = msg;
+    api("/api/shellbar", { method: "POST", body: msg }).catch(() => { last = ""; });
+  }
+  const later = () => setTimeout(send, 60); // (after the look's colours are applied)
+  new MutationObserver(later).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", later);
+  addEventListener("load", later);
+  setTimeout(send, 1500);
+})();

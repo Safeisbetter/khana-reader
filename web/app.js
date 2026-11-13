@@ -656,13 +656,25 @@ function paraHtml(p, i, re, found) {
   // («هر جمله در خط تازه»: the space after a sentence's end becomes a line break; the words keep their places in the paragraph)
   const lines = !!(S.settings && S.settings.sentenceLines);
   let ended = false;
-  const h = p.replace(/\S+|\s+/g, (tok, off) => {
-    if (/^\s/.test(tok)) { const br = lines && ended; ended = false; return br ? "<br>" : tok; }
-    // (not after a number or a one-letter abbreviation, «ص.»)
-    ended = /[.!?؟…][»"”)\]]?$/.test(tok) && !/^[\d۰-۹.]+$/.test(tok) && tok.replace(/[.!?؟…»"”)\]]/g, "").length > 1;
+  // (a sentence's end: not a one-letter abbreviation, «ص.», nor a list's number, «۲.», «12.»; a year closing a sentence, «۱۹۷۵.», is one)
+  const endsSentence = t => /[.!?؟…][»"”)\]]?$/.test(t) && !(/^[\d۰-۹.]+$/.test(t) && !/^[\d۰-۹]{3,}\.$/.test(t)) && t.replace(/[.!?؟…»"”)\]]/g, "").length > 1;
+  const word = (tok, off) => {
     let w = esc(tok);
     if (re) w = w.replace(re, m => (found(), `<mark>${m}</mark>`));
     return `<span class="w" data-s="${off}">${w}</span>`;
+  };
+  const h = p.replace(/\S+|\s+/g, (tok, off) => {
+    if (/^\s/.test(tok)) { const br = lines && ended; ended = false; return br ? "<br>" : tok; }
+    // (a full stop with no space after it, «است.بعد», as some PDFs give it: the next sentence on its own line too. Farsi letters on
+    // both sides only: «www.example.com», «e.g.» and «۳.۵» stay whole)
+    const glued = lines ? /^(.*?[\u0621-\u06cc]{2}[.!?؟…])(?=[\u0621-\u06cc])/.exec(tok) : null;
+    if (glued && endsSentence(glued[1])) {
+      const rest = tok.slice(glued[1].length);
+      ended = endsSentence(rest);
+      return word(glued[1], off) + "<br>" + word(rest, off + glued[1].length);
+    }
+    ended = endsSentence(tok);
+    return word(tok, off);
   });
   return `<p dir="auto" data-i="${i}" title="کلیک: خواندن از همین جمله">${h}</p>`;
 }
@@ -748,7 +760,9 @@ $("q").onkeydown = e => {
   nx.classList.add("cur"); nx.scrollIntoView({ block: "center", behavior: "smooth" });
 };
 addEventListener("keydown", e => {
-  if (!S.doc || e.target.closest("input,select,textarea") || !$("settings").hidden || !$("mp3").hidden) return;
+  // (not while typing: in a text box, or in a paragraph being edited on the page, «ویرایش متن», where Space is a space between
+  // two words and the arrows move the cursor)
+  if (!S.doc || e.target.closest("input,select,textarea") || e.target.isContentEditable || !$("settings").hidden || !$("mp3").hidden) return;
   if (e.key === "ArrowLeft") $("prev").click();
   if (e.key === "ArrowRight") $("next").click();
   if (e.key === " ") { e.preventDefault(); $("play").click(); }

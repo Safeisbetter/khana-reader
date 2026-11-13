@@ -75,7 +75,10 @@ pub fn run() {
             let qs = req.uri().query().unwrap_or("").to_string();
             let token = req.headers().get("X-Khana-Token").and_then(|v| v.to_str().ok()).map(|s| s.to_string());
             let r = a.handle(&method, &path, &qs, token.as_deref(), req.body(), &web);
-            if std::env::var("KHANA_SELFTEST").is_ok() {
+            if path == "/api/init" && std::env::var("KHANA_SMOKE").is_ok() {
+                eprintln!("SMOKE page loaded {}", r.status);
+            }
+            if khana::app::selftest_on() {
                 eprintln!("request {method} {path} body {} -> {} {}", req.body().len(), r.status, if r.status >= 400 { String::from_utf8_lossy(&r.body).into_owned() } else { String::new() });
             }
             let mut b = Response::builder()
@@ -91,7 +94,7 @@ pub fn run() {
             responder.respond(resp);
         });
     };
-    let selftest = if std::env::var("KHANA_SELFTEST").is_ok() { include_str!("selftest.js") } else { "" };
+    let selftest = if khana::app::selftest_on() { "" } else { "" };
     let mut web_context = WebContext::new(Some(khana::app::data_dir().join("webview-offline")));
     let webview = WebViewBuilder::new_with_web_context(&mut web_context)
         .with_additional_browser_args(concat!(
