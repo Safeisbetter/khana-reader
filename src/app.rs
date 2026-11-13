@@ -27,6 +27,16 @@ pub const VOICES: &[VoiceInfo] = &[
     VoiceInfo { id: "khabari", wav: "male_news.wav", name: "مدل صدا ۱", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
     VoiceInfo { id: "seda2", wav: "donated_andrea.wav", name: "مدل صدا ۲", gender: "زن", group: "natural", extra: false, tempo: 1.1 },
     VoiceInfo { id: "seda3", wav: "donated_aryobe.wav", name: "مدل صدا ۳", gender: "مرد", group: "natural", extra: false, tempo: 1.1 },
+    VoiceInfo { id: "mahtab", wav: "mahtab.wav", name: "مهتاب", gender: "زن", group: "natural", extra: true, tempo: 1.0 },
+    VoiceInfo { id: "arash", wav: "arash.wav", name: "آرش", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
+    VoiceInfo { id: "pariya", wav: "pariya.wav", name: "پریا", gender: "زن", group: "natural", extra: true, tempo: 1.0 },
+    VoiceInfo { id: "kaveh", wav: "kaveh.wav", name: "کاوه", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
+    VoiceInfo { id: "bahram", wav: "bahram.wav", name: "بهرام", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
+    VoiceInfo { id: "mokhtari", wav: "mokhtari.wav", name: "مختاری", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
+    VoiceInfo { id: "poyandeh", wav: "poyandeh.wav", name: "پوینده", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
+    VoiceInfo { id: "saeedi", wav: "saeedi.wav", name: "سعیدی", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
+    VoiceInfo { id: "shahin", wav: "shahin.wav", name: "شاهین نوایی", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
+    VoiceInfo { id: "shamlou", wav: "shamlou.wav", name: "شاملو", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
 ];
 
 pub fn data_dir() -> PathBuf {
@@ -72,6 +82,13 @@ fn voices() -> Vec<&'static VoiceInfo> {
     VOICES.iter().filter(|v| voice_path(v).is_file() && has_engine()).collect()
 }
 
+pub const SELFTEST: bool = false;
+
+#[inline]
+pub fn selftest_on() -> bool {
+    SELFTEST && std::env::var("KHANA_SELFTEST").is_ok()
+}
+
 fn all_voices() -> Vec<(String, String, String, String)> {
     let mut v: Vec<_> = voices().iter().map(|v| (v.id.to_string(), v.name.to_string(), v.gender.to_string(), v.group.to_string())).collect();
     if has_engine() && my_voice().is_file() {
@@ -83,7 +100,7 @@ fn all_voices() -> Vec<(String, String, String, String)> {
 fn default_settings() -> Map<String, Value> {
     let first = voices().first().map(|v| v.id).unwrap_or("");
     let v = json!({"voice": first, "speed": 1.0, "fontSize": 21, "reversed": false, "persianYeh": true, "autoNext": true,
-                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": false, "commaPause": "normal", "cursor": "large"});
+                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "normal", "cursor": "large"});
     v.as_object().unwrap().clone()
 }
 
@@ -901,7 +918,7 @@ impl App {
                 let voices: Vec<Value> = all_voices().into_iter().map(|(id, name, gender, group)| json!({"id": id, "name": name, "gender": gender, "group": group})).collect();
                 let mut v = json!({"settings": load_settings(), "voices": voices, "canListen": crate::asr::ready(), "canWrite": crate::stt::available()});
                 v["library"] = json!(library_dir().is_some());
-                if std::env::var("KHANA_SELFTEST").is_ok() {
+                if selftest_on() {
                     v["testData"] = json!(!data_dir().to_string_lossy().contains("/Containers/"));
                     v["screenTest"] = json!(std::env::var("KHANA_SELFTEST_SCREEN").is_ok());
                 }
@@ -1414,11 +1431,11 @@ impl App {
                 Ok(Reply { status: 200, ctype: "audio/mpeg", body: data,
                     headers: vec![("Content-Disposition".into(), format!("attachment; filename=\"{ascii}\""))] })
             }
-            "selftest_passwords_get" if std::env::var("KHANA_SELFTEST").is_ok() => {
+            "selftest_passwords_get" if selftest_on() => {
                 let list: Vec<String> = std::env::var("KHANA_SELFTEST_PASSWORDS").unwrap_or_default().split(',').filter(|x| !x.is_empty()).map(|x| x.to_string()).collect();
                 Ok(reply_json(&json!({"list": list})))
             }
-            "selftest_file_get" if std::env::var("KHANA_SELFTEST").is_ok() => {
+            "selftest_file_get" if selftest_on() => {
                 let f = if q.get("name").map(|s| s.as_str()) == Some("scan") {
                     save_dir().join(std::env::var("KHANA_SELFTEST_SCAN").unwrap_or_default())
                 } else {
@@ -1427,7 +1444,7 @@ impl App {
                 let data = std::fs::read(&f).map_err(|e| ApiError::Internal(format!("{}: {e}", f.display())))?;
                 Ok(Reply { status: 200, ctype: "application/octet-stream", body: data, headers: Vec::new() })
             }
-            "selftest_layout_post" if std::env::var("KHANA_SELFTEST").is_ok() => match std::env::var("KHANA_SELFTEST_LAYOUT") {
+            "selftest_layout_post" if selftest_on() => match std::env::var("KHANA_SELFTEST_LAYOUT") {
                 Ok(path) if !body.is_empty() => {
                     std::fs::write(&path, body).map_err(|e| ApiError::Internal(e.to_string()))?;
                     Ok(reply_json(&json!({"only": true})))
@@ -1435,7 +1452,7 @@ impl App {
                 Ok(_) => Ok(reply_json(&json!({"only": true}))),
                 Err(_) => Ok(reply_json(&json!({"only": false}))),
             },
-            "selftest_report_post" if std::env::var("KHANA_SELFTEST").is_ok() => {
+            "selftest_report_post" if selftest_on() => {
                 eprintln!("SELFTEST {}", String::from_utf8_lossy(body));
                 if String::from_utf8_lossy(body).starts_with("DONE") {
                     std::process::exit(0);

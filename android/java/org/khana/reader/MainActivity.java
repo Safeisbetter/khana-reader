@@ -99,7 +99,9 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         // the app's bar (its menu: the Mac menu's commands) is the window's own Toolbar, so that both it
         // and the page are kept clear of the system bars here (edge to edge: Android 15 and newer)
         bar = new Toolbar(this);
-        bar.setTitle("خوانا");
+        // (no title of its own: the page right under it shows the app's name; the bar keeps the menu)
+        bar.setTitle("");
+        bar.setContentDescription("خوانا");
         bar.setBackgroundColor(night() ? Color.rgb(20, 62, 52) : Color.rgb(31, 111, 92));
         bar.setTitleTextColor(Color.WHITE);
         outer.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -403,6 +405,30 @@ public final class MainActivity extends Activity implements Exporter.Asker {
      * photograph or record this screen (a screen recorder, a «screen sharing» app), and the list of recent apps shows a blank
      * card instead of the page being read. Asked again whenever the settings are saved (Server).
      */
+    /** The bar at the top in the page's own colours (its ground and writing), so it matches «رنگ پس‌زمینه»; the status bar's icons
+     *  dark on a light bar and light on a dark one. */
+    static void paintBar(final int ground, final int ink) {
+        final MainActivity a = current;
+        if (a == null) return;
+        android.util.Log.i("KhanaBar", String.format("bar painted #%06x #%06x", ground & 0xFFFFFF, ink & 0xFFFFFF));
+        a.runOnUiThread(() -> {
+            if (a.bar == null) return;
+            a.bar.setBackgroundColor(ground);
+            a.bar.setTitleTextColor(ink);
+            android.graphics.drawable.Drawable more = a.bar.getOverflowIcon();
+            if (more != null) more.setTint(ink);
+            a.outer.setBackgroundColor(ground);
+            boolean light = (0.299 * Color.red(ground) + 0.587 * Color.green(ground) + 0.114 * Color.blue(ground)) > 150;
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.view.WindowInsetsController c = a.getWindow().getInsetsController();
+                if (c != null) {
+                    int f = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                    c.setSystemBarsAppearance(light ? f : 0, f);
+                }
+            }
+        });
+    }
+
     static void applyScreenGuard() {
         final MainActivity a = current;
         if (a == null) return;

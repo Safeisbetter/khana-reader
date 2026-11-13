@@ -28,7 +28,8 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 .bar-inner { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
 .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .brand { display: flex; align-items: baseline; gap: 10px; margin-inline-end: auto; min-width: 0; }
-.logo { font-weight: 800; font-size: 26px; line-height: 1; color: var(--lapis); letter-spacing: -.01em; }
+/* (the app's name in its own typeface, Vazirmatn, which the app carries: the same on every device, not the system's fallback) */
+.logo { font-family: "Vazirmatn", var(--ui-font); font-weight: 800; font-size: 26px; line-height: 1; color: var(--lapis); letter-spacing: -.01em; }
 .file { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45vw; }
 .offline { font-size: 11px; padding: 1px 9px; border-radius: 99px; background: color-mix(in srgb, var(--turq) 14%, transparent); color: var(--turq); white-space: nowrap; }
 

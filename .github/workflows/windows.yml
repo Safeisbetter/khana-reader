@@ -22,7 +22,7 @@ permissions:
 env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: "v1.14"
+  MODELS_RELEASE: "v1.15"
 
 jobs:
   build:
@@ -125,13 +125,12 @@ jobs:
         run: |
           $dl = "$env:USERPROFILE\Downloads"
           New-Item -ItemType Directory -Force $dl | Out-Null
-          Set-Content "$dl\selftest.txt" "x"
-          $env:KHANA_SELFTEST = "selftest.txt"
+          $env:KHANA_SMOKE = "1"
           $p = Start-Process -FilePath ".\KhanaReader-Windows\KhanaReader.exe" -PassThru -RedirectStandardError err.txt -RedirectStandardOutput out.txt
           $ok = $false
           for ($i = 0; $i -lt 60; $i++) {
             Start-Sleep 2
-            if ((Test-Path err.txt) -and (Select-String -Path err.txt -Pattern "SELFTEST loaded" -Quiet)) { $ok = $true; break }
+            if ((Test-Path err.txt) -and (Select-String -Path err.txt -Pattern "SMOKE page loaded 200" -Quiet)) { $ok = $true; break }
           }
           Get-Content err.txt -ErrorAction SilentlyContinue | Select-Object -First 8
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
@@ -160,6 +159,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v1.14"
+          tag="v1.15"
           ls -la zips
           gh release upload "$tag" zips/*.zip --clobber

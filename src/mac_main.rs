@@ -84,7 +84,7 @@ pub fn run() {
     khana::ffi::lower_priority();
     std::thread::spawn(|| loop {
         khana::tts::set_heat(khana::mac::heat_level());
-        if std::env::var("KHANA_SELFTEST").is_ok() {
+        if khana::app::selftest_on() {
             std::thread::sleep(std::time::Duration::from_secs(15));
             continue;
         }
@@ -154,7 +154,7 @@ pub fn run() {
             } else {
                 a.handle(&method, &path, &qs, token.as_deref(), req.body(), &web)
             };
-            if std::env::var("KHANA_SELFTEST").is_ok() {
+            if khana::app::selftest_on() {
                 eprintln!("request {method} {path} body {} -> {} {}", req.body().len(), r.status, if r.status >= 400 { String::from_utf8_lossy(&r.body).into_owned() } else { String::new() });
             }
             let mut b = Response::builder()
@@ -170,8 +170,8 @@ pub fn run() {
             responder.respond(resp);
         });
     };
-    let selftest = if std::env::var("KHANA_SELFTEST").is_ok() { include_str!("selftest.js") } else { "" };
-    let lock_flag = if std::env::var("KHANA_SELFTEST_LOCK").is_ok() { "window.KHANA_LOCKTEST = true;\n" } else { "" };
+    let selftest = if khana::app::selftest_on() { "" } else { "" };
+    let lock_flag = if khana::app::selftest_on() && std::env::var("KHANA_SELFTEST_LOCK").is_ok() { "" } else { "" };
     let selftest = format!("window.KHANA_PDF_VIEW = true;\n{lock_flag}{selftest}");
     let gone = event_loop.create_proxy();
     let mut builder = WebViewBuilder::new()
