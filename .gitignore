@@ -27,7 +27,25 @@ password.txt
 /audiobook 2
 joins.tsv
 NOTES.md
+HANDOFF_WORDS.md
+IOS_PLAN.md
+# Agent folders and memory files hold secrets like a .env file does (commands with passwords, tokens, local paths): never committed
+/.claude
 .claude/
+.cursor/
+.gemini/
+.specstory/
+.aider*
+.continue/
+.windsurf/
+.codeium/
+.copilot/
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+MEMORY.md
+memory/
+settings.local.json
 tools/compare*.py
 tools/gen_consts.py
 tools/py_raw.py
