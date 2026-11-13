@@ -545,6 +545,41 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
     job.finish(res);
 }
 
+fn audio_seconds(p: &std::path::Path) -> Option<f64> {
+    use std::io::Read;
+    let size = p.metadata().ok()?.len();
+    let mut head = vec![0u8; 16 * 1024];
+    let n = std::fs::File::open(p).ok()?.read(&mut head).ok()?;
+    let head = &head[..n];
+    let u32le = |i: usize| head.get(i..i + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+    if head.starts_with(b"RIFF") && head.get(8..12) == Some(b"WAVE") {
+        let byte_rate = u32le(28)? as f64;
+        let data = head.windows(4).position(|w| w == b"data").and_then(|i| u32le(i + 4)).filter(|&d| d > 0).map_or(size.saturating_sub(44), |d| d as u64);
+        return (byte_rate > 0.0).then(|| data as f64 / byte_rate);
+    }
+    let mut at = 0usize;
+    if head.starts_with(b"ID3") && head.len() >= 10 {
+        at = 10 + ((head[6] as usize & 0x7f) << 21 | (head[7] as usize & 0x7f) << 14 | (head[8] as usize & 0x7f) << 7 | (head[9] as usize & 0x7f));
+    }
+    let i = (at..head.len().saturating_sub(4)).find(|&i| head[i] == 0xff && head[i + 1] & 0xe0 == 0xe0 && head[i + 1] & 0x06 == 0x02)?;
+    let (b1, b2) = (head[i + 1], head[i + 2]);
+    let mpeg1 = b1 & 0x18 == 0x18;
+    const KBPS1: [u32; 15] = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
+    const KBPS2: [u32; 15] = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+    let kbps = *(if mpeg1 { &KBPS1 } else { &KBPS2 }).get((b2 >> 4) as usize)?;
+    let rates = match b1 & 0x18 { 0x18 => [44100, 48000, 32000], 0x10 => [22050, 24000, 16000], _ => [11025, 12000, 8000] };
+    let rate = *rates.get(((b2 >> 2) & 3) as usize)? as f64;
+    let per_frame = if mpeg1 { 1152.0 } else { 576.0 };
+    if let Some(x) = head[i..].windows(4).take(64).position(|w| w == b"Xing" || w == b"Info") {
+        let x = i + x;
+        if head.get(x + 7).is_some_and(|f| f & 1 == 1) {
+            let frames = head.get(x + 8..x + 12).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))?;
+            return Some(frames as f64 * per_frame / rate);
+        }
+    }
+    (kbps > 0).then(|| (size - i as u64) as f64 * 8.0 / (kbps as f64 * 1000.0))
+}
+
 fn doc_info(d: &Arc<Document>) -> Value {
     json!({"id": d.id, "name": d.name, "title": d.title(), "pages": d.n_pages, "lang": d.lang(),
            "canTranslate": d.can_translate(), "hasImages": d.pdfjs, "hasText": d.has_text(), "scanned": d.had_scans,
@@ -1324,6 +1359,14 @@ impl App {
                 }
                 Ok(reply_json(&json!({"ok": true})))
             }
+            "lengths_get" => {
+                let d = self.doc(q)?;
+                let opts = Opts { translate: false, ..self.opts(q) };
+                let letters: Vec<i64> = (1..=d.n_pages)
+                    .map(|n| if d.needs_picture(n) { -1 } else { d.page_text(n, opts).iter().map(|p| p.chars().filter(|c| c.is_alphanumeric()).count() as i64).sum() })
+                    .collect();
+                Ok(reply_json(&json!({"letters": letters})))
+            }
             "library_get" => {
                 let mut files: Vec<Value> = Vec::new();
                 if let Some(dir) = library_dir() {
@@ -1333,7 +1376,7 @@ impl App {
                         library_file(&name).map(|_| (m.modified().unwrap_or(std::time::UNIX_EPOCH), name, m.len()))
                     }).collect()).unwrap_or_default();
                     all.sort_by(|a, b| b.0.cmp(&a.0));
-                    files = all.into_iter().take(500).map(|(_, name, bytes)| json!({"name": name, "bytes": bytes})).collect();
+                    files = all.into_iter().take(500).map(|(_, name, bytes)| json!({"name": name, "bytes": bytes, "seconds": audio_seconds(&dir.join(&name))})).collect();
                 }
                 Ok(reply_json(&json!({"enabled": library_dir().is_some(), "files": files})))
             }
@@ -1410,4 +1453,5 @@ impl App {
         }
     }
 }
+
 

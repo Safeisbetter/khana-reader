@@ -51,6 +51,7 @@ final class Bench {
             String id = field(doc, "id");
             String job = Native.text(callq("POST", "/api/mp3", "", Native.utf8("{\"doc\":\"" + id + "\",\"first\":1,\"last\":1,\"voice\":\"khabari\",\"speed\":1.0,\"bitrate\":64}")).body);
             String jid = field(job, "id");
+            String lengths = Native.text(callq("GET", "/api/lengths", "doc=" + id, null).body);
             String st = "";
             for (int k = 0; k < 240; k++) {
                 Thread.sleep(500);
@@ -67,7 +68,7 @@ final class Bench {
             String after = Native.text(callq("GET", "/api/library", "", null).body);
             Log.i("KhanaBench", "library: document opened " + !id.isEmpty() + "; job " + field(st, "status") + " " + field(st, "error") + "; core told the shell: " + events.trim()
                     + "; listed " + list.length() + " chars, first file «" + name + "»; read back " + file.status + " " + file.body.length + " bytes; deleted " + del.status
-                    + "; list after: " + after);
+                    + "; list after: " + after + "; letters per page: " + lengths);
         } catch (Throwable e) {
             Log.e("KhanaBench", "library test failed", e);
         }

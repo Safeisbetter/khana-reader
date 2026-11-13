@@ -1331,6 +1331,100 @@ fn is_number_piece(s: &str) -> bool {
     s.chars().any(|c| c.is_numeric()) && !s.chars().any(|c| c.is_alphabetic())
 }
 
+pub fn drop_vertical_text(items: &mut Vec<LayoutItem>) -> usize {
+    let short = |i: &LayoutItem| { let n = i.s.trim().chars().count(); n >= 1 && n <= 4 && (i.x1 - i.x0) <= 1.6 * i.size };
+    let apart = |k: usize| {
+        let i = &items[k];
+        !items.iter().enumerate().any(|(j, o)| {
+            j != k && !short(o) && !o.s.trim().is_empty() && (o.top - i.top).abs() < 0.5 * i.size && (o.x0 - i.x1).max(i.x0 - o.x1) < i.size
+        })
+    };
+    let mut idx: Vec<usize> = (0..items.len()).filter(|&k| short(&items[k]) && apart(k)).collect();
+    idx.sort_by(|&a, &b| items[a].top.partial_cmp(&items[b].top).unwrap_or(std::cmp::Ordering::Equal));
+    let mut gone = vec![false; items.len()];
+    let mut used = vec![false; items.len()];
+    for (pos, &k) in idx.iter().enumerate() {
+        if used[k] {
+            continue;
+        }
+        let mid = |i: &LayoutItem| (i.x0 + i.x1) / 2.0;
+        let mut col = vec![k];
+        let mut last = k;
+        for &j in &idx[pos + 1..] {
+            let (a, b) = (&items[last], &items[j]);
+            let step = b.top - a.top;
+            if step > 0.9 * a.size.max(b.size) {
+                break;
+            }
+            if step > 0.0 && (mid(a) - mid(b)).abs() <= a.size.max(b.size) && (a.size - b.size).abs() < 0.2 * a.size {
+                col.push(j);
+                last = j;
+            }
+        }
+        if col.len() >= 3 {
+            for &j in &col {
+                gone[j] = true;
+                used[j] = true;
+            }
+        }
+    }
+    let n = gone.iter().filter(|g| **g).count();
+    let mut k = 0;
+    items.retain(|_| { k += 1; !gone[k - 1] });
+    n
+}
+
+pub fn mend_reversed_numbers(pages: &mut [Vec<LayoutItem>]) -> usize {
+    fn digits_of(s: &str) -> Option<(String, String)> {
+        let t = s.trim_end_matches(|c: char| c.is_whitespace() || ('\u{e000}'..='\u{f8ff}').contains(&c)).trim_start();
+        let val = |c: char| match c {
+            '0'..='9' => Some(c as u32 - '0' as u32),
+            '\u{06f0}'..='\u{06f9}' => Some(c as u32 - 0x06f0),
+            '\u{0660}'..='\u{0669}' => Some(c as u32 - 0x0660),
+            _ => None,
+        };
+        let block = |c: char| c as u32 / 16;
+        let first = t.chars().next()?;
+        if t.chars().count() < 2 || !t.chars().all(|c| val(c).is_some() && block(c) == block(first)) {
+            return None;
+        }
+        Some((t.chars().map(|c| char::from_digit(val(c).unwrap(), 10).unwrap()).collect(), t.to_string()))
+    }
+    let year = |d: &str| d.parse::<u32>().is_ok_and(|y| (1300..=1499).contains(&y) || (1800..=2099).contains(&y));
+    let (mut back, mut fwd) = (0, 0);
+    for it in pages.iter().flatten() {
+        if let Some((d, _)) = digits_of(&it.s) {
+            if d.len() == 4 {
+                let r: String = d.chars().rev().collect();
+                match (year(&d), year(&r)) {
+                    (false, true) => back += 1,
+                    (true, false) => fwd += 1,
+                    _ => {}
+                }
+            }
+        }
+    }
+    if back < 2 || fwd > 0 {
+        return 0;
+    }
+    let farsi = |s: &str| s.chars().any(|c| ('\u{0621}'..='\u{06cc}').contains(&c));
+    let mut turned = 0;
+    for page in pages.iter_mut() {
+        let lines: Vec<(f64, f64)> = page.iter().filter(|i| farsi(&i.s)).map(|i| (i.top, i.size)).collect();
+        for it in page.iter_mut() {
+            let Some((d, core)) = digits_of(&it.s) else { continue };
+            let in_farsi_line = lines.iter().any(|(top, size)| (top - it.top).abs() < 0.5 * size.max(it.size));
+            let year_back = d.len() == 4 && year(&d.chars().rev().collect::<String>());
+            if (d.len() != 4 && (d.len() >= 3 || in_farsi_line)) || year_back {
+                let rev: String = core.chars().rev().collect();
+                it.s = it.s.replacen(&core, &rev, 1);
+                turned += 1;
+            }
+        }
+    }
+    turned
+}
+
 pub fn paragraphs_from_layout(items: &[LayoutItem], page_h: f64) -> Vec<String> {
     paragraphs_from_lines(&layout_lines(items, page_h))
 }
@@ -1361,17 +1455,32 @@ fn word_cut_in_two(left: &str, right: &str) -> bool {
     let l = plain(left.chars().rev().take_while(|c| is_letter(*c)).collect::<Vec<_>>().into_iter().rev().collect());
     let r = plain(right.chars().take_while(|c| is_letter(*c)).collect());
     let (nl, nr) = (l.chars().count(), r.chars().count());
-    if nl == 0 || nr == 0 || nl.min(nr) > 2 {
+    if nl == 0 || nr == 0 {
         return false;
     }
     const STAND_ALONE: &[&str] = &["می", "نمی", "بی", "به", "هم", "نا", "یک", "دو", "سه", "تک", "پی", "پس", "تن", "کم", "پر", "دی", "در", "بر", "از", "آن", "این"];
-    const ENDINGS: &[&str] = &["ها", "ی", "ای", "ام", "ات", "اش", "تر", "ان", "اند", "ایم", "اید", "رو", "گر", "گو", "زا", "کن", "سو", "ماه", "بار", "وار"];
-    if (nl <= 2 && STAND_ALONE.contains(&l.as_str())) || (nr <= 2 && ENDINGS.contains(&r.as_str())) {
+    const ENDINGS: &[&str] = &["ها", "ی", "ای", "ام", "ات", "اش", "تر", "ان", "اند", "ایم", "اید", "رو", "گر", "گو", "زا", "کن", "سو", "ماه", "بار", "وار",
+                               "های", "هایی", "هایش", "هایم", "هایت", "هایشان", "هایمان", "ترین", "است", "شان", "مان", "تان", "گری", "گرا", "گرایی", "وار"];
+    if STAND_ALONE.contains(&l.as_str()) || ENDINGS.contains(&r.as_str()) {
         return false;
     }
     let c = crate::vocab::word_costs();
     let word = |x: &str| x.chars().count() >= 2 && c.get(x).is_some_and(|v| v.cost <= 13.0);
     let whole = format!("{l}{r}");
+    let pair = nl >= 3 && word(&l) && nr >= 3 && r.starts_with('و') || nr >= 3 && word(&r);
+    if !pair && (nl.min(nr) > 2 || !word(&l) || !word(&r) || nr == 1) {
+        let cost = |x: &str| c.get(x).map_or(99.0, |v| v.cost as f64);
+        let cw = cost(&whole);
+        if (nr == 1 || !word(&l) || !word(&r)) && cw <= 13.0 && cw + 2.0 < cost(&l) + cost(&r) {
+            return true;
+        }
+        if nl.min(nr) > 2 {
+            return false;
+        }
+    }
+    if nl.min(nr) > 2 {
+        return false;
+    }
     let short = if nl <= nr { &l } else { &r };
     let fragment = (short.chars().count() == 2 && !word(short)) || (nl == 1 && l != "و");
     ((!word(&l) && !word(&r)) || fragment) && c.get(whole.as_str()).is_some_and(|v| v.cost <= 13.5)

@@ -185,6 +185,85 @@ fn collapse_echo(src: &str, fa: &str) -> String {
     format!("{}{mark}", toks[..n / 2].join(" "))
 }
 
+const SPOKEN_IRREGULAR: &[(&str, &str)] = &[
+    ("میره", "می‌رود"), ("نمیره", "نمی‌رود"), ("میرن", "می‌روند"), ("نمیرن", "نمی‌روند"), ("بره", "برود"), ("برن", "بروند"),
+    ("میشن", "می‌شوند"), ("نمیشن", "نمی‌شوند"), ("بشن", "بشوند"), ("میگه", "می‌گوید"), ("نمیگه", "نمی‌گوید"), ("میگن", "می‌گویند"),
+    ("نمیگن", "نمی‌گویند"), ("بگه", "بگوید"), ("بگن", "بگویند"), ("میدن", "می‌دهند"), ("نمیدن", "نمی‌دهند"), ("میان", "می‌آیند"),
+    ("همدیگه", "همدیگر"), ("دیگه", "دیگر"), ("آتیش", "آتش"), ("اینو", "این را"), ("اونو", "آن را"), ("خودشو", "خودش را"),
+    ("خودمو", "خودم را"), ("خودتو", "خودت را"), ("خودشونو", "خودشان را"), ("اینجوری", "این‌گونه"), ("اونجوری", "آن‌گونه"),
+    ("یکی دیگه", "یکی دیگر"), ("چیه", "چیست"), ("منو", "من را"), ("تورو", "تو را"), ("اگه", "اگر"), ("بیاد", "بیاید"),
+    ("نیاد", "نیاید"), ("میتونم", "می‌توانم"), ("نمیتونم", "نمی‌توانم"), ("میتونی", "می‌توانی"), ("نمیتونی", "نمی‌توانی"),
+    ("میتونیم", "می‌توانیم"), ("نمیتونیم", "نمی‌توانیم"), ("میتونید", "می‌توانید"), ("نمیتونید", "نمی‌توانید"), ("میخواد", "می‌خواهد"), ("نمیخواد", "نمی‌خواهد"), ("بخواد", "بخواهد"), ("میخوان", "می‌خواهند"),
+];
+
+fn written_word(w: &str) -> Option<String> {
+    let half_spaced = w.contains('\u{200c}');
+    let w = w.replace('\u{200c}', "");
+    let w = w.as_str();
+    if w.chars().count() < 3 || !w.chars().all(|c| ('\u{0621}'..='\u{06cc}').contains(&c)) {
+        return None;
+    }
+    let c = crate::vocab::word_costs();
+    let cost = |x: &str| c.get(x).map_or(99.0, |v| v.cost as f64);
+    let mi = w.starts_with("می") || w.starts_with("نمی");
+    let verb = mi || w.starts_with('ب') || w.ends_with("ستن");
+    let mut cands: Vec<String> = Vec::new();
+    let mut bases = vec![w.to_string()];
+    if let Some(i) = w.find("ون").filter(|_| !w.ends_with("وند")) {
+        bases.push(format!("{}ان{}", &w[..i], &w[i + "ون".len()..]));
+        bases.push(format!("{}وان{}", &w[..i], &w[i + "ون".len()..]));
+    }
+    for (k, base) in bases.iter().enumerate() {
+        if verb && base.ends_with('ه') {
+            cands.push(format!("{}د", base.trim_end_matches('ه')));
+        }
+        if verb && base.ends_with('ن') && !base.ends_with("دن") && !base.ends_with("تن") || base.ends_with("ستن") {
+            cands.push(format!("{base}د"));
+        }
+        if k > 0 && !(mi && w.ends_with('ه')) {
+            cands.push(base.clone());
+        }
+    }
+    for (end, new) in [("ایی", "هایی"), ("ای", "های"), ("ا", "ها")] {
+        if let Some(stem) = w.strip_suffix(end) {
+            if stem.chars().count() >= 2 && !half_spaced && !stem.ends_with('ه') {
+                cands.push(format!("{stem}{new}"));
+            }
+            break;
+        }
+    }
+    let own = cost(w);
+    let best = cands.into_iter().map(|x| (cost(&x), x)).min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))?;
+    if !(best.0 <= 11.5 && best.0 + 2.5 <= own || best.0 <= 14.5 && own >= 13.5 && best.0 + 1.5 <= own) {
+        return None;
+    }
+    Some(sub(r"^(ن?می)(?=\S)", "\\1\u{200c}", &best.1))
+}
+
+pub fn written_forms(s: &str) -> String {
+    let mut t = s.to_string();
+    for (a, b) in SPOKEN_IRREGULAR {
+        if *a == "میان" {
+            continue;
+        }
+        let a = if a.starts_with("می") || a.starts_with("نمی") { a.replacen("می", "می\u{200c}?", 1) } else { a.to_string() };
+        t = sub(&format!(r"(?<![\x{{0600}}-\x{{06FF}}\x{{200c}}]){a}(?![\x{{0600}}-\x{{06FF}}\x{{200c}}])"), b, &t);
+    }
+    let t = sub_fn(r"[\x{0621}-\x{06cc}][\x{0621}-\x{06cc}\x{200c}]*", &t, |m| {
+        let w = &m[0];
+        let parts = || w.split('\u{200c}').map(|p| written_word(p).unwrap_or_else(|| p.to_string())).collect::<Vec<_>>().join("\u{200c}");
+        if !w.contains('\u{200c}') || w.starts_with("می\u{200c}") || w.starts_with("نمی\u{200c}") {
+            written_word(w).unwrap_or_else(parts)
+        } else {
+            let p = parts();
+            if p != *w { p } else { written_word(w).unwrap_or(p) }
+        }
+    });
+    let t = sub(r"(?<=[\x{0600}-\x{06FF}])(?<!\bبه)(?<!\bاز این)(?<!\bاز همین)(?<!\bاز آن)(?<!\bاز همان)(?<!\bاز هر) رو(?![\x{0600}-\x{06FF}\x{200c}])(?! به ?رو)", " را", &t);
+    let t = sub(r"(?<![\x{0600}-\x{06FF}\x{200c}])اون(?= (?:خود|می|نمی|هم |را |که ))", "او", &t);
+    sub(r"(?<![\x{0600}-\x{06FF}\x{200c}])اون(?![\x{0600}-\x{06FF}\x{200c}])", "آن", &t)
+}
+
 fn tidy_farsi(src: &str, s: &str) -> String {
     let once = collapse_echo(src, s);
     let s = once.as_str();
@@ -200,6 +279,11 @@ fn tidy_farsi(src: &str, s: &str) -> String {
     let mut s = translate_map(&sub(r"\s*<unk>\s*", " ", s), &[('ي', "ی"), ('ك', "ک")]);
     for (a, b) in FA_FIXES {
         s = sub(a, b, &s);
+    }
+    let s = written_forms(&s);
+    let mut s: String = s.chars().filter(|c| !matches!(*c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')).collect();
+    if !src.chars().any(|c| matches!(c, '"' | '\u{201c}' | '\u{201d}' | '\u{201e}' | '\u{ab}' | '\u{bb}' | '\u{2039}' | '\u{203a}')) {
+        s = s.replace('"', "");
     }
     s = sub(r"(?<=[\x{0600}-\x{06FF}]ه) (اند|ایم|اید|ام|ای)(?![\x{0600}-\x{06FF}])", "\u{200c}\\1", &s);
     for (en, a, b) in TERM_FIXES {

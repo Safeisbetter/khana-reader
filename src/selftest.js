@@ -165,6 +165,22 @@ addEventListener("load", () => setTimeout(async () => {
     await new Promise(r => setTimeout(r, 3000));
     await say("opened: pages " + document.getElementById("pageCount").textContent + ", paragraphs on screen " + document.querySelectorAll("#text p, .para, p").length);
     try {
+      // how long the book takes to listen to: the line under the controls, following page and speed; the save window's length
+      const t0 = Date.now();
+      while (!S.letters && Date.now() - t0 < 30000) await new Promise(r => setTimeout(r, 200));
+      const line = () => ($("bookTime").hidden ? "(hidden)" : $("bookTime").textContent);
+      const atStart = line(), sp0 = S.settings.speed;
+      await setSetting("speed", 1.5); showBookTime(); const faster = line();
+      await setSetting("speed", sp0);
+      const p0 = S.page; if (S.doc.pages > 1) { await loadPage(2); } const page2 = line(); if (S.page !== p0) await loadPage(p0);
+      openSave("mp3"); const one = $("mp3Len").textContent;
+      document.querySelector("input[name=scope][value=all]").checked = true; showSaveLength(); const all = $("mp3Len").textContent;
+      $("mp3").hidden = true;
+      const box = $("bookTime").getBoundingClientRect(), dock = $("docTools").getBoundingClientRect();
+      await say(`book time: «${atStart}»; at 150 %: «${faster}»; on page 2: «${page2}»; save window, this page: «${one}», whole book: «${all}»; `
+        + `inside the dock ${box.width > 0 && box.top >= dock.top - 1 && box.bottom <= dock.bottom + 1}, letters per page ${S.letters ? S.letters.slice(0, 4).join(",") : "none"}`);
+    } catch (e) { await say("book time: " + e); }
+    try {
       // the looks: each can be chosen, colours the page, and the glass ones frost the bar
       const seen = [];
       for (const th of THEMES) {

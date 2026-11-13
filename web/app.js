@@ -94,7 +94,7 @@ const SPEED_MIN = 0.5, SPEED_MAX = 2, SPEED_STEP = 0.01, SPEED_KEY_STEP = 0.05;
 function setSpeed(v, quiet) {
   v = Math.round(Math.min(SPEED_MAX, Math.max(SPEED_MIN, Number(v) || 1)) * 100) / 100;
   if (v === Number(S.settings.speed)) { if (!quiet) toast("سرعت " + pct(v)); return; }
-  setSetting("speed", v); ttsCache.clear(); restartReading();
+  setSetting("speed", v); ttsCache.clear(); restartReading(); showBookTime();
   if (!quiet) toast(v === 1 ? "سرعت عادی (۱۰۰٪)" : "سرعت " + pct(v));
 }
 const resetSpeed = () => setSpeed(1);
@@ -401,8 +401,9 @@ async function openFile(file, images) {
     const d = /\.pdf$/i.test(file.name) ? await openWithPdfjs(file)
       : isImage(file) ? await openImages(images || [file])
       : await (await api("/api/open?name=" + encodeURIComponent(file.name), { method: "POST", body: await file.arrayBuffer() })).json();
-    S.doc = d; S.page = 1;
+    S.doc = d; S.page = 1; S.letters = null;
     S.view = "text";
+    loadLengths();
     $("fileName").textContent = d.name;
     $("welcome").hidden = true;
     $("from").value = fa(1); $("to").value = fa(d.pages);
@@ -716,6 +717,7 @@ function syncChrome() {
   if (!has) return;
   $("pageInput").value = fa(S.page);
   $("pageCount").textContent = fa(S.doc.pages);
+  showBookTime();
   $("prev").disabled = S.page <= 1; $("next").disabled = S.page >= S.doc.pages;
   $("viewPage").disabled = !S.doc.hasImages;
   $("trBtn").hidden = !S.doc.canTranslate;
@@ -1056,6 +1058,58 @@ $("textView").addEventListener("click", e => {
 });
 
 /* ---------------- MP3, and PDF of the translation (the same dialog) ---------------- */
+/* ---------------- how long the book takes to listen to ----------------
+   From the letters on each page (the core counts them, /api/lengths) and the voice's pace: about 9.6 letters a second at 100 %
+   with the pauses between paragraphs (measured: a book page of 1,362 letters made 143 s of sound). A translated book is read in Farsi, about 0.8 times as many letters as the
+   source (measured on a Dutch novel). Pages not read yet (scans) count as the average of the others. */
+const LETTERS_PER_SECOND = 9.6, TRANSLATED_LETTERS = 0.8;
+function durText(sec, exact) {
+  if (!(sec > 0)) return "";
+  if (sec < 50 && !exact) return "کمتر از یک دقیقه";
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.round(sec % 60);
+  if (exact) return (h ? fa(h) + " ساعت و " : "") + fa(m) + " دقیقه" + (h ? "" : " و " + fa(s) + " ثانیه");
+  const mr = Math.round((sec % 3600) / 60);
+  return "حدود " + (h ? fa(h) + " ساعت" + (mr ? " و " + fa(mr) + " دقیقه" : "") : fa(Math.max(1, mr)) + " دقیقه");
+}
+async function loadLengths() {
+  const d = S.doc;
+  S.letters = null;
+  try {
+    const r = await jget(`/api/lengths?doc=${d.id}&rev=${!!S.settings.reversed}&yeh=${!!S.settings.persianYeh}`);
+    if (S.doc === d) { S.letters = r.letters; showBookTime(); }
+  } catch (e) { /* (no time shown) */ }
+}
+/** Seconds of listening for pages first..last at the reading speed set, or 0 when not known. */
+function listenSeconds(first, last) {
+  const L = S.letters;
+  if (!L || !L.length) return 0;
+  const known = L.filter(x => x >= 0), avg = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 0;
+  let n = 0;
+  for (let p = Math.max(1, first); p <= Math.min(last, L.length); p++) n += L[p - 1] >= 0 ? L[p - 1] : avg;
+  const letters = n * (translating() ? TRANSLATED_LETTERS : 1);
+  return letters / (LETTERS_PER_SECOND * (Number(S.settings.speed) || 1));
+}
+function showBookTime() {
+  const el = $("bookTime");
+  if (!el) return;
+  const left = S.doc ? listenSeconds(S.page, S.doc.pages) : 0, all = S.doc ? listenSeconds(1, S.doc.pages) : 0;
+  el.hidden = !(left > 0);
+  if (left > 0) {
+    el.textContent = (S.page > 1 ? durText(left) + " شنیدن تا پایان کتاب" : "کل کتاب: " + durText(all) + " شنیدن") + " (با سرعت " + pct(S.settings.speed) + ")";
+    el.title = "کل کتاب: " + durText(all) + " شنیدن";
+  }
+}
+/** The save window's line: how long the sound file will be, for the pages chosen. */
+function showSaveLength() {
+  if (!S.doc || saveKind === "pdf") { $("mp3Len").textContent = ""; return; }
+  const scope = document.querySelector("input[name=scope]:checked").value;
+  let first = S.page, last = S.page;
+  if (scope === "all") { first = 1; last = S.doc.pages; }
+  if (scope === "range") { first = numOf($("from").value) || 1; last = numOf($("to").value) || first; }
+  const sec = listenSeconds(first, last);
+  $("mp3Len").textContent = sec > 0 ? "طول فایل صدا: " + durText(sec) : "";
+}
+
 let job = null, pollT;
 var saveKind = "mp3";  // (var: applySettings may run before this line)
 function openSave(kind) {
@@ -1072,6 +1126,7 @@ function openSave(kind) {
   syncBitrate();
   $("mp3Start").textContent = pdf ? "ساختن PDF" : "ساختن فایل صدا";
   applySettings();
+  showSaveLength();
   if (pdf) $("mp3Voice").textContent = "هر صفحه روی همین دستگاه به فارسی ترجمه می‌شود (برای هر صفحه چند ثانیه تا یک دقیقه) و فایل PDF در پوشه Downloads ذخیره می‌شود.";
   openPanel("mp3");
 }
@@ -1081,7 +1136,8 @@ document.querySelectorAll("input[name=afmt]").forEach(r => r.addEventListener("c
 $("mp3Btn").onclick = () => openSave("mp3");
 $("pdfBtn").onclick = () => openSave("pdf");
 for (const id of ["pageInput", "from", "to"]) $(id).addEventListener("input", e => { const t = fa(latinDigits(e.target.value).replace(/\D/g, "")); if (t !== e.target.value) e.target.value = t; });
-$("from").oninput = $("to").oninput = () => document.querySelector('input[name=scope][value=range]').checked = true;
+$("from").oninput = $("to").oninput = () => { document.querySelector('input[name=scope][value=range]').checked = true; showSaveLength(); };
+document.querySelectorAll("input[name=scope]").forEach(r => r.addEventListener("change", showSaveLength));
 $("mp3Start").onclick = async () => {
   const scope = document.querySelector("input[name=scope]:checked").value;
   let first = S.page, last = S.page;
@@ -1131,8 +1187,7 @@ async function poll() {
   const pct = Math.round(job.progress * 100);
   $("mp3Bar").style.width = pct + "%";
   $("mp3Prog").setAttribute("aria-valuenow", pct);
-  const mins = Math.floor(job.seconds / 60), secs = job.seconds % 60;
-  const len = fa(mins) + " دقیقه و " + fa(secs) + " ثانیه";
+  const len = durText(job.seconds, true);
   const pdf = saveKind === "pdf";
   if (job.status === "running") {
     // (the sign at the number's right, close to it: «۳۵%», whatever the direction of the line around it)
@@ -1172,7 +1227,7 @@ async function libShow() {
     const name = document.createElement("div"); name.className = "name"; name.textContent = f.name;
     const acts = document.createElement("div"); acts.className = "acts";
     const size = document.createElement("span"); size.className = "size";
-    size.textContent = f.bytes >= 1048576 ? fa((f.bytes / 1048576).toFixed(1)) + " مگابایت" : fa(Math.max(1, Math.round(f.bytes / 1024))) + " کیلوبایت";
+    size.textContent = (f.seconds > 0 ? durText(f.seconds, true) + " · " : "") + (f.bytes >= 1048576 ? fa((f.bytes / 1048576).toFixed(1)) + " مگابایت" : fa(Math.max(1, Math.round(f.bytes / 1024))) + " کیلوبایت");
     const q = "name=" + encodeURIComponent(f.name);
     const play = document.createElement("button"); play.type = "button"; play.className = "primary"; play.textContent = "▶ پخش";
     play.onclick = async () => {
@@ -1362,7 +1417,8 @@ async function openTyped() {
   stopReading();
   const d = await (await api("/api/open?name=" + encodeURIComponent("متن من.txt"), { method: "POST", body: new TextEncoder().encode(t).buffer })).json();
   if (d.error) { toast(d.error); return false; }
-  S.doc = d; S.page = 1; S.view = "text";
+  S.doc = d; S.page = 1; S.view = "text"; S.letters = null;
+  loadLengths();
   $("fileName").textContent = d.name;
   $("welcome").hidden = true;
   $("from").value = fa(1); $("to").value = fa(d.pages);
