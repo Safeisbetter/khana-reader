@@ -148,6 +148,10 @@ final class Server {
         // (on Android 9 and older any app can read the clipboard for as long as the text lies there).
         if ("POST".equals(method) && "/api/clip".equals(path)) {
             if (!tokenOk(tok)) return json(403, "{}");
+            if (isLocked()) { // (the app lock: this request does not go through the core, so it asks)
+                if (body != null) Arrays.fill(body, (byte) 0);
+                return json(423, "{\"locked\":true}");
+            }
             copySensitive(ctx, body == null ? "" : Native.text(body));
             if (body != null) Arrays.fill(body, (byte) 0);
             return json(200, "{\"ok\":true}");
@@ -155,12 +159,22 @@ final class Server {
         Native.Reply r = new Native.Reply(Native.handle(Native.utf8(method), Native.utf8(path), Native.utf8(query), Native.utf8(tok), body));
         if (body != null) Arrays.fill(body, (byte) 0); // (the document's bytes: the core has its own copy now)
         if ("/api/tts".equals(path)) lastSpeech = android.os.SystemClock.elapsedRealtime();
-        if (r.status == 200 && "POST".equals(method) && ("/api/settings".equals(path) || "/api/forget".equals(path))) MainActivity.applyScreenGuard();
+        if (r.status == 200 && "POST".equals(method) && ("/api/settings".equals(path) || "/api/forget".equals(path) || "/api/unlock".equals(path))) MainActivity.applyScreenGuard(); // (after an unlock too: the setting could not be read while the app was locked)
         if (r.status == 200 && "POST".equals(method) && ("/api/mp3".equals(path) || "/api/pdf".equals(path))) {
             JobService.start(ctx);
         }
         if (path.startsWith("/api/")) Exporter.drain(ctx);
         return response(r);
+    }
+
+    /** Whether the app lock is on and the app locked now (the core says so; it refuses the request itself otherwise). */
+    private static boolean isLocked() {
+        try {
+            Native.Reply r = new Native.Reply(Native.handle(Native.utf8("GET"), Native.utf8("/api/lock_status"), Native.utf8(""), Native.token(), null));
+            return Native.text(r.body).replace(" ", "").contains("\"locked\":true");
+        } catch (RuntimeException e) {
+            return true; // (cannot tell: shut)
+        }
     }
 
     /** The page's token, compared in constant time (MessageDigest.isEqual). */

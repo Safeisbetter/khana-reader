@@ -2,8 +2,123 @@
 // (anything the page's Content-Security-Policy refuses is counted and reported at the end)
 const cspViolations = [];
 document.addEventListener("securitypolicyviolation", e => cspViolations.push(e.violatedDirective + " " + (e.blockedURI || "inline") + " at " + (e.sourceFile || "?").split("/").pop() + ":" + e.lineNumber + " " + (e.sample || "") + " on " + (e.target && e.target.nodeName)));
+
+// KHANA_SELFTEST_LOCK: the app lock driven like a person, in three page loads (sessionStorage says which): A turns it on through the card in
+// Settings and uses the lock screen; B is the page loaded again with the lock on (the start must wait for the password); C is the page after
+// «erase everything» from the lock screen.
+async function lockSelfTest(rawSay) {
+  // (the app refuses the test's own reports while it is locked, 423: they wait in sessionStorage and go out, in order, once it answers)
+  const queue = () => JSON.parse(sessionStorage.getItem("ltlog") || "[]");
+  const say = async m => {
+    const q = queue(); q.push(m); sessionStorage.setItem("ltlog", JSON.stringify(q));
+    while (queue().length) {
+      const r = await rawSay(queue()[0]);
+      if (r.status === 423) return r;
+      sessionStorage.setItem("ltlog", JSON.stringify(queue().slice(1)));
+    }
+  };
+  const wait = async (f, ms = 10000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await f()) return true; await new Promise(r => setTimeout(r, 50)); } return false; };
+  const type = (id, v) => { const el = $(id); el.value = v; el.dispatchEvent(new Event("input", { bubbles: true })); };
+  const status = () => jget("/api/lock_status");
+  const refused = async () => { try { await api("/api/init"); return false; } catch (e) { return true; } };
+  const locked = () => document.body.classList.contains("locked");
+  const stage = sessionStorage.getItem("lt") || "A";
+  let s = await status();
+  if (stage === "A") {
+    await say("lock A: at start enabled " + s.enabled + ", locked " + s.locked + ", screen shown " + locked() + ", voices " + S.voices.length);
+    $("settingsBtn").click();
+    await wait(() => !$("settings").hidden);
+    await wait(() => $("lockState").textContent !== "");
+    await say("lock A card: «" + $("lockState").textContent + "», on-button shown " + !$("lockOn").hidden + ", change/off/now hidden " + ($("lockChange").hidden && $("lockOff").hidden && $("lockNow").hidden) + ", timeout row hidden " + $("lockTimeoutRow").hidden);
+    $("lockOn").click();
+    await wait(() => !$("lockForm").hidden);
+    type("lockNew", "ab"); type("lockRep", "ab"); $("lockFormOk").click();
+    await wait(() => $("lockFormErr").textContent !== "");
+    await say("lock A form, short password: «" + $("lockFormErr").textContent + "», form still open " + !$("lockForm").hidden);
+    type("lockNew", "1234"); type("lockRep", "12345"); $("lockFormOk").click();
+    await wait(() => $("lockFormErr").textContent.includes("یکی نیست"));
+    await say("lock A form, two different: «" + $("lockFormErr").textContent + "»");
+    type("lockNew", "۱۲۳۴"); type("lockRep", "۱۲۳۴"); $("lockFormOk").click();
+    await wait(() => $("lockForm").hidden);
+    await wait(async () => (await status()).enabled);
+    s = await status();
+    await say("lock A turned on (set with Farsi digits): enabled " + s.enabled + ", locked " + s.locked + ", card «" + $("lockState").textContent + "», timeout row shown " + !$("lockTimeoutRow").hidden + ", timeout " + s.timeout + ", select shows " + $("lockTimeout").value);
+    $("lockTimeout").value = "60"; $("lockTimeout").dispatchEvent(new Event("change"));
+    await wait(async () => (await status()).timeout === 60);
+    await say("lock A timeout chosen: " + (await status()).timeout);
+    $("lockNow").click();
+    await wait(locked);
+    const box = $("lockScreen").getBoundingClientRect();
+    await say("lock A locked now: screen shown " + (!$("lockScreen").hidden && box.width > 100 && box.height > 100) + ", covers the window " + (box.width >= innerWidth - 2 && box.height >= innerHeight - 2) + ", settings closed " + $("settings").hidden + ", app refuses " + await refused() + ", everything else inert " + [...document.body.children].filter(e => e.id !== "lockScreen" && e.tagName !== "SCRIPT").every(e => e.inert) + ", background colour " + getComputedStyle($("lockScreen")).backgroundColor);
+    type("lockPw", "0000"); $("lockGo").click();
+    await wait(() => $("lockErr").textContent !== "");
+    await say("lock A wrong password: «" + $("lockErr").textContent + "», still locked " + locked());
+    type("lockPw", "1234"); $("lockGo").click();
+    await wait(() => !locked());
+    await say("lock A right password (typed with Latin digits): unlocked " + !locked() + ", app answers " + !(await refused()) + ", the screen is gone " + $("lockScreen").hidden);
+    // the app locks itself (as after a long pause): the next refused request brings the screen up
+    await jpost("/api/lock_now", {});
+    await refused();
+    await wait(locked);
+    await say("lock A locked from outside, the refused request brings the screen up: " + locked());
+    type("lockPw", "1234"); $("lockGo").click();
+    await wait(() => !locked());
+    // the time chosen (60 seconds): untouched, the app locks itself; touched, it does not
+    const t0 = Date.now();
+    const bySelf = await wait(locked, 85000);
+    await say("lock A untouched: the app locked itself after " + Math.round((Date.now() - t0) / 1000) + " s: " + bySelf);
+    type("lockPw", "1234"); $("lockGo").click();
+    await wait(() => !locked());
+    const t1 = Date.now(); let open = true;
+    while (Date.now() - t1 < 85000) { window.dispatchEvent(new Event("pointerdown")); await new Promise(r => setTimeout(r, 15000)); if (locked()) { open = false; break; } }
+    await say("lock A touched every 15 s for " + Math.round((Date.now() - t1) / 1000) + " s: still open " + open);
+    // turning it off asks for the password
+    $("settingsBtn").click(); await wait(() => !$("settings").hidden);
+    await wait(() => !$("lockOff").hidden);
+    $("lockOff").click(); await wait(() => !$("lockForm").hidden);
+    type("lockCur", "9999"); $("lockFormOk").click();
+    await wait(() => $("lockFormErr").textContent !== "");
+    await say("lock A turn off, wrong password: «" + $("lockFormErr").textContent + "»");
+    type("lockCur", "1234"); $("lockFormOk").click();
+    await wait(() => $("lockForm").hidden);
+    s = await status();
+    await say("lock A turned off: enabled " + s.enabled + ", card «" + $("lockState").textContent + "», on-button shown " + !$("lockOn").hidden);
+    // on again, and the page is loaded again with the lock on
+    await jpost("/api/lock_set", { password: "1234" });
+    await jpost("/api/lock_now", {});     // (a page loaded again does not lock the app: it is locked first, as it is when it starts)
+    sessionStorage.setItem("lt", "B");
+    await say("lock A done, loading the page again with the app locked");
+    location.reload();
+    return;
+  }
+  if (stage === "B") {
+    await say("lock B: the start waits for the password: screen shown " + locked() + ", voices loaded " + S.voices.length + " (0 = the start is waiting), app refuses " + await refused());
+    type("lockPw", "0000"); $("lockGo").click();
+    await wait(() => $("lockErr").textContent !== "");
+    await say("lock B wrong password: «" + $("lockErr").textContent + "», still waiting " + (S.voices.length === 0));
+    type("lockPw", "1234"); $("lockGo").click();
+    await wait(() => !locked());
+    const started = await wait(() => S.voices.length > 0, 20000);
+    await say("lock B right password: unlocked " + !locked() + ", the start went on: voices " + S.voices.length + " (" + started + ")");
+    await jpost("/api/lock_now", {});
+    await wait(async () => { await refused(); return locked(); });
+    window.confirm = () => true;
+    sessionStorage.setItem("lt", "C");
+    await say("lock B locked again; erasing everything from the lock screen (forgot the password)");
+    $("lockForgot").open = true;
+    $("lockReset").click();
+    return;
+  }
+  s = await status();
+  const started = await wait(() => S.voices.length > 0, 20000);
+  await say("lock C after the erase: enabled " + s.enabled + ", locked " + s.locked + ", screen shown " + locked() + ", the page started: voices " + S.voices.length + " (" + started + ")");
+  sessionStorage.removeItem("lt");
+  await say("lock C finished");
+  await rawSay("DONE");
+}
 addEventListener("load", () => setTimeout(async () => {
   const say = m => fetch("/api/selftest_report", { method: "POST", headers: { "X-Khana-Token": TOKEN }, body: m });
+  if (window.KHANA_LOCKTEST) { try { await lockSelfTest(say); } catch (e) { await say("lock FAILED " + e); await say("DONE"); } return; }
   // (a password prompt is answered from KHANA_SELFTEST_PASSWORDS, one password per prompt; none left: the dialog is closed)
   try {
     const list = (await (await api("/api/selftest_passwords")).json()).list || [];

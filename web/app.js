@@ -12,6 +12,8 @@ const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 async function api(path, opts = {}) {
   const res = await fetch(path, { ...opts, headers: { "X-Khana-Token": TOKEN, ...(opts.headers || {}) } });
   if (!res.ok) {
+    // (the app is locked: the lock screen comes up, web/lock.js)
+    if (res.status === 423 && window.khanaLockHit) window.khanaLockHit();
     let msg = "خطا";
     try { msg = (await res.json()).error || msg; } catch (e) {}
     throw new Error(msg);
@@ -104,6 +106,7 @@ document.querySelectorAll("[data-speed]").forEach(b => b.onclick = () => setSpee
 function setFontSize(v) { setSetting("fontSize", Math.min(72, Math.max(14, Math.round(v)))); }
 // commands from the app's menu bar (src/main.rs)
 window.khanaMenu = cmd => {
+  if (document.body.classList.contains("locked")) return;
   if (cmd === "speed-reset") resetSpeed();
   else if (cmd === "speed-up") setSpeed(Number(S.settings.speed) + SPEED_KEY_STEP);
   else if (cmd === "speed-down") setSpeed(Number(S.settings.speed) - SPEED_KEY_STEP);
@@ -249,7 +252,7 @@ $("recBtn").onclick = async () => {
 };
 $("voiceFile").onchange = e => { const f = e.target.files[0]; e.target.value = ""; if (f) useMyVoice(f, f.name); };
 $("forgetAll").onclick = async () => {
-  if (!confirm("همه‌ی ویرایش‌ها، صدای شما، تنظیمات و اصلاح‌های تلفظ از این دستگاه پاک شود؟ این کار برگشت ندارد.")) return;
+  if (!confirm("همه‌ی ویرایش‌ها، صدای شما، تنظیمات و اصلاح‌های تلفظ از این دستگاه پاک شود؟ اگر قفل برنامه روشن باشد، خاموش هم می‌شود. این کار برگشت ندارد.")) return;
   try {
     stopReading();
     await jpost("/api/forget", {});
@@ -1206,8 +1209,10 @@ let toastT;
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3500); }
 let resizeT; addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => S.doc && S.view === "page" && renderPageImage(), 250); });
 
-(async function init() {
+async function init() {
   try {
+    // (the app lock, web/lock.js: if the app is locked the start waits here for the password)
+    if (window.khanaLockGate) await window.khanaLockGate();
     const r = await jget("/api/init");
     S.settings = r.settings; S.voices = r.voices;
     S.library = !!r.library; $("libBtn").hidden = !S.library;
@@ -1219,7 +1224,9 @@ let resizeT; addEventListener("resize", () => { clearTimeout(resizeT); resizeT =
     fillVoices(r.voices);
     applySettings(); renderLexicon(); syncChrome(); setPlayButton();
   } catch (e) { note("برنامه درست اجرا نشد: " + esc(e.message), true); }
-})();
+}
+// (after every script has run: web/lock.js comes after this one)
+if (document.readyState === "loading") addEventListener("DOMContentLoaded", init); else init();
 
 
 /* ---------------- editing the text: a paragraph changed or taken out, a word changed everywhere ---------------- */
@@ -1645,6 +1652,7 @@ async function jumpFigure(dir) {
 
 // Back (the Android back gesture or button): close the window that is open, or go to the page before; false: nothing to go back to
 window.khanaBack = function () {
+  if (document.body.classList.contains("locked")) return false;
   const open = [...document.querySelectorAll(".panel")].filter(p => !p.hidden);
   if (open.length) { open.forEach(p => { p.hidden = true; }); return true; }
   if (S.doc && S.page > 1) { $("prev").click(); return true; }

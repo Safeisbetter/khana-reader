@@ -152,6 +152,15 @@ Everything runs on your device; nothing is sent anywhere.
 - Your books stay on your device. There is no account, no analytics and no server, anywhere.
 - The Android app has no internet, no storage and no microphone permission. Files are opened and saved through Android's own screens.
 - The text of the open book is kept in memory while it is open and overwritten when the book is closed.
+- **App lock** (Settings, «قفل برنامه»), like the screen lock of Signal and off unless you turn it on: the app asks for a password
+  you chose when it starts and after the time you pick without being touched (1 minute to 1 hour, or only at start). While it is
+  locked the app itself refuses every request, not just the page. The password is never kept: only a random salt and its
+  PBKDF2-HMAC-SHA256 hash (300,000 rounds) are stored, in a file only your account can read. After five wrong tries you must wait
+  (30 seconds, then longer, up to an hour), and the wait survives a restart. **It is a lock on using the app on a device that is
+  switched on and open; it does not encrypt the app's files** (use FileVault, or the phone's own encryption, for that). A
+  forgotten password cannot be recovered: the lock screen offers «erase everything and start again», which removes the app's
+  data (edits, your recorded voice, settings, sound files kept inside the app) and the lock itself, and leaves the books and
+  files you keep elsewhere alone.
 - On the Mac the app runs in Apple's App Sandbox. It holds Apple's "outgoing network" permission only because Apple's WebKit
   needs it to start its own helper processes (the app does not open without it); the program has no network code and its page
   refuses every outside address.
@@ -286,6 +295,7 @@ Everything runs on your device; nothing is sent anywhere.
 - PDF، EPUB، FB2، پاورپوینت، ورد و متن ساده را **باز می‌کند**؛ صفحه‌ی اسکن‌شده و PDF رمزدار را هم.
 - از انگلیسی، هلندی، آلمانی، فرانسوی، اسپانیایی، ایتالیایی، پرتغالی، ترکی و لهستانی به فارسی **ترجمه می‌کند** و ترجمه را به صورت **PDF فارسی** ذخیره می‌کند (در نسخه‌های سبک نیست).
 - می‌تواند با **صدای خود شما** بخواند («صدای من»). فقط صدای خودتان را به کار ببرید.
+- **قفل برنامه** (تنظیمات، «قفل برنامه»؛ مانند قفل صفحه‌ی سیگنال، و تا خودتان روشنش نکنید خاموش است): برنامه هنگام باز شدن و بعد از مدتی که انتخاب می‌کنید (از ۱ دقیقه تا ۱ ساعت، یا فقط هنگام باز شدن) رمزی را که خودتان گذاشته‌اید می‌پرسد. تا قفل است، خودِ برنامه همه‌ی درخواست‌ها را رد می‌کند، نه فقط صفحه. رمز هیچ‌جا نگه داشته نمی‌شود؛ فقط یک نمک تصادفی و چکیده‌ی PBKDF2-HMAC-SHA256 آن (۳۰۰٬۰۰۰ دور) در پرونده‌ای که فقط حساب خودتان می‌خواند. بعد از پنج رمز اشتباه باید صبر کنید (۳۰ ثانیه، و هر بار بیشتر تا یک ساعت)، و این صبر با بستن برنامه برنمی‌گردد. **این قفل جلوی استفاده‌ی دیگران از برنامه را روی دستگاهِ روشن و بازِ شما می‌گیرد؛ فایل‌های برنامه را رمزگذاری نمی‌کند** (برای آن، FileVault یا رمزگذاری خودِ گوشی را روشن کنید). رمزِ فراموش‌شده را نمی‌شود بازیابی کرد: صفحه‌ی قفل «پاک کردن همه‌ی اطلاعات و شروع دوباره» را دارد که اطلاعات برنامه (ویرایش‌ها، صدای ضبط‌شده، تنظیمات، فایل‌های صدایی که داخل خودِ برنامه‌اند) و خودِ قفل را پاک می‌کند و به کتاب‌ها و فایل‌هایی که جای دیگر دارید دست نمی‌زند.
 
 ### برای کسانی که خوب نمی‌بینند
 
