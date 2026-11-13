@@ -460,6 +460,10 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         it.removeExtra("khana_test");
         if (bench) new Thread(Bench::run, "khana-bench").start();
         else if ("library".equals(test)) new Thread(Bench::library, "khana-bench").start();
+        // (reading with the screen off, checked over USB: a text of the test's own is opened and read; nothing of the reader's)
+        else if ("read".equals(test)) web.evaluateJavascript("(async()=>{const t=document.getElementById('typeText');"
+                + "t.value=Array(40).fill('این یک آزمایش خواندن با صفحه‌ی خاموش است. جمله‌ها پشت سر هم خوانده می‌شوند.').join(' ');"
+                + "if(await openTyped())document.getElementById('play').click();})()", null);
         else if ("mp3".equals(test)) {
             final String plan = it.getStringExtra("khana_plan");
             final android.content.Context ctx = getApplicationContext();
@@ -476,7 +480,8 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     // While a file is being made, or the book is being read aloud, the screen stays on. Not for the look of it: Android gives
     // the app on the screen every processor core, but an app behind another, or with the screen off, only the four small ones
     // (seen on one tablet: cores 0-3 of 8), where making speech is several times slower: a 20-page MP3 took two hours.
-    // (The reader can still switch the screen off with the power button; the work then goes on, slowly.)
+    // Reading with the screen off (tried 2026-11-13): Android 16+'s «audio hardening» mutes the web view's sound in the background;
+    // the shell playing the speech itself works (checked on a tablet), the hand-over from the page is not finished: dist/screen-off-reading.
     private final android.os.Handler awake = new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable keepAwake = new Runnable() {
         @Override

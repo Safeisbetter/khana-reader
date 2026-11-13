@@ -27,6 +27,9 @@ pub const VOICES: &[VoiceInfo] = &[
     VoiceInfo { id: "khabari", wav: "male_news.wav", name: "مدل صدا ۱", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
     VoiceInfo { id: "seda2", wav: "donated_andrea.wav", name: "مدل صدا ۲", gender: "زن", group: "natural", extra: false, tempo: 1.1 },
     VoiceInfo { id: "seda3", wav: "donated_aryobe.wav", name: "مدل صدا ۳", gender: "مرد", group: "natural", extra: false, tempo: 1.1 },
+    VoiceInfo { id: "seda4", wav: "donated_imran.wav", name: "مدل صدا ۴", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
+    VoiceInfo { id: "seda5", wav: "donated_taiyo.wav", name: "مدل صدا ۵", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
+    VoiceInfo { id: "seda6", wav: "donated_roscoe.wav", name: "مدل صدا ۶", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
     VoiceInfo { id: "mahtab", wav: "mahtab.wav", name: "مهتاب", gender: "زن", group: "natural", extra: true, tempo: 1.0 },
     VoiceInfo { id: "arash", wav: "arash.wav", name: "آرش", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
     VoiceInfo { id: "pariya", wav: "pariya.wav", name: "پریا", gender: "زن", group: "natural", extra: true, tempo: 1.0 },
@@ -1289,6 +1292,7 @@ impl App {
                 Ok(reply_json(&json!({"heat": tts::heat()})))
             }
             "tts_post" => {
+                self.lock.touch(crate::lock::now());
                 let req = body_json()?;
                 let text: String = strip(req.get("text").and_then(|v| v.as_str()).unwrap_or("")).chars().take(5000).collect();
                 if text.is_empty() {

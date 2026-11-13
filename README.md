@@ -108,7 +108,7 @@ can follow this repository's releases (we did not make or audit it). The Farsi g
 
 ## What it does
 
-- **Reads aloud** in Farsi with a natural-sounding voice (three to choose from; two were donated to the public domain by their owners), and saves the reading as **MP3** or **WAV** (on the Mac also **M4A**).
+- **Reads aloud** in Farsi with a natural-sounding voice (six to choose from; five were donated to the public domain by their owners), and saves the reading as **MP3** or **WAV** (on the Mac also **M4A**).
 - **Reads a text you type or paste** («✎ نوشتن متن»), and reads the text of **pictures** (a photo of a page, a screenshot) with OCR.
 - **Lets you correct the text in the page itself:** «✎ ویرایش متن» makes every paragraph a box you can type in, select in and
   delete from; a word can be changed or removed in the whole book. Corrections reach the reading, the MP3 and the PDF.

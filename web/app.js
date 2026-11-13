@@ -107,7 +107,10 @@ function setFontSize(v) { setSetting("fontSize", Math.min(72, Math.max(14, Math.
 // commands from the app's menu bar (src/main.rs)
 window.khanaMenu = cmd => {
   if (document.body.classList.contains("locked")) return;
-  if (cmd === "speed-reset") resetSpeed();
+  if (cmd === "stop") stopReading();
+  // (the reading notification's pause, Android: the play button pauses and goes on)
+  else if (cmd === "playpause") { if (reader.active) $("play").click(); }
+  else if (cmd === "speed-reset") resetSpeed();
   else if (cmd === "speed-up") setSpeed(Number(S.settings.speed) + SPEED_KEY_STEP);
   else if (cmd === "speed-down") setSpeed(Number(S.settings.speed) - SPEED_KEY_STEP);
   else if (cmd === "font-up") setFontSize(Number(S.settings.fontSize) + 2);
