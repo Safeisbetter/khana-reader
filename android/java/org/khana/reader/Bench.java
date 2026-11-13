@@ -73,6 +73,50 @@ final class Bench {
         }
     }
 
+    /**
+     * An MP3 export timed part by part (`--es khana_test mp3 --es khana_plan 5n,3n,3f`): each entry is a number of pieces made at once
+     * and n (normal: every piece listened back to) or f (faster). The text is this test's own twelve sentences, three times.
+     * Nothing is kept: the sound file of each run is deleted from the app's folder at once.
+     */
+    static void mp3(android.content.Context ctx, String plan) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (int k = 0; k < 3; k++) for (String l : LINES) sb.append(l).append(k == 0 && l.endsWith("است.") ? "\n\n" : " ");
+            String doc = Native.text(callq("POST", "/api/open", "name=test%20-%20bench.txt", Native.utf8(sb.toString())).body);
+            String id = field(doc, "id");
+            say("سلام.");
+            for (String step : plan.split(",")) {
+                String w = step.substring(0, step.length() - 1);
+                boolean fast = step.endsWith("f");
+                android.system.Os.setenv("KHANA_WORKERS", w, true);
+                call("POST", "/api/profile", "");
+                long t0 = System.nanoTime();
+                JobService.start(ctx); // (as a real export: the service that keeps it going with the screen off)
+                String job = Native.text(callq("POST", "/api/mp3", "", Native.utf8("{\"doc\":\"" + id + "\",\"first\":1,\"last\":1,\"voice\":\"khabari\",\"speed\":1.0,\"bitrate\":64,\"fast\":" + fast + "}")).body);
+                String jid = field(job, "id");
+                String st = "";
+                for (int k = 0; k < 7200; k++) {
+                    Thread.sleep(500);
+                    st = Native.text(callq("GET", "/api/job", "id=" + jid, null).body);
+                    if (!field(st, "status").equals("running")) break;
+                }
+                double took = (System.nanoTime() - t0) / 1e9;
+                String cpuset = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("/proc/self/cpuset"))).trim();
+                String prof =Native.text(call("GET", "/api/profile", null).body);
+                Native.takeEvents();
+                String list = Native.text(callq("GET", "/api/library", "", null).body);
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"name\"\\s*:\\s*\"(test - bench[^\"]*)\"").matcher(list);
+                while (m.find()) callq("POST", "/api/library_delete", "name=" + java.net.URLEncoder.encode(m.group(1), "UTF-8"), Native.utf8("{}"));
+                Log.i("KhanaBench", "mp3 " + w + " at once, " + (fast ? "faster" : "normal") + ": " + field(st, "status") + " " + field(st, "error")
+                        + "; job " + st + "; took " + Math.round(took) + " s; cores group at the end " + cpuset + "; " + prof);
+            }
+            android.system.Os.unsetenv("KHANA_WORKERS");
+            Log.i("KhanaBench", "mp3 done");
+        } catch (Throwable e) {
+            Log.e("KhanaBench", "mp3 test failed", e);
+        }
+    }
+
     static void run() {
         try {
             Log.i("KhanaBench", "start; cores " + Runtime.getRuntime().availableProcessors());

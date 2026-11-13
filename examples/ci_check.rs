@@ -89,6 +89,40 @@ fn main() {
         }
     }
 
+    // the app lock (src/lock.rs) through the request handler: refused while locked, opened by the password (Farsi digits count), turned off.
+    // Skipped if the app already has a lock on: its password is not ours.
+    let status_of = |r: &khana::app::Reply| serde_json::from_slice::<Value>(&r.body).unwrap_or_default();
+    if status_of(&call("GET", "/api/lock_status", "", &[]))["enabled"] == false {
+        let r = call("POST", "/api/lock_set", "", br#"{"password":"ab"}"#);
+        step("lock: a short password", r.status == 400, format!("status {}", r.status));
+        let r = call("POST", "/api/lock_set", "", br#"{"password":"1234"}"#);
+        step("lock: turned on", r.status == 200 && status_of(&r)["enabled"] == true && status_of(&r)["locked"] == false, format!("status {}", r.status));
+        let r = call("POST", "/api/lock_now", "", b"{}");
+        step("lock: locked", status_of(&r)["locked"] == true, format!("status {}", r.status));
+        let r = call("GET", "/api/init", "", &[]);
+        step("lock: refuses while locked", r.status == 423, format!("status {}", r.status));
+        let r = call("POST", "/api/open", "name=locked.txt", b"text");
+        step("lock: refuses a book while locked", r.status == 423, format!("status {}", r.status));
+        let r = call("POST", "/api/unlock", "", br#"{"password":"0000"}"#);
+        step("lock: a wrong password", r.status == 403, format!("status {}", r.status));
+        let r = call("POST", "/api/unlock", "", "{\"password\":\"۱۲۳۴\"}".as_bytes());
+        step("lock: the right password (Farsi digits)", r.status == 200 && status_of(&r)["locked"] == false, format!("status {}", r.status));
+        let r = call("GET", "/api/init", "", &[]);
+        step("lock: open again", r.status == 200, format!("status {}", r.status));
+        let r = call("POST", "/api/lock_timeout", "", br#"{"timeout":61}"#);
+        step("lock: a time that is not offered", r.status == 400, format!("status {}", r.status));
+        let r = call("POST", "/api/lock_timeout", "", br#"{"timeout":60}"#);
+        step("lock: a time", r.status == 200 && status_of(&r)["timeout"] == 60, format!("status {}", r.status));
+        let r = call("POST", "/api/lock_off", "", br#"{"password":"0000"}"#);
+        step("lock: turned off with a wrong password", r.status == 403, format!("status {}", r.status));
+        let r = call("POST", "/api/lock_off", "", br#"{"password":"1234"}"#);
+        step("lock: turned off", r.status == 200 && status_of(&r)["enabled"] == false, format!("status {}", r.status));
+        let r = call("GET", "/api/init", "", &[]);
+        step("lock: off, open", r.status == 200, format!("status {}", r.status));
+    } else {
+        step("lock", true, "skipped: this app has a lock on".to_string());
+    }
+
     if failed > 0 {
         std::process::exit(1);
     }

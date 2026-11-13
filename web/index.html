@@ -233,11 +233,48 @@
       </div>
       <details id="lexDetails" hidden><summary id="lexSummary">فهرست اصلاح‌ها</summary><div class="lexlist" id="lexList"></div></details>
     </div>
+    <div class="field" id="lockField">
+      <label>قفل برنامه (رمز)</label>
+      <p class="editnote">با قفل، هر بار که خوانا را باز می‌کنید، و هر وقت چند دقیقه به آن دست نزنید، رمزی را که خودتان گذاشته‌اید می‌پرسد (مانند قفل صفحه‌ی سیگنال). جلوی استفاده‌ی دیگران از برنامه را روی دستگاهی که روشن و باز است می‌گیرد. فایل‌های برنامه را رمزگذاری نمی‌کند.</p>
+      <p class="hint" id="lockState">قفل خاموش است.</p>
+      <div class="inline">
+        <button type="button" id="lockOn" class="primary">روشن کردن قفل…</button>
+        <button type="button" id="lockChange" hidden>عوض کردن رمز…</button>
+        <button type="button" id="lockOff" hidden>خاموش کردن قفل…</button>
+        <button type="button" id="lockNow" hidden>همین حالا قفل کن</button>
+      </div>
+      <div id="lockTimeoutRow" hidden>
+        <label for="lockTimeout">قفل شدن خودکار</label>
+        <select id="lockTimeout">
+          <option value="-1">فقط هنگام باز کردن برنامه</option>
+          <option value="60">بعد از ۱ دقیقه دست‌نزدن</option>
+          <option value="300">بعد از ۵ دقیقه دست‌نزدن</option>
+          <option value="1800">بعد از ۳۰ دقیقه دست‌نزدن</option>
+          <option value="3600">بعد از ۱ ساعت دست‌نزدن</option>
+        </select>
+      </div>
+    </div>
     <div class="field" id="forgetField">
       <label>ردهای برنامه روی این دستگاه</label>
       <p class="editnote">خوانا این‌ها را روی همین دستگاه نگه می‌دارد: ویرایش‌های شما (که جمله‌هایی از کتاب‌ها در آن‌هاست)، صدای ضبط‌شده‌ی شما، تنظیمات و فهرست اصلاح تلفظ. با این دکمه همه پاک می‌شود. فایل‌های MP3 و PDF که ذخیره کرده‌اید و خودِ کتاب‌ها پاک نمی‌شوند؛ آن‌ها را خودتان پاک کنید.</p>
       <button type="button" id="forgetAll">پاک کردن همه‌ی ردها</button>
     </div>
+  </div>
+</div>
+
+<!-- the password of the app lock: asked by the page, sent to the app, not kept here -->
+<div class="panel" id="lockForm" hidden>
+  <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="lockFormTitle">
+    <div class="panel-head"><h2 id="lockFormTitle">رمز برنامه</h2><button type="button" data-close>بستن</button></div>
+    <div class="field" id="lockCurRow"><label for="lockCur">رمز فعلی</label><input type="password" id="lockCur" autocomplete="off" autocapitalize="off" spellcheck="false" dir="ltr"></div>
+    <div class="field" id="lockNewRow"><label for="lockNew">رمز تازه (دست‌کم ۴ نویسه)</label><input type="password" id="lockNew" autocomplete="off" autocapitalize="off" spellcheck="false" dir="ltr"></div>
+    <div class="field" id="lockRepRow"><label for="lockRep">رمز تازه را دوباره بنویسید</label><input type="password" id="lockRep" autocomplete="off" autocapitalize="off" spellcheck="false" dir="ltr"></div>
+    <p class="lockerr" id="lockFormErr" role="alert"></p>
+    <div class="inline">
+      <button type="button" class="primary" id="lockFormOk">تأیید</button>
+      <button type="button" data-close>انصراف</button>
+    </div>
+    <p class="hint">رمز را جایی امن نگه دارید. اگر فراموش شود، رمز را نمی‌شود بازیابی کرد؛ فقط با پاک کردن همه‌ی اطلاعات برنامه می‌توان دوباره از آن استفاده کرد.</p>
   </div>
 </div>
 
@@ -340,7 +377,7 @@
       </select>
     </div>
     <div class="field" id="fastField">
-      <label><input type="checkbox" id="fastExport"> سریع‌تر (حدود دو برابر): صدا بعد از ساخته شدن دوباره بررسی نمی‌شود</label>
+      <label><input type="checkbox" id="fastExport"> سریع‌تر: صدا بعد از ساخته شدن دوباره بررسی نمی‌شود (روی گوشی و تبلت فقط کمی سریع‌تر است)</label>
       <span class="hint">ممکن است گاهی کلمه‌ای جا بیفتد یا نامفهوم باشد. برای کیفیت بهتر، آن را خاموش بگذارید.</span>
     </div>
     <p class="hint" id="mp3Voice"></p>
@@ -377,6 +414,24 @@
 <button type="button" class="primary fixbtn" id="fixWord" hidden></button>
 <audio id="audio" preload="auto"></audio>
 
+<!-- the lock screen: over everything while the app is locked (web/lock.js); the app refuses every request meanwhile -->
+<div id="lockScreen" hidden role="dialog" aria-modal="true" aria-labelledby="lockTitle">
+  <div class="lockbox">
+    <div class="lockmark" aria-hidden="true">🔒</div>
+    <h2 id="lockTitle">خوانا قفل است</h2>
+    <p class="hint">رمز برنامه را وارد کنید.</p>
+    <input type="password" id="lockPw" aria-label="رمز برنامه" autocomplete="off" autocapitalize="off" spellcheck="false" dir="ltr">
+    <p class="lockerr" id="lockErr" role="alert"></p>
+    <button type="button" class="primary" id="lockGo">باز کردن</button>
+    <details id="lockForgot">
+      <summary>رمز را فراموش کرده‌اید؟</summary>
+      <p class="hint">رمز را نمی‌شود بازیابی کرد. می‌توانید همه‌ی اطلاعات خوانا را از این دستگاه پاک کنید (ویرایش‌ها، صدای ضبط‌شده، تنظیمات، فایل‌های صدایی که داخل خودِ برنامه نگه داشته شده‌اند و خودِ قفل) و دوباره شروع کنید. کتاب‌ها و فایل‌هایی که خودتان جای دیگر دارید دست‌نخورده می‌مانند.</p>
+      <button type="button" id="lockReset">پاک کردن همه‌ی اطلاعات برنامه و شروع دوباره</button>
+    </details>
+  </div>
+</div>
+
 <script src="app.js"></script>
+<script src="lock.js"></script>
 </body>
 </html>

@@ -18,6 +18,7 @@ pub mod onnx;
 pub mod audio;
 pub mod prosody;
 pub mod lexicon;
+pub mod lock;
 pub mod asr;
 pub mod stt;
 pub mod planner;

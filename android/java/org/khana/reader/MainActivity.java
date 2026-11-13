@@ -434,6 +434,11 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         it.removeExtra("khana_test");
         if (bench) new Thread(Bench::run, "khana-bench").start();
         else if ("library".equals(test)) new Thread(Bench::library, "khana-bench").start();
+        else if ("mp3".equals(test)) {
+            final String plan = it.getStringExtra("khana_plan");
+            final android.content.Context ctx = getApplicationContext();
+            new Thread(() -> Bench.mp3(ctx, plan == null ? "5n,5f,3n,3f" : plan), "khana-bench").start();
+        }
     }
 
     @Override

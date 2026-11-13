@@ -182,6 +182,7 @@ impl Speech {
         tts::set_comma_pause(settings.get("commaPause").and_then(|v| v.as_str()).unwrap_or("normal"));
         let recent = self.last_play.lock().unwrap().map_or(false, |t| t.elapsed() < Duration::from_secs(30));
         let workers = if recent { 3 } else { 5 };
+        let workers = std::env::var("KHANA_WORKERS").ok().and_then(|v| v.parse::<usize>().ok()).filter(|n| (1..=8).contains(n)).unwrap_or(workers);
         let mut a = eng.synthesize_text(&text, &id, &wav, workers, cancel)?;
         if (speed - 1.0).abs() >= 0.008 && !a.is_empty() {
             a = crate::stretch::stretch(&a, speed, tts::RATE);
@@ -632,11 +633,30 @@ fn bad<E: ToString>(e: E) -> ApiError {
     ApiError::Bad(e.to_string())
 }
 
+const LOCK_OK: &[&str] = &["lock_status_get", "unlock_post", "lock_now_post", "forget_post", "close_post", "heat_post", "power_post"];
+
+fn take_text(b: &mut Map<String, Value>, key: &str) -> String {
+    match b.remove(key) {
+        Some(Value::String(s)) => s,
+        _ => String::new(),
+    }
+}
+
+fn lock_status_json(s: &crate::lock::Status) -> Value {
+    json!({"enabled": s.enabled, "locked": s.locked, "wait": s.wait, "timeout": s.timeout, "timeouts": crate::lock::TIMEOUTS,
+           "min": crate::lock::MIN_CHARS, "max": crate::lock::MAX_CHARS})
+}
+
+fn lock_refusal(e: crate::lock::LockError) -> Reply {
+    Reply { status: e.status(), ..reply_json(&json!({"error": e.message()})) }
+}
+
 pub struct App {
     pub token: String,
     docs: Mutex<Option<Arc<Document>>>,
     jobs: Mutex<HashMap<String, Arc<Job>>>,
     engines: Arc<Engines>,
+    pub lock: crate::lock::Lock,
 }
 
 pub fn query(q: &str) -> HashMap<String, String> {
@@ -728,7 +748,7 @@ pub fn sweep_temp(younger_too: bool) {
 impl App {
     pub fn new(engines: Engines) -> App {
         sweep_temp(false);
-        App { token: new_token(), docs: Mutex::new(None), jobs: Mutex::new(HashMap::new()), engines: Arc::new(engines) }
+        App { token: new_token(), docs: Mutex::new(None), jobs: Mutex::new(HashMap::new()), engines: Arc::new(engines), lock: crate::lock::Lock::new(data_dir().join("lock.json"), crate::lock::now()) }
     }
 
     fn doc(&self, q: &HashMap<String, String>) -> Result<Arc<Document>, ApiError> {
@@ -743,6 +763,11 @@ impl App {
         let s = load_settings();
         let b = |k: &str| s.get(k).and_then(|v| v.as_bool()).unwrap_or(false);
         Opts { reversed: tf(q, "rev", b("reversed")), persian_yeh: tf(q, "yeh", b("persianYeh")), translate: tf(q, "tr", b("translate")) }
+    }
+
+    pub fn locked(&self) -> bool {
+        self.lock.tick(crate::lock::now());
+        self.lock.is_locked()
     }
 
     fn add_job(&self, job: Job) -> Arc<Job> {
@@ -799,7 +824,7 @@ impl App {
             }
             return Reply { status: 200, ctype, body, headers };
         }
-        if method == "GET" && (path == "/app.js" || path == "/app.css" || (cfg!(target_os = "android") && path == "/android.js") || (cfg!(target_os = "ios") && path == "/ios.js")) {
+        if method == "GET" && (path == "/app.js" || path == "/lock.js" || path == "/app.css" || (cfg!(target_os = "android") && path == "/android.js") || (cfg!(target_os = "ios") && path == "/ios.js")) {
             let ctype = if path.ends_with(".js") { "text/javascript; charset=utf-8" } else { "text/css; charset=utf-8" };
             return Reply { status: 200, ctype, body: std::fs::read(web.join(&path[1..])).unwrap_or_default(), headers: Vec::new() };
         }
@@ -811,6 +836,10 @@ impl App {
             return Reply { status: if path.starts_with("/api/") { 403 } else { 404 }, ctype: "text/plain", body: Vec::new(), headers: Vec::new() };
         }
         let route = format!("{}_{}", &path[5..].replace('/', "_"), method.to_lowercase());
+        self.lock.tick(crate::lock::now());
+        if self.lock.is_locked() && !LOCK_OK.contains(&route.as_str()) {
+            return Reply { status: 423, ..reply_json(&json!({"error": "برنامه قفل است.", "locked": true})) };
+        }
         let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.route(&route, &q, body)))
             .unwrap_or_else(|p| Err(ApiError::Internal(p.downcast_ref::<String>().cloned().or(p.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default())));
         match res {
@@ -856,6 +885,54 @@ impl App {
                 }
                 Ok(reply_json(&json!({"seconds": make_my_voice(body, &ext).map_err(bad)?})))
             }
+            "lock_status_get" => Ok(reply_json(&lock_status_json(&self.lock.status(crate::lock::now())))),
+            "activity_post" => {
+                self.lock.touch(crate::lock::now());
+                Ok(reply_json(&json!({"ok": true})))
+            }
+            "lock_now_post" => {
+                self.lock.lock_now();
+                Ok(reply_json(&lock_status_json(&self.lock.status(crate::lock::now()))))
+            }
+            "unlock_post" => {
+                let mut b = body_json()?;
+                let mut pw = take_text(&mut b, "password");
+                let r = self.lock.unlock(&pw, crate::lock::now());
+                crate::ffi::wipe::string(&mut pw);
+                match r {
+                    Ok(()) => Ok(reply_json(&lock_status_json(&self.lock.status(crate::lock::now())))),
+                    Err(e) => Ok(lock_refusal(e)),
+                }
+            }
+            "lock_set_post" => {
+                let mut b = body_json()?;
+                let (mut pw, mut cur) = (take_text(&mut b, "password"), take_text(&mut b, "current"));
+                let r = self.lock.set_password(&pw, if cur.is_empty() { None } else { Some(cur.as_str()) }, crate::lock::now());
+                crate::ffi::wipe::string(&mut pw);
+                crate::ffi::wipe::string(&mut cur);
+                match r {
+                    Ok(()) => Ok(reply_json(&lock_status_json(&self.lock.status(crate::lock::now())))),
+                    Err(e) => Ok(lock_refusal(e)),
+                }
+            }
+            "lock_off_post" => {
+                let mut b = body_json()?;
+                let mut pw = take_text(&mut b, "password");
+                let r = self.lock.disable(&pw, crate::lock::now());
+                crate::ffi::wipe::string(&mut pw);
+                match r {
+                    Ok(()) => Ok(reply_json(&lock_status_json(&self.lock.status(crate::lock::now())))),
+                    Err(e) => Ok(lock_refusal(e)),
+                }
+            }
+            "lock_timeout_post" => {
+                let b = body_json()?;
+                let secs = b.get("timeout").and_then(|v| v.as_i64()).unwrap_or(i64::MIN);
+                match self.lock.set_timeout(secs, crate::lock::now()) {
+                    Ok(()) => Ok(reply_json(&lock_status_json(&self.lock.status(crate::lock::now())))),
+                    Err(e) => Ok(lock_refusal(e)),
+                }
+            }
             "myvoice_delete_post" => {
                 let _ = std::fs::remove_file(my_voice());
                 let s = load_settings();
@@ -885,6 +962,7 @@ impl App {
                     }
                 }
                 sweep_temp(true);
+                self.lock.erase();
                 Ok(reply_json(&json!({"ok": true})))
             }
             "close_post" => {
@@ -1146,7 +1224,7 @@ impl App {
             }
             "profile_get" | "profile_post" => {
                 let p: Vec<f64> = tts::PROFILE.iter().map(|x| if route == "profile_post" { x.swap(0, Ordering::Relaxed) } else { x.load(Ordering::Relaxed) } as f64 / 1e9).collect();
-                Ok(reply_json(&json!({"voice_model": p[0], "sound_decoder": p[1], "checks": p[2], "listening": p[3], "listen_now": tts::LISTEN.load(Ordering::Relaxed),
+                Ok(reply_json(&json!({"voice_model": p[0], "sound_decoder": p[1], "checks": p[2], "listening": p[3], "pieces": p[4] * 1e9, "takes": p[5] * 1e9, "listen_now": tts::LISTEN.load(Ordering::Relaxed),
                                      "speed_seen": *READ_SPEED.lock().unwrap()})))
             }
             "power_post" => {
