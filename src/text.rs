@@ -1333,16 +1333,25 @@ fn is_number_piece(s: &str) -> bool {
 
 pub fn drop_vertical_text(items: &mut Vec<LayoutItem>) -> usize {
     let short = |i: &LayoutItem| { let n = i.s.trim().chars().count(); n >= 1 && n <= 4 && (i.x1 - i.x0) <= 1.6 * i.size };
+    let mut by_top: Vec<usize> = (0..items.len()).filter(|&k| !items[k].s.trim().is_empty()).collect();
+    by_top.sort_by(|&a, &b| items[a].top.partial_cmp(&items[b].top).unwrap_or(std::cmp::Ordering::Equal));
+    let tops: Vec<f64> = by_top.iter().map(|&k| items[k].top).collect();
+    let near = |top: f64, reach: f64| {
+        let lo = tops.partition_point(|t| *t < top - reach);
+        let hi = tops.partition_point(|t| *t <= top + reach);
+        lo..hi
+    };
     let apart = |k: usize| {
         let i = &items[k];
-        !items.iter().enumerate().any(|(j, o)| {
-            j != k && !short(o) && !o.s.trim().is_empty() && (o.top - i.top).abs() < 0.5 * i.size && (o.x0 - i.x1).max(i.x0 - o.x1) < i.size
+        !near(i.top, 0.5 * i.size).any(|q| {
+            let o = &items[by_top[q]];
+            by_top[q] != k && !short(o) && (o.x0 - i.x1).max(i.x0 - o.x1) < i.size
         })
     };
-    let mut idx: Vec<usize> = (0..items.len()).filter(|&k| short(&items[k]) && apart(k)).collect();
-    idx.sort_by(|&a, &b| items[a].top.partial_cmp(&items[b].top).unwrap_or(std::cmp::Ordering::Equal));
+    let idx: Vec<usize> = by_top.iter().copied().filter(|&k| short(&items[k]) && apart(k)).collect();
     let mut gone = vec![false; items.len()];
     let mut used = vec![false; items.len()];
+    let mut n = 0;
     for (pos, &k) in idx.iter().enumerate() {
         if used[k] {
             continue;
@@ -1350,7 +1359,7 @@ pub fn drop_vertical_text(items: &mut Vec<LayoutItem>) -> usize {
         let mid = |i: &LayoutItem| (i.x0 + i.x1) / 2.0;
         let mut col = vec![k];
         let mut last = k;
-        for &j in &idx[pos + 1..] {
+        for &j in idx[pos + 1..].iter().take(400) {
             let (a, b) = (&items[last], &items[j]);
             let step = b.top - a.top;
             if step > 0.9 * a.size.max(b.size) {
@@ -1361,14 +1370,19 @@ pub fn drop_vertical_text(items: &mut Vec<LayoutItem>) -> usize {
                 last = j;
             }
         }
-        if col.len() >= 3 {
+        for &j in &col {
+            used[j] = true;
+        }
+        if col.len() >= 3 && col.len() <= 60 {
             for &j in &col {
                 gone[j] = true;
-                used[j] = true;
             }
+            n += col.len();
         }
     }
-    let n = gone.iter().filter(|g| **g).count();
+    if n == 0 || n > 12 && n * 6 > items.len() {
+        return 0;
+    }
     let mut k = 0;
     items.retain(|_| { k += 1; !gone[k - 1] });
     n
@@ -1518,37 +1532,57 @@ pub fn layout_lines(items: &[LayoutItem], page_h: f64) -> Vec<LLine> {
     let items: Vec<LayoutItem> = items.iter().map(|i| LayoutItem { s: join_spaced_letters(&sub(r"\+{3,}", "", &i.s.replace('\u{fffd}', ""))), ..i.clone() }).collect();
     let items = leading_marks_moved(&items);
     let mut items: Vec<&LayoutItem> = items.iter().filter(|i| !strip(&i.s).is_empty() && i.bot > i.top).collect();
-    let marks: Vec<usize> = (0..items.len()).filter(|&k| is_note_mark(items[k], &items)).collect();
+    let numbers = items.iter().filter(|i| i.s.chars().count() <= 6 && i.s.trim().chars().all(|c| c.is_numeric())).count();
+    let marks: Vec<usize> = if numbers > 2000 { Vec::new() } else { (0..items.len()).filter(|&k| is_note_mark(items[k], &items)).collect() };
     for k in marks.into_iter().rev() {
         items.remove(k);
     }
     items.sort_by(|a, b| a.top.partial_cmp(&b.top).unwrap_or(std::cmp::Ordering::Equal));
     let mut groups: Vec<Vec<&LayoutItem>> = Vec::new();
+    let (mut t, mut b) = (f64::MAX, f64::MIN);
     for it in items {
-        let joins = groups.last().is_some_and(|g| {
-            let (t, b) = (g.iter().map(|x| x.top).fold(f64::MAX, f64::min), g.iter().map(|x| x.bot).fold(f64::MIN, f64::max));
+        let joins = !groups.is_empty() && {
             let overlap = it.bot.min(b) - it.top.max(t);
             overlap > 0.5 * (it.bot - it.top).min(b - t)
-        });
+        };
         if joins {
             groups.last_mut().unwrap().push(it);
+            t = t.min(it.top);
+            b = b.max(it.bot);
         } else {
             groups.push(vec![it]);
+            t = it.top;
+            b = it.bot;
         }
     }
     let mut split: Vec<Vec<&LayoutItem>> = Vec::new();
     for mut g in groups {
         g.sort_by(|a, b| a.x0.partial_cmp(&b.x0).unwrap_or(std::cmp::Ordering::Equal));
         let mut cut = None;
-        for k in 1..g.len() {
-            let (l, r) = (&g[..k], &g[k..]);
-            let reach = l.iter().map(|x| x.x1).fold(f64::MIN, f64::max);
+        let n = g.len();
+        let (mut lmax_x1, mut lmin_x0, mut lsum_mid, mut lbig) = (vec![f64::MIN; n + 1], vec![f64::MAX; n + 1], vec![0.0; n + 1], vec![f64::MIN; n + 1]);
+        for k in 0..n {
+            lmax_x1[k + 1] = lmax_x1[k].max(g[k].x1);
+            lmin_x0[k + 1] = lmin_x0[k].min(g[k].x0);
+            lsum_mid[k + 1] = lsum_mid[k] + g[k].top + g[k].bot;
+            lbig[k + 1] = lbig[k].max(g[k].size);
+        }
+        let (mut rmax_x1, mut rmin_x0, mut rbig) = (vec![f64::MIN; n + 1], vec![f64::MAX; n + 1], vec![f64::MIN; n + 1]);
+        for k in (0..n).rev() {
+            rmax_x1[k] = rmax_x1[k + 1].max(g[k].x1);
+            rmin_x0[k] = rmin_x0[k + 1].min(g[k].x0);
+            rbig[k] = rbig[k + 1].max(g[k].size);
+        }
+        for k in 1..n {
+            let reach = lmax_x1[k];
             let size = g[k].size.min(g[k - 1].size);
-            let mid = |v: &[&LayoutItem]| v.iter().map(|x| x.top + x.bot).sum::<f64>() / (2.0 * v.len() as f64);
-            let big = |v: &[&LayoutItem]| v.iter().map(|x| x.size).fold(f64::MIN, f64::max);
-            let other_size = (big(l) - big(r)).abs() > 0.04 * big(l).max(big(r));
-            let wide = |v: &[&LayoutItem]| v.iter().map(|x| x.x1).fold(f64::MIN, f64::max) - v.iter().map(|x| x.x0).fold(f64::MAX, f64::min) > 6.0 * size;
-            if g[k].x0 - reach > 0.5 * size && ((mid(l) - mid(r)).abs() > 0.25 * size || other_size) && wide(l) && wide(r) {
+            let mid_l = lsum_mid[k] / (2.0 * k as f64);
+            let mid_r = (lsum_mid[n] - lsum_mid[k]) / (2.0 * (n - k) as f64);
+            let (big_l, big_r) = (lbig[k], rbig[k]);
+            let other_size = (big_l - big_r).abs() > 0.04 * big_l.max(big_r);
+            let wide_l = lmax_x1[k] - lmin_x0[k] > 6.0 * size;
+            let wide_r = rmax_x1[k] - rmin_x0[k] > 6.0 * size;
+            if g[k].x0 - reach > 0.5 * size && ((mid_l - mid_r).abs() > 0.25 * size || other_size) && wide_l && wide_r {
                 cut = Some(k);
                 break;
             }
