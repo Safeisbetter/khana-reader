@@ -355,6 +355,8 @@ input[type="text"], input[type="search"], input[type="password"], select, textar
   font-family: var(--ui-font); word-spacing: .25em;
 }
 .dock .transport { display: flex; align-items: center; gap: 8px; }
+/* (how long the rest of the book takes to listen to: a small line under the controls) */
+.dock .booktime { flex: 1 1 100%; text-align: center; font-size: 13px; color: var(--muted); margin-top: -2px; }
 #play { min-height: 56px; min-width: 156px; justify-content: center; font-size: 19px; border-radius: 99px; }
 #stop { min-height: 48px; border-radius: 99px; }
 .pager button { border-radius: 99px; min-width: 46px; justify-content: center; }

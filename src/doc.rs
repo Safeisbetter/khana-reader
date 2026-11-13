@@ -613,7 +613,15 @@ pub fn textutil_paragraphs(data: &[u8], ext: &str) -> Result<Vec<String>, String
     res
 }
 
-pub fn open_document_layout(name: &str, pages: Vec<(Vec<LayoutItem>, f64, bool)>, engines: Arc<Engines>) -> Arc<Document> {
+pub fn open_document_layout(name: &str, mut pages: Vec<(Vec<LayoutItem>, f64, bool)>, engines: Arc<Engines>) -> Arc<Document> {
+    let mut items: Vec<Vec<LayoutItem>> = pages.iter_mut().map(|p| std::mem::take(&mut p.0)).collect();
+    crate::text::mend_reversed_numbers(&mut items);
+    for page in items.iter_mut() {
+        crate::text::drop_vertical_text(page);
+    }
+    for (p, it) in pages.iter_mut().zip(items) {
+        p.0 = it;
+    }
     let images: Vec<bool> = pages.iter().map(|p| p.2).collect();
     let mut lines: Vec<(Vec<LLine>, f64)> = pages.iter().map(|(items, h, _)| (layout_lines(items, *h), *h)).collect();
     drop_running_lines(&mut lines);
