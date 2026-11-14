@@ -209,7 +209,8 @@ fn written_word(w: &str) -> Option<String> {
     }
     let c = crate::vocab::word_costs();
     let cost = |x: &str| c.get(x).map_or(99.0, |v| v.cost as f64);
-    let mi = w.starts_with("می") || w.starts_with("نمی");
+    let mi = w.strip_prefix("نمی").or_else(|| w.strip_prefix("می"))
+        .is_some_and(|stem| stem.chars().count() >= 3);
     let verb = mi || w.starts_with('ب') || w.ends_with("ستن");
     let mut cands: Vec<String> = Vec::new();
     let mut bases = vec![w.to_string()];
@@ -241,7 +242,7 @@ fn written_word(w: &str) -> Option<String> {
     if !(best.0 <= 11.5 && best.0 + 2.5 <= own || best.0 <= 14.5 && own >= 13.5 && best.0 + 1.5 <= own) {
         return None;
     }
-    Some(sub(r"^(ن?می)(?=\S)", "\\1\u{200c}", &best.1))
+    Some(if mi { sub(r"^(ن?می)(?=\S)", "\\1\u{200c}", &best.1) } else { best.1 })
 }
 
 pub fn written_forms(s: &str) -> String {
