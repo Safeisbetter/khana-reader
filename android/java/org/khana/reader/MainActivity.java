@@ -219,7 +219,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         s.setSafeBrowsingEnabled(false); // (it would ask Google's servers about pages)
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         s.setMediaPlaybackRequiresUserGesture(false); // (reading aloud plays page after page)
-        s.setTextZoom(100);
+        s.setTextZoom(Math.max(50, Math.min(300, Math.round(getResources().getConfiguration().fontScale * 100))));
         // (nothing typed in the page, the password of a PDF least of all, is offered to the phone's «autofill» service)
         web.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         web.setWebViewClient(new Client());
