@@ -609,3 +609,15 @@ body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: calc
   .reading-context { order: -2; }
   #readingTip { display: none; }
 }
+
+/* Reading preferences apply to extracted text and its source comparison. */
+.text, .source-text { line-height: var(--reader-line-height, 2.2); }
+.source-text { font-size: var(--fs, 21px); white-space: pre-wrap; overflow-wrap: anywhere; }
+.text p[data-i]:focus-visible { outline: 3px solid currentColor; outline-offset: 5px; }
+button, .btn { min-block-size: 48px; }
+input[type="range"] { min-block-size: 44px; }
+.skip-link { position: fixed; inset-block-start: 8px; inset-inline-start: 8px; z-index: 200; padding: 12px 18px; background: var(--surface); color: var(--ink); border: 3px solid currentColor; transform: translateY(-160%); }
+.skip-link:focus { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important; }
+}

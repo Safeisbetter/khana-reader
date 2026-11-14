@@ -51,9 +51,9 @@ pub fn ready() -> bool {
 }
 
 pub fn split_source_sentences(text: &str) -> Vec<String> {
-    let parts: Vec<String> = split(r#"(?<=[.!?])\s+(?=["“‘«„(\[]?[\p{Lu}0-9])"#, text)
+    let parts: Vec<String> = split(r#"(?<=[.!?])\s+(?=["“‘«„(\[]?[\p{L}0-9])"#, text)
         .iter()
-        .flat_map(|p| split(r#"(?<=[.!?]["”’»)\]])\s+(?=["“‘«„(\[]?[\p{Lu}0-9])"#, p))
+        .flat_map(|p| split(r#"(?<=[.!?]["”’»)\]])\s+(?=["“‘«„(\[]?[\p{L}0-9])"#, p))
         .collect();
     let mut out: Vec<String> = Vec::new();
     for p in parts {
@@ -72,7 +72,11 @@ pub fn split_source_sentences(text: &str) -> Vec<String> {
             let head: String = sent[..600].iter().collect();
             let rfind = |pat: &str| head.rfind(pat).map(|b| head[..b].chars().count() as isize).unwrap_or(-1);
             let cut = rfind("; ").max(rfind(": ")).max(rfind(", "));
-            let cut = if cut > 200 { cut as usize + 1 } else { 600 };
+            let cut = if cut > 200 {
+                cut as usize + 1
+            } else {
+                sent[..600].iter().rposition(|c| c.is_whitespace()).filter(|&at| at > 0).unwrap_or(600)
+            };
             fin.push(strip(&sent[..cut].iter().collect::<String>()).to_string());
             sent = strip(&sent[cut..].iter().collect::<String>()).chars().collect();
         }

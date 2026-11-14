@@ -26,6 +26,7 @@
     document.body.classList.add("locked");
     for (const el of document.body.children) if (el.id !== "lockScreen" && el.tagName !== "SCRIPT") el.inert = true;
     $("lockScreen").hidden = false;
+    $("lockScreen").inert = false;
     $("lockPw").value = "";
     $("lockErr").textContent = message || "";
     $("lockForgot").open = false;
