@@ -621,3 +621,7 @@ input[type="range"] { min-block-size: 44px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important; }
 }
+@media (max-width: 680px) {
+  .welcome .welcome-actions { flex-direction: column; flex-wrap: nowrap; width: 100%; min-width: 0; }
+  .welcome .welcome-actions button { flex: 0 0 auto; width: 100%; max-width: 100%; min-width: 0; white-space: normal; }
+}
