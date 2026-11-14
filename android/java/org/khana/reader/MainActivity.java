@@ -232,6 +232,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
 
     /** Gives the reader page (and only it: the main frame, at the app's address) its body port. */
     private void givePort() {
+        server.clearBodies();
         if (pagePort != null) pagePort.close();
         WebMessagePort[] ch = web.createWebMessageChannel();
         pagePort = ch[0];
@@ -271,6 +272,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
 
         @Override
         public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+            server.clearBodies();
             // the page's process ended (out of memory, a crash): a new WebView with the page again
             if (pagePort != null) pagePort.close();
             pagePort = null;
@@ -448,28 +450,9 @@ public final class MainActivity extends Activity implements Exporter.Asker {
 
     /** A developer's speed test (Bench), only when it is asked for over USB with USB debugging switched on. */
     /** The developer's tests (Bench) exist only in a developer's own build: the public download is built with this false (android/build.sh). */
-    static final boolean DEV_TOOLS = true;
+    static final boolean DEV_TOOLS = false;
 
-    private void maybeBench(Intent it) {
-        if (!DEV_TOOLS || it == null) return;
-        boolean bench = it.getBooleanExtra("khana_bench", false);
-        String test = it.getStringExtra("khana_test");
-        if (!bench && test == null) return;
-        if (android.provider.Settings.Global.getInt(getContentResolver(), android.provider.Settings.Global.ADB_ENABLED, 0) != 1) return;
-        it.removeExtra("khana_bench");
-        it.removeExtra("khana_test");
-        if (bench) new Thread(Bench::run, "khana-bench").start();
-        else if ("library".equals(test)) new Thread(Bench::library, "khana-bench").start();
-        // (reading with the screen off, checked over USB: a text of the test's own is opened and read; nothing of the reader's)
-        else if ("read".equals(test)) web.evaluateJavascript("(async()=>{const t=document.getElementById('typeText');"
-                + "t.value=Array(40).fill('این یک آزمایش خواندن با صفحه‌ی خاموش است. جمله‌ها پشت سر هم خوانده می‌شوند.').join(' ');"
-                + "if(await openTyped())document.getElementById('play').click();})()", null);
-        else if ("mp3".equals(test)) {
-            final String plan = it.getStringExtra("khana_plan");
-            final android.content.Context ctx = getApplicationContext();
-            new Thread(() -> Bench.mp3(ctx, plan == null ? "5n,5f,3n,3f" : plan), "khana-bench").start();
-        }
-    }
+    private void maybeBench(Intent it) {}
 
     @Override
     protected void onNewIntent(Intent it) {
@@ -543,6 +526,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
 
     @Override
     protected void onDestroy() {
+        if (server != null) server.clearBodies();
         Exporter.setAsker(null);
         if (isFinishing() && server != null) {
             // (the window is ending: the open book is let go, its text overwritten, not left for the process's remaining life)

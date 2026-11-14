@@ -84,10 +84,6 @@ pub fn run() {
     khana::ffi::lower_priority();
     std::thread::spawn(|| loop {
         khana::tts::set_heat(khana::mac::heat_level());
-        if khana::app::selftest_on() {
-            std::thread::sleep(std::time::Duration::from_secs(15));
-            continue;
-        }
         if let Some((percent, charging)) = khana::mac::battery() {
             khana::tts::set_power(percent, charging);
         }
@@ -154,9 +150,6 @@ pub fn run() {
             } else {
                 a.handle(&method, &path, &qs, token.as_deref(), req.body(), &web)
             };
-            if khana::app::selftest_on() {
-                eprintln!("request {method} {path} body {} -> {} {}", req.body().len(), r.status, if r.status >= 400 { String::from_utf8_lossy(&r.body).into_owned() } else { String::new() });
-            }
             let mut b = Response::builder()
                 .status(r.status)
                 .header(header::CONTENT_TYPE, r.ctype)
@@ -170,16 +163,13 @@ pub fn run() {
             responder.respond(resp);
         });
     };
-    let selftest = if khana::app::selftest_on() { "" } else { "" };
-    let lock_flag = if khana::app::selftest_on() && std::env::var("KHANA_SELFTEST_LOCK").is_ok() { "" } else { "" };
-    let selftest = format!("window.KHANA_PDF_VIEW = true;\n{lock_flag}{selftest}");
     let gone = event_loop.create_proxy();
     let mut builder = WebViewBuilder::new()
-        .with_initialization_script(selftest)
+        .with_initialization_script("window.KHANA_PDF_VIEW = true;\n")
         .with_asynchronous_custom_protocol("khana".into(), handler)
         .with_url(START_URL)
         .with_incognito(true)
-        .with_navigation_handler(|url| url.starts_with("khana://"))
+        .with_navigation_handler(|url| url == "khana://reader" || url.starts_with("khana://reader/"))
         .with_new_window_req_handler(|_url, _features| wry::NewWindowResponse::Deny)
         .with_download_started_handler(|_url, _path| false)
         .with_drag_drop_handler(|_e| false)

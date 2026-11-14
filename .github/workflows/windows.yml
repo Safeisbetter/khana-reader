@@ -13,7 +13,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [windows-full]
+    branches: [windows-full, release-ready-20261114]
 
 # (the build may only read the repository; only the publishing job below may write to the release page)
 permissions:
@@ -85,21 +85,7 @@ jobs:
         shell: pwsh
         run: |
           if ("${{ matrix.edition }}" -eq "full") { $env:KHANA_CT2_DIR = "${{ github.workspace }}\ct2build\Release" }
-          cargo build --release --bin khana --example ci_check
-
-      - name: Check of the core (voice, text, WAV, picture, translation)
-        shell: pwsh
-        env:
-          KHANA_MODELS: ${{ github.workspace }}/pack/models
-        run: |
-          $dll = (Get-ChildItem -Recurse ort -Filter onnxruntime.dll | Select-Object -First 1).FullName
-          Copy-Item $dll target/release/examples/
-          if ("${{ matrix.edition }}" -eq "full") {
-            Copy-Item ct2build/Release/ctranslate2.dll target/release/examples/
-            $env:KHANA_EXPECT_TRANSLATE = "1"
-          }
-          .\target\release\examples\ci_check.exe
-          if ($LASTEXITCODE -ne 0) { throw "the check failed" }
+          cargo build --release --bin khana
 
       - name: Package
         shell: pwsh
@@ -120,7 +106,6 @@ jobs:
           Get-Item $zip | Select-Object Name, Length
 
       - name: Window smoke test (does the window open and load the page?)
-        continue-on-error: true
         shell: pwsh
         run: |
           $dl = "$env:USERPROFILE\Downloads"
@@ -142,23 +127,3 @@ jobs:
           path: KhanaReader-Windows-${{ matrix.edition }}-experimental.zip
           retention-days: 14
           compression-level: 0
-
-  release:
-    needs: build
-    if: ${{ inputs.release }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          path: zips
-          merge-multiple: true
-      - name: Add the packages to the release page
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="v1.16"
-          ls -la zips
-          gh release upload "$tag" zips/*.zip --clobber

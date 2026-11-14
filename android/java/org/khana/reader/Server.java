@@ -91,32 +91,51 @@ final class Server {
     }
 
     /** A message from the page's port: «B<id>:<base64>» a piece of a body, «E<id>» its end. */
-    void onPortMessage(WebMessagePort port, WebMessage m) {
+    synchronized void clearBodies() {
+        for (Body b : bodies.values()) b.wipe();
+        bodies.clear();
+    }
+
+    private synchronized byte[] takeBody(String id) {
+        Body b = bodies.remove(id);
+        return b == null ? null : b.take();
+    }
+
+    /** Bound both individual uploads and the aggregate retained by abandoned requests. */
+    synchronized void onPortMessage(WebMessagePort port, WebMessage m) {
         String d = m.getData();
         if (d == null || d.isEmpty()) return;
-        if (d.charAt(0) == 'B') {
-            int c = d.indexOf(':');
-            if (c < 2) return;
-            String id = d.substring(1, c);
-            byte[] piece = Base64.decode(d.substring(c + 1), Base64.DEFAULT);
-            Body b = bodies.computeIfAbsent(id, k -> new Body());
-            if (b.size() + (long) piece.length > MAX_BODY) {
-                bodies.remove(id);
-                b.wipe();
-            } else {
-                b.write(piece, piece.length);
+        char op = d.charAt(0);
+        int c = op == 'B' ? d.indexOf(':') : d.length();
+        if ((op != 'B' && op != 'E') || c < 2 || c > 65) return;
+        String id = d.substring(1, c);
+        if (!id.matches("[A-Za-z0-9-]{1,64}")) return;
+        byte[] piece = null;
+        try {
+            if (op == 'B') {
+                // The page sends 3 MiB pieces; check before allocating the decoded bytes.
+                if (d.length() - c - 1 > 4 * 1024 * 1024) throw new IllegalArgumentException();
+                piece = Base64.decode(d.substring(c + 1), Base64.DEFAULT);
             }
-            Arrays.fill(piece, (byte) 0);
-        } else if (d.charAt(0) == 'E') {
-            String id = d.substring(1);
-            bodies.computeIfAbsent(id, k -> new Body());
-            port.postMessage(new WebMessage("A" + id));
+            long total = 0;
+            for (Body pending : bodies.values()) total += pending.size();
+            if ((!bodies.containsKey(id) && bodies.size() >= 8)
+                    || total + (piece == null ? 0 : piece.length) > MAX_BODY) throw new IllegalArgumentException();
+            Body b = bodies.computeIfAbsent(id, k -> new Body());
+            if (piece != null) b.write(piece, piece.length);
+            else port.postMessage(new WebMessage("A" + id));
+        } catch (IllegalArgumentException e) {
+            // Clear the channel's incomplete uploads; never acknowledge a truncated body as complete.
+            clearBodies();
+            port.postMessage(new WebMessage("F" + id));
+        } finally {
+            if (piece != null) Arrays.fill(piece, (byte) 0);
         }
     }
 
     WebResourceResponse handle(WebResourceRequest req) {
         Uri u = req.getUrl();
-        if (!"https".equals(u.getScheme()) || !HOST.equals(u.getHost())) return refuse();
+        if (!"https".equals(u.getScheme()) || !HOST.equals(u.getHost()) || (u.getPort() != -1 && u.getPort() != 443) || u.getUserInfo() != null) return refuse();
         String method = req.getMethod() == null ? "GET" : req.getMethod().toUpperCase(Locale.ROOT);
         // (as the Mac window passes them: the path and query still percent-encoded)
         String path = u.getEncodedPath() == null || u.getEncodedPath().isEmpty() ? "/" : u.getEncodedPath();
@@ -125,56 +144,62 @@ final class Server {
         byte[] body = null;
         String bodyId = header(req, "X-Khana-Body");
         if (bodyId != null) {
-            Body b = bodies.remove(bodyId);
-            if (b == null) return text(400, "the request's body did not arrive");
-            body = b.take();
-        }
-        // a voice sample other than WAV is decoded by Android first (the Mac uses afconvert); only for the page itself
-        if ("/api/myvoice".equals(path) && body != null) {
-            if (!tokenOk(tok)) {
-                Arrays.fill(body, (byte) 0);
-                return json(403, "{}");
-            }
-            String name = u.getQueryParameter("name");
-            if (name != null && !name.toLowerCase(Locale.ROOT).endsWith(".wav")) {
-                byte[] wav = AudioDecode.toWav(ctx, body);
-                if (wav == null) return json(400, "{\"error\":\"این فایل صوتی باز نشد. یک فایل WAV، M4A یا MP3 انتخاب کنید.\"}");
-                body = wav;
-                query = query.replaceAll("(^|&)name=[^&]*", "$1name=voice.wav");
-            }
-        }
-        // The page's «copy page text»: put on the clipboard here, not by the web view, so that it can be marked as sensitive
-        // (Android 13 and newer then keep it out of the clipboard preview) and taken off again after a minute and a half
-        // (on Android 9 and older any app can read the clipboard for as long as the text lies there).
-        // The page's colours for the shell's own bar at the top («رنگ پس‌زمینه»): the bar is not part of the page, so the page says
-        // what it looks like now, «#rrggbb #rrggbb» (ground, writing). Only two colours are read, nothing else.
-        if ("POST".equals(method) && "/api/shellbar".equals(path)) {
             if (!tokenOk(tok)) return json(403, "{}");
-            String t = body == null ? "" : Native.text(body);
-            java.util.regex.Matcher m = java.util.regex.Pattern.compile("^#([0-9a-fA-F]{6}) #([0-9a-fA-F]{6})$").matcher(t.trim());
-            if (!m.find()) return json(400, "{}");
-            MainActivity.paintBar(0xFF000000 | Integer.parseInt(m.group(1), 16), 0xFF000000 | Integer.parseInt(m.group(2), 16));
-            return json(200, "{\"ok\":true}");
+            body = takeBody(bodyId);
+            if (body == null) return text(400, "the request's body did not arrive");
         }
-        if ("POST".equals(method) && "/api/clip".equals(path)) {
-            if (!tokenOk(tok)) return json(403, "{}");
-            if (isLocked()) { // (the app lock: this request does not go through the core, so it asks)
+        try {
+            // a voice sample other than WAV is decoded by Android first (the Mac uses afconvert); only for the page itself
+            if ("/api/myvoice".equals(path) && body != null) {
+                if (!tokenOk(tok)) {
+                    Arrays.fill(body, (byte) 0);
+                    return json(403, "{}");
+                }
+                String name = u.getQueryParameter("name");
+                if (name != null && !name.toLowerCase(Locale.ROOT).endsWith(".wav")) {
+                    if (isLocked()) return json(423, "{\"locked\":true}");
+                    byte[] wav = AudioDecode.toWav(ctx, body);
+                    Arrays.fill(body, (byte) 0);
+                    if (wav == null) return json(400, "{\"error\":\"این فایل صوتی باز نشد. یک فایل WAV، M4A یا MP3 انتخاب کنید.\"}");
+                    body = wav;
+                    query = query.replaceAll("(^|&)name=[^&]*", "$1name=voice.wav");
+                }
+            }
+            // The page's «copy page text»: put on the clipboard here, not by the web view, so that it can be marked as sensitive
+            // (Android 13 and newer then keep it out of the clipboard preview) and taken off again after a minute and a half
+            // (on Android 9 and older any app can read the clipboard for as long as the text lies there).
+            // The page's colours for the shell's own bar at the top («رنگ پس‌زمینه»): the bar is not part of the page, so the page says
+            // what it looks like now, «#rrggbb #rrggbb» (ground, writing). Only two colours are read, nothing else.
+            if ("POST".equals(method) && "/api/shellbar".equals(path)) {
+                if (!tokenOk(tok)) return json(403, "{}");
+                String t = body == null ? "" : Native.text(body);
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("^#([0-9a-fA-F]{6}) #([0-9a-fA-F]{6})$").matcher(t.trim());
+                if (!m.find()) return json(400, "{}");
+                MainActivity.paintBar(0xFF000000 | Integer.parseInt(m.group(1), 16), 0xFF000000 | Integer.parseInt(m.group(2), 16));
+                return json(200, "{\"ok\":true}");
+            }
+            if ("POST".equals(method) && "/api/clip".equals(path)) {
+                if (!tokenOk(tok)) return json(403, "{}");
+                if (isLocked()) { // (the app lock: this request does not go through the core, so it asks)
+                    if (body != null) Arrays.fill(body, (byte) 0);
+                    return json(423, "{\"locked\":true}");
+                }
+                copySensitive(ctx, body == null ? "" : Native.text(body));
                 if (body != null) Arrays.fill(body, (byte) 0);
-                return json(423, "{\"locked\":true}");
+                return json(200, "{\"ok\":true}");
             }
-            copySensitive(ctx, body == null ? "" : Native.text(body));
+            Native.Reply r = new Native.Reply(Native.handle(Native.utf8(method), Native.utf8(path), Native.utf8(query), Native.utf8(tok), body));
+            if (body != null) Arrays.fill(body, (byte) 0); // (the document's bytes: the core has its own copy now)
+            if ("/api/tts".equals(path)) lastSpeech = android.os.SystemClock.elapsedRealtime();
+            if (r.status == 200 && "POST".equals(method) && ("/api/settings".equals(path) || "/api/forget".equals(path) || "/api/unlock".equals(path))) MainActivity.applyScreenGuard(); // (after an unlock too: the setting could not be read while the app was locked)
+            if (r.status == 200 && "POST".equals(method) && ("/api/mp3".equals(path) || "/api/pdf".equals(path))) {
+                JobService.start(ctx);
+            }
+            if (path.startsWith("/api/")) Exporter.drain(ctx);
+            return response(r);
+        } finally {
             if (body != null) Arrays.fill(body, (byte) 0);
-            return json(200, "{\"ok\":true}");
         }
-        Native.Reply r = new Native.Reply(Native.handle(Native.utf8(method), Native.utf8(path), Native.utf8(query), Native.utf8(tok), body));
-        if (body != null) Arrays.fill(body, (byte) 0); // (the document's bytes: the core has its own copy now)
-        if ("/api/tts".equals(path)) lastSpeech = android.os.SystemClock.elapsedRealtime();
-        if (r.status == 200 && "POST".equals(method) && ("/api/settings".equals(path) || "/api/forget".equals(path) || "/api/unlock".equals(path))) MainActivity.applyScreenGuard(); // (after an unlock too: the setting could not be read while the app was locked)
-        if (r.status == 200 && "POST".equals(method) && ("/api/mp3".equals(path) || "/api/pdf".equals(path))) {
-            JobService.start(ctx);
-        }
-        if (path.startsWith("/api/")) Exporter.drain(ctx);
-        return response(r);
     }
 
     /** Whether the app lock is on and the app locked now (the core says so; it refuses the request itself otherwise). */

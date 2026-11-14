@@ -38,7 +38,9 @@ char *k_vision_ocr(const unsigned char *gray, int w, int h)
 			[out appendFormat:@"%.17g\t%.17g\t%.17g\t%.17g\t%@\n", b.origin.x, b.origin.y, b.size.width, b.size.height, t];
 		}
 		const char *u = [out UTF8String];
+		if (!u) return NULL;
 		char *r = malloc(strlen(u) + 1);
+		if (!r) return NULL;
 		strcpy(r, u);
 		return r;
 	}

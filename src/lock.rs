@@ -336,17 +336,7 @@ impl Lock {
 
     fn save(&self, rec: &Stored) -> Result<(), LockError> {
         let json = serde_json::to_vec(rec).map_err(|e| LockError::Io(e.to_string()))?;
-        if let Some(dir) = self.path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| LockError::Io(e.to_string()))?;
-        }
-        let tmp = self.path.with_extension("tmp");
-        std::fs::write(&tmp, &json).map_err(|e| LockError::Io(e.to_string()))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600));
-        }
-        std::fs::rename(&tmp, &self.path).map_err(|e| LockError::Io(e.to_string()))
+        crate::private_fs::atomic_write(&self.path, &json).map_err(|e| LockError::Io(e.to_string()))
     }
 
     pub fn enabled(&self) -> bool {

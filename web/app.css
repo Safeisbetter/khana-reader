@@ -567,3 +567,45 @@ body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: 108p
 .lockerr { color: var(--danger); min-height: 1.4em; margin: 0; font-size: 14px; }
 body.locked > :not(#lockScreen):not(script) { visibility: hidden; }
 body.locked { overflow: hidden; }
+
+/* First-use guidance and frequently used reading controls. */
+.welcome { padding: clamp(26px, 5vw, 48px) clamp(20px, 4vw, 40px); gap: 18px; }
+.welcome .hero { width: 76px; height: 68px; }
+.welcome h1 { font-size: clamp(24px, 3vw, 32px); line-height: 1.65; }
+.welcome > p { max-width: 52ch; }
+.welcome-badge { font-size: 13px; color: var(--turq); font-weight: 600; }
+.welcome-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.welcome-actions button { min-height: 54px; justify-content: center; }
+.welcome .drop-hint { font-size: 13px; }
+.welcome-steps { list-style: none; padding: 0; margin: 8px 0; width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; text-align: start; }
+.welcome-steps li { display: flex; align-items: flex-start; gap: 10px; padding: 16px; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; }
+.step-number { flex: 0 0 30px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--reading); color: var(--lapis); font-weight: 700; }
+.welcome-steps strong, .welcome-steps li div > span { display: block; }
+.welcome-steps strong { font-size: 15px; margin-bottom: 6px; }
+.welcome-steps li div > span { font-size: 13px; line-height: 1.9; color: var(--muted); }
+.welcome-help { white-space: normal; text-align: center; justify-content: center; color: var(--lapis); }
+.welcome .thanks { margin-top: 0; font-size: 16px; }
+.text-size { gap: 2px; }
+.text-size button { min-height: 44px; }
+#fontChip { min-width: 42px; justify-content: center; font-variant-numeric: tabular-nums; color: var(--muted); }
+.reading-context { flex: 1 1 100%; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; font-size: 13px; line-height: 1.7; }
+#readingState { color: var(--lapis); font-weight: 600; }
+#readingTip { color: var(--muted); }
+.guide-card h3 { font-size: 17px; margin: 0; }
+.guide-card p { margin: 0; font-size: 15px; line-height: 2; }
+.shortcut-list { margin: 0; display: grid; gap: 12px; }
+.shortcut-list > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.shortcut-list dt { direction: ltr; font-size: 13px; }
+.shortcut-list dd { margin: 0; font-size: 14px; }
+/* Measure the player instead of assuming a fixed height, including when labels wrap or text is enlarged. */
+body.has-doc main { padding-bottom: calc(var(--dock-height, 180px) + 40px + env(safe-area-inset-bottom, 0px)); }
+body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: calc(var(--dock-height, 180px) + 32px + env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 680px) {
+  .welcome-steps { grid-template-columns: 1fr; gap: 8px; }
+  .welcome-steps li { padding: 12px 14px; }
+  .welcome-steps strong { margin-bottom: 2px; }
+  .welcome-actions { width: 100%; }
+  .welcome-actions button { flex: 1 1 100%; white-space: normal; }
+  .reading-context { order: -2; }
+  #readingTip { display: none; }
+}

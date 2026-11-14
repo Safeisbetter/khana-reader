@@ -591,8 +591,7 @@ pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
 }
 
 pub fn textutil_paragraphs(data: &[u8], ext: &str) -> Result<Vec<String>, String> {
-    let tmp = std::env::temp_dir().join(format!("khana-{}", new_id()));
-    std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
+    let tmp = crate::private_fs::TempDir::new().map_err(|e| e.to_string())?;
     let src = tmp.join(format!("input{ext}"));
     let dst = tmp.join("output.txt");
     let res = (|| {
@@ -609,7 +608,6 @@ pub fn textutil_paragraphs(data: &[u8], ext: &str) -> Result<Vec<String>, String
         let b = std::fs::read(&dst).map_err(|e| e.to_string())?;
         Ok(split_paragraphs(&String::from_utf8_lossy(&b)))
     })();
-    let _ = std::fs::remove_dir_all(&tmp);
     res
 }
 

@@ -30,16 +30,6 @@ pub const VOICES: &[VoiceInfo] = &[
     VoiceInfo { id: "seda4", wav: "donated_imran.wav", name: "مدل صدا ۴", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
     VoiceInfo { id: "seda5", wav: "donated_taiyo.wav", name: "مدل صدا ۵", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
     VoiceInfo { id: "seda6", wav: "donated_roscoe.wav", name: "مدل صدا ۶", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
-    VoiceInfo { id: "mahtab", wav: "mahtab.wav", name: "مهتاب", gender: "زن", group: "natural", extra: true, tempo: 1.0 },
-    VoiceInfo { id: "arash", wav: "arash.wav", name: "آرش", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
-    VoiceInfo { id: "pariya", wav: "pariya.wav", name: "پریا", gender: "زن", group: "natural", extra: true, tempo: 1.0 },
-    VoiceInfo { id: "kaveh", wav: "kaveh.wav", name: "کاوه", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
-    VoiceInfo { id: "bahram", wav: "bahram.wav", name: "بهرام", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
-    VoiceInfo { id: "mokhtari", wav: "mokhtari.wav", name: "مختاری", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
-    VoiceInfo { id: "poyandeh", wav: "poyandeh.wav", name: "پوینده", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
-    VoiceInfo { id: "saeedi", wav: "saeedi.wav", name: "سعیدی", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
-    VoiceInfo { id: "shahin", wav: "shahin.wav", name: "شاهین نوایی", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
-    VoiceInfo { id: "shamlou", wav: "shamlou.wav", name: "شاملو", gender: "مرد", group: "natural", extra: true, tempo: 1.0 },
 ];
 
 pub fn data_dir() -> PathBuf {
@@ -83,13 +73,6 @@ fn voice_path(v: &VoiceInfo) -> PathBuf {
 
 fn voices() -> Vec<&'static VoiceInfo> {
     VOICES.iter().filter(|v| voice_path(v).is_file() && has_engine()).collect()
-}
-
-pub const SELFTEST: bool = false;
-
-#[inline]
-pub fn selftest_on() -> bool {
-    SELFTEST && std::env::var("KHANA_SELFTEST").is_ok()
 }
 
 fn all_voices() -> Vec<(String, String, String, String)> {
@@ -147,7 +130,7 @@ fn save_settings(new: &Map<String, Value>) -> Result<Map<String, Value>, String>
     }
     s.insert("lexicon".into(), Value::Object(clean));
     std::fs::create_dir_all(data_dir()).map_err(|e| e.to_string())?;
-    std::fs::write(settings_file(), serde_json::to_string_pretty(&Value::Object(s.clone())).unwrap()).map_err(|e| e.to_string())?;
+    crate::private_fs::atomic_write(&settings_file(), serde_json::to_string_pretty(&Value::Object(s.clone())).unwrap().as_bytes()).map_err(|e| e.to_string())?;
     Ok(s)
 }
 
@@ -240,7 +223,7 @@ impl Drop for Turn<'_> {
 fn make_my_voice(data: &[u8], ext: &str) -> Result<f64, String> {
     let (keep, rate) = voice_sample(data, ext)?;
     std::fs::create_dir_all(data_dir()).map_err(|e| e.to_string())?;
-    std::fs::write(my_voice(), audio::wav_bytes(&keep, rate as u32)).map_err(|e| e.to_string())?;
+    crate::private_fs::atomic_write(&my_voice(), &audio::wav_bytes(&keep, rate as u32)).map_err(|e| e.to_string())?;
     if let Ok(e) = speech().engine() {
         e.forget_pace("mine");
     }
@@ -248,8 +231,7 @@ fn make_my_voice(data: &[u8], ext: &str) -> Result<f64, String> {
 }
 
 fn decode_16k(data: &[u8], ext: &str) -> Result<Vec<f32>, String> {
-    let tmp = std::env::temp_dir().join(format!("khana-stt-{}", std::process::id()));
-    std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
+    let tmp = crate::private_fs::TempDir::new().map_err(|e| e.to_string())?;
     let src = tmp.join(format!("input{ext}"));
     let dst = tmp.join("sound.wav");
     let res = (|| {
@@ -259,7 +241,6 @@ fn decode_16k(data: &[u8], ext: &str) -> Result<Vec<f32>, String> {
         }
         audio::read_wav(&dst)
     })();
-    let _ = std::fs::remove_dir_all(&tmp);
     let (a, rate) = res?;
     if a.is_empty() || rate == 0 {
         return Err("در این فایل صدایی نیست.".into());
@@ -268,8 +249,7 @@ fn decode_16k(data: &[u8], ext: &str) -> Result<Vec<f32>, String> {
 }
 
 pub fn voice_sample(data: &[u8], ext: &str) -> Result<(Vec<f32>, usize), String> {
-    let tmp = std::env::temp_dir().join(format!("khana-{}", std::process::id()));
-    std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
+    let tmp = crate::private_fs::TempDir::new().map_err(|e| e.to_string())?;
     let src = tmp.join(format!("input{ext}"));
     let dst = tmp.join("voice.wav");
     let res = (|| {
@@ -279,7 +259,6 @@ pub fn voice_sample(data: &[u8], ext: &str) -> Result<(Vec<f32>, usize), String>
         }
         audio::read_wav(&dst)
     })();
-    let _ = std::fs::remove_dir_all(&tmp);
     let (a, rate) = res?;
     let rate = rate as usize;
     if a.is_empty() || a.iter().fold(0f32, |m, x| m.max(x.abs())) < 0.01 {
@@ -460,7 +439,11 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
     tts::LISTEN.store(!r.fast, Ordering::Relaxed);
     tts::set_max_tries(if r.fast { 3 } else { 5 });
     let wav = r.format == "wav" || r.format == "m4a";
-    let path = std::env::temp_dir().join(format!("khana-{}.{}", job.id, if wav { "wav" } else { "mp3" }));
+    let scratch = match crate::private_fs::TempDir::new() {
+        Ok(d) => d,
+        Err(e) => { job.finish(Err(e.to_string())); return; }
+    };
+    let path = scratch.join(if wav { "audio.wav" } else { "audio.mp3" });
     *job.path.lock().unwrap() = Some(path.clone());
     let _awake = crate::platform::awake(c"Khana Reader is saving an MP3");
     let res = (|| -> Result<(), String> {
@@ -749,22 +732,9 @@ fn tf(q: &HashMap<String, String>, k: &str, default: bool) -> bool {
 }
 
 pub fn random_bytes<const N: usize>() -> [u8; N] {
+    use rand::TryRng;
     let mut b = [0u8; N];
-    if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
-        use std::io::Read;
-        if f.read_exact(&mut b).is_ok() && b.iter().any(|x| *x != 0) {
-            return b;
-        }
-    }
-    use std::hash::{BuildHasher, Hasher};
-    for (i, chunk) in b.chunks_mut(8).enumerate() {
-        let mut h = std::collections::hash_map::RandomState::new().build_hasher();
-        h.write_usize(i);
-        h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
-        let v = h.finish().to_le_bytes();
-        chunk.copy_from_slice(&v[..chunk.len()]);
-    }
-    assert!(b.iter().any(|x| *x != 0), "no random source");
+    rand::rngs::SysRng.try_fill_bytes(&mut b).expect("system random source unavailable");
     b
 }
 
@@ -921,10 +891,6 @@ impl App {
                 let voices: Vec<Value> = all_voices().into_iter().map(|(id, name, gender, group)| json!({"id": id, "name": name, "gender": gender, "group": group})).collect();
                 let mut v = json!({"settings": load_settings(), "voices": voices, "canListen": crate::asr::ready(), "canWrite": crate::stt::available()});
                 v["library"] = json!(library_dir().is_some());
-                if selftest_on() {
-                    v["testData"] = json!(!data_dir().to_string_lossy().contains("/Containers/"));
-                    v["screenTest"] = json!(std::env::var("KHANA_SELFTEST_SCREEN").is_ok());
-                }
                 Ok(reply_json(&v))
             }
             "settings_post" => Ok(reply_json(&Value::Object(save_settings(&body_json()?).map_err(ApiError::Internal)?))),
@@ -1434,34 +1400,6 @@ impl App {
                 let ascii: String = j.filename.chars().map(|c| if c.is_ascii_alphanumeric() || " ._-".contains(c) { c } else { '_' }).collect();
                 Ok(Reply { status: 200, ctype: "audio/mpeg", body: data,
                     headers: vec![("Content-Disposition".into(), format!("attachment; filename=\"{ascii}\""))] })
-            }
-            "selftest_passwords_get" if selftest_on() => {
-                let list: Vec<String> = std::env::var("KHANA_SELFTEST_PASSWORDS").unwrap_or_default().split(',').filter(|x| !x.is_empty()).map(|x| x.to_string()).collect();
-                Ok(reply_json(&json!({"list": list})))
-            }
-            "selftest_file_get" if selftest_on() => {
-                let f = if q.get("name").map(|s| s.as_str()) == Some("scan") {
-                    save_dir().join(std::env::var("KHANA_SELFTEST_SCAN").unwrap_or_default())
-                } else {
-                    save_dir().join(std::env::var("KHANA_SELFTEST").unwrap())
-                };
-                let data = std::fs::read(&f).map_err(|e| ApiError::Internal(format!("{}: {e}", f.display())))?;
-                Ok(Reply { status: 200, ctype: "application/octet-stream", body: data, headers: Vec::new() })
-            }
-            "selftest_layout_post" if selftest_on() => match std::env::var("KHANA_SELFTEST_LAYOUT") {
-                Ok(path) if !body.is_empty() => {
-                    std::fs::write(&path, body).map_err(|e| ApiError::Internal(e.to_string()))?;
-                    Ok(reply_json(&json!({"only": true})))
-                }
-                Ok(_) => Ok(reply_json(&json!({"only": true}))),
-                Err(_) => Ok(reply_json(&json!({"only": false}))),
-            },
-            "selftest_report_post" if selftest_on() => {
-                eprintln!("SELFTEST {}", String::from_utf8_lossy(body));
-                if String::from_utf8_lossy(body).starts_with("DONE") {
-                    std::process::exit(0);
-                }
-                Ok(reply_json(&json!({"ok": true})))
             }
             _ => Err(ApiError::NotFound("not found".into())),
         }
