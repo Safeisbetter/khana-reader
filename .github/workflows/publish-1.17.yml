@@ -1,0 +1,69 @@
+name: Publish verified 1.17 packages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && github.repository == 'Safeisbetter/khana-reader'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Download and verify every staged package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          def gh(*args):
+              return subprocess.check_output(['gh', *args], text=True)
+          repo = os.environ['GITHUB_REPOSITORY']
+          release = json.loads(gh('release', 'view', 'v1.17', '--repo', repo, '--json', 'isDraft,targetCommitish,assets'))
+          assert release['isDraft'], 'Release must still be a draft'
+          assert release['targetCommitish'] == os.environ['GITHUB_SHA'], 'Release target changed'
+          packages = {
+              'KhanaReader-Android.apk', 'KhanaReader-Android-lite.apk',
+              'KhanaReader-Mac.dmg', 'KhanaReader-Mac.002.dmgpart', 'KhanaReader-Mac.003.dmgpart',
+              'KhanaReader-Mac-medium.dmg', 'KhanaReader-Mac-lite.dmg',
+              'KhanaReader-Windows-full-experimental.zip', 'KhanaReader-Windows-light-experimental.zip',
+              'KhanaReader-source.zip', 'RELEASE_PROVENANCE.json',
+          }
+          assert {a['name'] for a in release['assets']} == packages | {'SHA256SUMS.txt'}, 'Unexpected or missing release asset'
+          subprocess.run(['gh', 'release', 'download', 'v1.17', '--repo', repo, '--dir', 'verified'], check=True)
+          root = pathlib.Path('verified')
+          listed = {}
+          for line in (root / 'SHA256SUMS.txt').read_text().splitlines():
+              digest, name = line.split('  ', 1)
+              assert name in packages and name not in listed
+              listed[name] = digest
+          assert set(listed) == packages, 'Incomplete checksums'
+          for name, expected in listed.items():
+              h = hashlib.sha256()
+              with (root / name).open('rb') as stream:
+                  for block in iter(lambda: stream.read(8 * 1024 * 1024), b''):
+                      h.update(block)
+              assert h.hexdigest() == expected, 'Checksum mismatch: ' + name
+          provenance = json.loads((root / 'RELEASE_PROVENANCE.json').read_text())
+          source = provenance['source_commit']
+          assert len(source) == 40 and all(c in '0123456789abcdef' for c in source)
+          changes = subprocess.check_output(['git', 'diff', '--name-only', source, 'HEAD'], text=True).splitlines()
+          assert all(p.startswith('.github/') for p in changes), 'Runtime source changed after builds'
+          run = json.loads(gh('run', 'view', str(provenance['windows_run_id']), '--repo', repo, '--json', 'conclusion,headSha'))
+          assert run['conclusion'] == 'success' and run['headSha'] == source, 'Windows builds did not pass for this source'
+          assert provenance['mac_signatures_verified'] and provenance['android_signatures_verified']
+          assert provenance['package_privacy_checks_passed']
+          print('All release assets and build provenance verified')
+          PY
+      - name: Publish the verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit v1.17 --repo "$GITHUB_REPOSITORY" --draft=false --latest
