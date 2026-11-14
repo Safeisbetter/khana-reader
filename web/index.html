@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
+<a class="skip-link" id="skipContent" href="#mainContent">رفتن به محتوای صفحه</a>
 <header class="bar">
   <div class="bar-inner">
     <!-- the app's own row: its name, the open book, and what is always at hand -->
@@ -35,6 +36,7 @@
         <button id="viewPage" type="button">صفحه</button>
       </div>
         <button id="trBtn" type="button" hidden title="ترجمه‌ی ماشینی و آفلاین (انگلیسی، هلندی، آلمانی، فرانسوی، اسپانیایی، ایتالیایی، پرتغالی، ترکی، لهستانی)">ترجمه به فارسی</button>
+        <button id="sourceBtn" type="button" hidden aria-haspopup="dialog" aria-controls="sourcePanel">مقایسه با متن اصلی</button>
       </div>
       <div class="group text-size" role="group" aria-label="اندازه‌ی متن">
         <button type="button" id="fontDown" aria-label="کوچک‌تر کردن متن" title="متن کوچک‌تر">قلم −</button>
@@ -60,7 +62,7 @@
   </div>
 </header>
 
-<main id="mainContent">
+<main id="mainContent" tabindex="-1">
   <div class="sheet">
     <section class="welcome" id="welcome">
       <svg class="hero" viewBox="0 0 108 96" width="108" height="96" aria-hidden="true" focusable="false">
@@ -86,7 +88,8 @@
       <p class="thanks">با تشکر از الف و میم، برای تست و ایده‌های سازنده</p>
     </section>
     <div class="note" id="note" role="status" aria-live="polite" hidden></div>
-    <div id="textView" class="text" hidden></div>
+    <p id="paragraphHelp" class="sr-only">با کلیدهای بالا و پایین میان بندها حرکت کنید. برای خواندن از بند انتخاب‌شده، Enter را بزنید. کلید فاصله خواندن را مکث یا ادامه می‌دهد.</p>
+    <div id="textView" class="text" tabindex="-1" aria-label="متن صفحه" aria-describedby="paragraphHelp" hidden></div>
     <div id="pageView" hidden><img id="pageImg" class="pageimg" alt="تصویر صفحه"></div>
   </div>
 </main>
@@ -111,13 +114,21 @@
   <div class="booktime" id="bookTime" hidden></div>
 </nav>
 
+<div class="panel" id="sourcePanel" hidden>
+  <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="sourceTitle">
+    <div class="panel-head"><h2 id="sourceTitle">متن اصلی این صفحه</h2><button type="button" data-close>بستن</button></div>
+    <p class="hint">ترجمه‌ی ماشینی ممکن است اشتباه کند. این متنِ استخراج‌شده از سند است؛ اگر سند اسکن شده باشد، تشخیص حروف هم ممکن است اشتباه داشته باشد. نمای «صفحه» تصویر اصلی را نشان می‌دهد.</p>
+    <div id="sourceText" class="source-text" dir="auto" tabindex="0" aria-busy="false"></div>
+  </div>
+</div>
+
 <!-- A short, local guide, available without leaving the document. -->
 <div class="panel" id="helpPanel" hidden>
   <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
     <div class="panel-head"><h2 id="helpTitle">راهنمای کوتاه خوانا</h2><button type="button" data-close>بستن</button></div>
     <section class="field guide-card"><h3>بازکردن و خواندن</h3><p>«بازکردن فایل» را بزنید یا «نوشتن متن» را انتخاب کنید. سپس با «خواندن» گوش بدهید. «مکث» خواندن را نگه می‌دارد و «ادامه» از همان‌جا پیش می‌رود؛ «توقف» خواندن را تمام می‌کند.</p></section>
-    <section class="field guide-card"><h3>از جمله‌ی دلخواه شروع کنید</h3><p>در نمای «متن»، روی یک جمله بزنید. با دکمه‌های صفحه‌ی قبل و بعد یا نوشتن شماره‌ی صفحه جابه‌جا شوید. نمای «صفحه» شکل اصلی فایل را نشان می‌دهد، اگر در دسترس باشد.</p></section>
-    <section class="field guide-card"><h3>خواندن راحت‌تر</h3><p>با «قلم +» و «قلم −» اندازه‌ی متن را عوض کنید. دکمه‌های + و − کنار درصد سرعت، خواندن را تند و آهسته می‌کنند. روی درصد بزنید تا سرعت عادی شود. صدا، رنگ و گزینه‌های بیشتر در تنظیمات‌اند.</p><button type="button" id="helpSettings">رفتن به تنظیمات</button></section>
+    <section class="field guide-card"><h3>از جمله‌ی دلخواه شروع کنید</h3><p>در نمای «متن»، روی یک جمله بزنید. با Tab وارد متن شوید، با کلیدهای بالا و پایین بند را انتخاب کنید و با Enter خواندن را شروع کنید. با دکمه‌های صفحه‌ی قبل و بعد یا نوشتن شماره‌ی صفحه جابه‌جا شوید. نمای «صفحه» شکل اصلی فایل را نشان می‌دهد، اگر در دسترس باشد.</p></section>
+    <section class="field guide-card"><h3>خواندن راحت‌تر</h3><p>با «قلم +» و «قلم −» اندازه‌ی متن را عوض کنید. دکمه‌های + و − کنار درصد سرعت، خواندن را تند و آهسته می‌کنند. روی درصد بزنید تا سرعت عادی شود. فاصله‌ی خط‌ها، صدا و رنگ در تنظیمات‌اند. برای بررسی ترجمه، «مقایسه با متن اصلی» را باز کنید؛ ترجمه‌ی ماشینی و تشخیص حروف ممکن است اشتباه کنند.</p><button type="button" id="helpSettings">رفتن به تنظیمات</button></section>
     <section class="field guide-card"><h3>ذخیره برای بعد</h3><p>«ذخیره‌ی صدا» از متن فایل صوتی می‌سازد. در پنجره‌ی ذخیره می‌توانید همه‌ی متن یا چند صفحه را انتخاب کنید.</p></section>
     <section class="field guide-card"><h3>کلیدهای میانبر</h3><dl class="shortcut-list"><div><dt><kbd>Space</kbd></dt><dd>خواندن، مکث یا ادامه</dd></div><div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>صفحه‌ی قبل و بعد</dd></div><div><dt><kbd>⌘O</kbd> / <kbd>Ctrl+O</kbd></dt><dd>بازکردن فایل</dd></div><div><dt><kbd>⌘F</kbd> / <kbd>Ctrl+F</kbd></dt><dd>جستجو در متن همین صفحه</dd></div><div><dt><kbd>Esc</kbd></dt><dd>بستن پنجره‌ی باز</dd></div></dl><p class="hint">میانبرهای خواندن هنگام نوشتن در کادرها یا باز بودن پنجره‌ها فعال نیستند.</p></section>
     <p class="privacy">خواندن، تشخیص متن و ترجمه روی همین دستگاه انجام می‌شوند. فایل‌هایتان به جایی فرستاده نمی‌شوند.</p>
@@ -179,6 +190,11 @@
     <div class="field">
       <label for="fontSize">اندازه‌ی قلم: <span id="fontVal"></span></label>
       <input id="fontSize" type="range" aria-label="اندازه‌ی قلم" min="14" max="72" step="1">
+    </div>
+    <div class="field">
+      <label for="lineHeight">فاصله‌ی خط‌ها: <span id="lineHeightVal"></span></label>
+      <input id="lineHeight" type="range" min="1.5" max="3" step="0.1">
+      <p class="hint">فاصله‌ی بیشتر می‌تواند دنبال‌کردن خط‌ها را آسان‌تر کند.</p>
     </div>
     <div class="field">
       <label for="pageWidth">پهنای صفحه‌ی متن: <span id="pageWidthVal"></span></label>

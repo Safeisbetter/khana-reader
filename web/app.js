@@ -31,6 +31,11 @@ const THEMES = ["light", "dark", "night", "black", "blackyellow", "glass", "glas
 function applySettings() {
   const s = S.settings;
   document.documentElement.style.setProperty("--fs", s.fontSize + "px");
+  const lineHeight = Math.min(3, Math.max(1.5, Number(s.lineHeight) || 2.2));
+  document.documentElement.style.setProperty("--reader-line-height", String(lineHeight));
+  $("lineHeight").value = lineHeight;
+  $("lineHeightVal").textContent = fa(lineHeight.toFixed(1));
+  $("lineHeight").setAttribute("aria-valuetext", fa(lineHeight.toFixed(1)) + " برابر اندازه‌ی قلم");
   // (the text's own page: its width in letters' widths, 100 is the whole window; the room round the text, 100 is as it was made)
   const pw = Math.min(100, Math.max(26, Number(s.pageWidth) || 46)), pm = Math.min(200, Math.max(20, Number(s.pageMargin) || 100));
   document.documentElement.style.setProperty("--pw", pw >= 100 ? "100%" : pw + "em");
@@ -131,6 +136,7 @@ window.khanaMenu = cmd => {
   }
 };
 $("fontSize").oninput = e => setSetting("fontSize", +e.target.value);
+$("lineHeight").oninput = e => setSetting("lineHeight", +e.target.value);
 document.querySelectorAll("input[name=cursor]").forEach(r => r.onchange = () => setSetting("cursor", r.value));
 $("autoNext").onchange = e => setSetting("autoNext", e.target.checked);
 $("naturalTone").onchange = e => setSetting("naturalTone", e.target.checked);
@@ -343,23 +349,54 @@ $("fixWord").onclick = () => {
 // A window over the page, usable without seeing it: the focus goes into it, Tab stays inside it, and when it closes the
 // focus returns to the button that opened it (a screen reader would otherwise be left at the top of the page).
 const panelOpener = new Map();
+const panelStack = [], modalInert = new Map();
+function syncModalState() {
+  if (document.body.classList.contains("locked")) {
+    panelStack.length = 0;
+    modalInert.clear();
+    for (const el of document.body.children) el.inert = el.id !== "lockScreen" && el.tagName !== "SCRIPT";
+    return;
+  }
+  const visible = [...document.querySelectorAll(".panel:not([hidden])")];
+  for (const p of visible) if (!panelStack.includes(p)) panelStack.push(p);
+  for (let i = panelStack.length - 1; i >= 0; i--) if (panelStack[i].hidden) panelStack.splice(i, 1);
+  const top = panelStack[panelStack.length - 1];
+  for (const el of document.body.children) {
+    if (top) {
+      if (!modalInert.has(el)) modalInert.set(el, el.inert);
+      const live = el.id === "srLive" || el.getAttribute("role") === "status" || el.getAttribute("role") === "alert";
+      el.inert = el !== top && !live && el.tagName !== "SCRIPT";
+    } else if (modalInert.has(el)) {
+      el.inert = modalInert.get(el);
+    }
+  }
+  if (!top) modalInert.clear();
+  panelStack.forEach((p, i) => p.style.zIndex = String(70 + i));
+}
 function openPanel(id) {
+  if (document.body.classList.contains("locked")) return;
   if ($(id).hidden) panelOpener.set(id, document.activeElement);
   $(id).hidden = false;
+  const at = panelStack.indexOf($(id));
+  if (at >= 0) panelStack.splice(at, 1);
+  panelStack.push($(id));
+  syncModalState();
   $(id).querySelector("button,select,input").focus();
 }
 // said by a screen reader, shown nowhere
 function announce(msg) { const n = $("srLive"); n.textContent = ""; setTimeout(() => { n.textContent = msg; }, 50); }
 document.querySelectorAll(".panel").forEach(p => {
   new MutationObserver(() => {
+    syncModalState();
     if (!p.hidden) return;
     const back = panelOpener.get(p.id);
     panelOpener.delete(p.id);
+    if (document.body.classList.contains("locked")) return;
     if (back && back.isConnected && !back.disabled && (document.activeElement === document.body || p.contains(document.activeElement))) back.focus();
   }).observe(p, { attributes: true, attributeFilter: ["hidden"] });
   p.addEventListener("keydown", e => {
     if (e.key !== "Tab") return;
-    const f = [...p.querySelectorAll("button, select, input, textarea, summary, [tabindex]")].filter(x => !x.disabled && x.offsetParent !== null);
+    const f = [...p.querySelectorAll("button, select, input, textarea, summary, [tabindex]")].filter(x => !x.disabled && x.tabIndex >= 0 && x.offsetParent !== null);
     if (!f.length) return;
     const first = f[0], last = f[f.length - 1];
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
@@ -369,7 +406,13 @@ document.querySelectorAll(".panel").forEach(p => {
 document.querySelectorAll(".panel").forEach(p => {
   p.addEventListener("click", e => { if (e.target === p || e.target.hasAttribute("data-close")) p.hidden = true; });
 });
-addEventListener("keydown", e => { if (e.key === "Escape") { stopRecording(false); document.querySelectorAll(".panel").forEach(p => p.hidden = true); } });
+addEventListener("keydown", e => {
+  if (e.key === "Escape" && !e.defaultPrevented) {
+    stopRecording(false);
+    const top = panelStack[panelStack.length - 1];
+    if (top) { e.preventDefault(); top.hidden = true; }
+  }
+});
 $("settingsBtn").onclick = () => openPanel("settings");
 $("helpBtn").onclick = $("welcomeHelp").onclick = () => openPanel("helpPanel");
 $("helpSettings").onclick = () => { $("helpPanel").hidden = true; openPanel("settings"); };
@@ -560,14 +603,16 @@ async function openWithPdfjs(file) {
 }
 // a scanned page, drawn grey at 250 dpi by pdf.js, for the app's text recognition
 const picturesGiven = new Map();
-function givePicture(n) {
-  const key = S.doc.id + "|" + n;
+function givePicture(n, docId = S.doc && S.doc.id) {
+  const key = docId + "|" + n;
   if (!picturesGiven.has(key)) {
     const p = (async () => {
+      if (!S.doc || S.doc.id !== docId) throw new Error("سند تغییر کرده است.");
       const g = await pdfCall({ op: "gray", n, dpi: 250 });
+      if (!S.doc || S.doc.id !== docId) throw new Error("سند تغییر کرده است.");
       const body = new Uint8Array(8 + g.px.length), dv = new DataView(body.buffer);
       dv.setUint32(0, g.w, true); dv.setUint32(4, g.h, true); body.set(g.px instanceof Uint8Array ? g.px : new Uint8Array(g.px.buffer || g.px), 8);
-      await api(`/api/page_picture?doc=${S.doc.id}&n=${n}`, { method: "POST", body: body.buffer });
+      await api(`/api/page_picture?doc=${docId}&n=${n}`, { method: "POST", body: body.buffer });
     })();
     p.catch(() => picturesGiven.delete(key));
     picturesGiven.set(key, p);
@@ -597,11 +642,32 @@ addEventListener("drop", e => {
 const pageCache = new Map();  // "page|rev|yeh|tr" -> Promise<paragraphs>
 const translating = () => !!(S.doc && S.doc.canTranslate && S.settings.translate);
 // A page request; a scanned page of a pdf.js document is first drawn by pdf.js and read with OCR.
-async function pageReq(url, n) {
+async function pageReq(url, n, docId = S.doc && S.doc.id) {
   let r = await jget(url);
-  if (r.needsPicture) { await givePicture(n); r = await jget(url); }
+  if (r.needsPicture) { await givePicture(n, docId); r = await jget(url); }
   return r;
 }
+let sourceSeq = 0;
+$("sourceBtn").onclick = async () => {
+  if (!S.doc) return;
+  const docId = S.doc.id, n = S.page, seq = ++sourceSeq;
+  openPanel("sourcePanel");
+  const box = $("sourceText");
+  box.lang = S.doc.lang || "und";
+  box.textContent = "در حال آماده کردن متن اصلی…";
+  box.setAttribute("aria-busy", "true");
+  try {
+    const r = await pageReq(`/api/page?doc=${docId}&n=${n}&rev=${!!S.settings.reversed}&yeh=${!!S.settings.persianYeh}&tr=false`, n, docId);
+    if (seq !== sourceSeq) return;
+    box.textContent = S.doc && S.doc.id === docId && S.page === n
+      ? (r.paragraphs.join("\n\n") || "این صفحه متن قابل استخراج ندارد.")
+      : "سند یا صفحه تغییر کرده است؛ این پنجره را ببندید و دوباره باز کنید.";
+  } catch (e) {
+    if (seq === sourceSeq) box.textContent = "متن اصلی باز نشد: " + e.message;
+  } finally {
+    if (seq === sourceSeq) box.setAttribute("aria-busy", "false");
+  }
+};
 function getParas(n) {
   const s = S.settings, tr = translating(), key = `${S.doc.id}|${n}|${!!s.reversed}|${!!s.persianYeh}|${tr}`;
   if (!pageCache.has(key)) {
@@ -633,7 +699,7 @@ async function followPage(n, seq) {
   while (seq === S.loadSeq && !S.pageDone) {
     await sleep(700);
     if (seq !== S.loadSeq) return;
-    const r = await pageSoFar(n).catch(() => null);
+    const r = await pageSoFar(n);
     if (r && seq === S.loadSeq) growPage(n, r.paragraphs, r.done);
   }
 }
@@ -646,11 +712,17 @@ async function loadPage(n, keepReading) {
   if (!keepReading && n !== S.page) announce(`صفحه‌ی ${fa(n)} از ${fa(S.doc.pages)}`);
   S.page = n;
   const seq = ++S.loadSeq;
+  S.paras = [];
+  S.pageDone = false;
+  $("play").disabled = true;
+  $("textView").replaceChildren();
+  $("textView").setAttribute("aria-busy", "true");
   syncChrome();
   // the page's picture needs no text: drawn at once, not after a translation that may be waiting its turn
   if (S.view === "page") renderPageImage();
   // a scanned page is read (OCR) and a foreign one translated the first time: say so meanwhile
   const waitT = setTimeout(() => { if (seq === S.loadSeq) $("textView").innerHTML = `<p class="empty">${translating() ? "در حال ترجمه‌ی این صفحه به فارسی…" : "در حال آماده کردن این صفحه…"}</p>`; }, 250);
+  try {
   if (translating()) {
     // shown (and readable) from its first translated paragraphs on; the rest follows
     let r;
@@ -661,13 +733,32 @@ async function loadPage(n, keepReading) {
     if (seq !== S.loadSeq) return;
     S.paras = r.paragraphs; S.pageDone = r.done;
     renderText();
-    if (!r.done) followPage(n, seq);
+    if (!r.done) followPage(n, seq).catch(e => {
+      if (seq !== S.loadSeq) return;
+      stopReading();
+      note(esc("ترجمه کامل نشد: " + e.message) + ' <button type="button" id="retryTranslation">تلاش دوباره</button>', true);
+      $("retryTranslation").onclick = () => { $("note").hidden = true; loadPage(n); };
+      announce("ترجمه کامل نشد. دکمه‌ی تلاش دوباره در دسترس است.");
+    });
     return;
   }
   const paras = await getParas(n).finally(() => clearTimeout(waitT));
   if (seq !== S.loadSeq) return;
   S.paras = paras; S.pageDone = true;
   renderText();
+  } catch (e) {
+    if (seq !== S.loadSeq) return;
+    S.paras = []; S.pageDone = false;
+    $("textView").textContent = "متن این صفحه آماده نشد: " + e.message;
+    const retry = document.createElement("button");
+    retry.type = "button"; retry.textContent = "تلاش دوباره";
+    retry.onclick = () => loadPage(n);
+    $("textView").append(retry);
+    announce("متن این صفحه آماده نشد. می‌توانید دوباره تلاش کنید.");
+  } finally {
+    clearTimeout(waitT);
+    if (seq === S.loadSeq) $("textView").setAttribute("aria-busy", "false");
+  }
 }
 function showPage(n, paras, done = true) {  // switch the visible page while reading continues
   S.page = n; S.paras = paras; S.pageDone = done; S.loadSeq++;
@@ -699,11 +790,12 @@ function paraHtml(p, i, re, found) {
     ended = endsSentence(tok);
     return word(tok, off);
   });
-  return `<p dir="auto" data-i="${i}" title="کلیک: خواندن از همین جمله">${h}</p>`;
+  return `<p dir="auto" data-i="${i}" tabindex="${i === 0 ? 0 : -1}" aria-keyshortcuts="Enter" title="کلیک یا Enter: خواندن از این بند">${h}</p>`;
 }
 const moreNote = () => S.pageDone === false ? '<p class="empty" id="trMore">در حال ترجمه‌ی ادامه‌ی این صفحه…</p>' : "";
 // paragraphs from `from` on were added (a page still being translated): add them, keep the rest
 function appendText(from) {
+  $("play").disabled = !S.paras.length;
   const box = $("textView"), q = $("q").value.trim();
   if (q || box.querySelectorAll("p[data-i]").length !== from) return renderText();
   const html = S.paras.slice(from).map((p, k) => paraHtml(p, from + k, null, () => {})).join("");
@@ -711,7 +803,11 @@ function appendText(from) {
   if (more) more.insertAdjacentHTML("beforebegin", html); else box.insertAdjacentHTML("beforeend", html + moreNote());
 }
 function renderText() {
+  $("play").disabled = !S.paras.length;
   const box = $("textView");
+  box.lang = translating() ? "fa" : (S.doc && S.doc.lang || "fa");
+  const focused = box.contains(document.activeElement) && document.activeElement.closest("p[data-i]");
+  const focusedIndex = focused ? Number(focused.dataset.i) : null;
   const q = $("q").value.trim();
   let count = 0;
   if (!S.paras.length) {
@@ -725,6 +821,13 @@ function renderText() {
   if (first) { first.classList.add("cur"); first.scrollIntoView({ block: "center" }); }
   reader.shownWord = null;
   armParagraphs();
+  if (focusedIndex !== null) {
+    const next = box.querySelector(`p[data-i="${focusedIndex}"]`);
+    if (next) {
+      if (!S.editing) box.querySelectorAll("p[data-i]").forEach(p => p.tabIndex = p === next ? 0 : -1);
+      next.focus();
+    }
+  }
 }
 function renderPageImage() {
   const w = Math.round(Math.min(document.querySelector(".sheet").clientWidth, 900) * (devicePixelRatio || 1));
@@ -745,6 +848,7 @@ function renderPageImage() {
 }
 function syncChrome() {
   const has = !!S.doc;
+  $("skipContent").href = has && S.view === "text" ? "#textView" : "#mainContent";
   // (the book's tools and the player show only with a book open, the search only over its text: app.css)
   document.body.classList.toggle("has-doc", has);
   document.body.classList.toggle("view-text", has && S.view === "text");
@@ -758,6 +862,7 @@ function syncChrome() {
   $("prev").disabled = S.page <= 1; $("next").disabled = S.page >= S.doc.pages;
   $("viewPage").disabled = !S.doc.hasImages;
   $("trBtn").hidden = !S.doc.canTranslate;
+  $("sourceBtn").hidden = !S.doc.canTranslate;
   $("pdfBtn").hidden = !S.doc.canTranslate;
   $("trBtn").classList.toggle("on", translating());
   $("viewText").classList.toggle("on", S.view === "text");
@@ -874,16 +979,35 @@ function isTitleLine(p) {
   const t = p.trim();
   return t.length <= 70 && t.split(/\s+/).length <= 10 && /[\p{L}\p{N}»”)\]]$/u.test(t);
 }
+function spokenSentences(text) {
+  const out = [];
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (!/[.!?؟…]/.test(text[i])) continue;
+    if (text[i] === ".") {
+      if (/\p{N}/u.test(text[i - 1] || "") && /\p{N}/u.test(text[i + 1] || "")) continue;
+      if (/[a-z]/i.test(text[i - 1] || "") && /[a-z]/i.test(text[i + 1] || "")) continue;
+      const head = text.slice(start, i + 1);
+      if (/(?:^|\s)(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|vs|e\.g|i\.e)\.$/i.test(head) || /(?:^|\s)(?:[A-Z]\.)+$/.test(head)) continue;
+    }
+    let end = i + 1;
+    while (end < text.length && /[.!?؟…"'’”»)\]]/.test(text[end])) end++;
+    while (end < text.length && /\s/.test(text[end])) end++;
+    out.push({ start, text: text.slice(start, end) });
+    start = end; i = end - 1;
+  }
+  if (start < text.length) out.push({ start, text: text.slice(start) });
+  return out;
+}
 function piecesFor(page, paras, fromPara, fromOff = 0) {
   const out = [];
   let afterTitle = false;
   paras.forEach((p, i) => {
     if (i < fromPara) return;
     const title = isTitleLine(p);
-    const re = /[^.!?؟…]+(?:[.!?؟…]+["'’”»)\]]*[.!?؟…]*|$)\s*/g;
-    let m, first = true;
-    while ((m = re.exec(p)) && m[0]) {
-      let start = m.index, sent = m[0];
+    let first = true;
+    for (const sentence of spokenSentences(p)) {
+      const start = sentence.start, sent = sentence.text;
       const parts = sent.length > 240 ? sent.split(/(?<=[،؛,;])\s+/) : [sent];
       let off = start;
       parts.forEach((part, k) => {
@@ -904,6 +1028,8 @@ function piecesFor(page, paras, fromPara, fromOff = 0) {
 
 const reader = { active: false, paused: false, run: 0, queue: [], next: 0, playing: [], lastEnd: 0, lastPage: 0, sources: [] };
 function setPlayButton() {
+  $("play").setAttribute("aria-pressed", String(reader.active && !reader.paused));
+  $("play").setAttribute("aria-label", reader.active && !reader.paused ? "مکث خواندن" : reader.paused ? "ادامه‌ی خواندن" : "شروع خواندن");
   $("play").textContent = reader.active && !reader.paused ? "❚❚ مکث" : (reader.paused ? "▶ ادامه" : "▶ خواندن");
   $("stop").disabled = !reader.active;
   const state = reader.paused ? "خواندن مکث شده" : reader.active ? "در حال خواندن" : "آماده‌ی خواندن";
@@ -1106,8 +1232,27 @@ $("textView").addEventListener("click", e => {
   ensureAudio();
   // from the sentence clicked (the word's offset; between words, the paragraph's start)
   const w = e.target.closest(".w"), off = w ? +w.dataset.s : 0;
+  const id = S.doc && S.doc.id, page = S.page, seq = S.loadSeq;
   // wait a moment: a double-click selects a word (to fix its pronunciation) instead of reading
-  setTimeout(() => { if (!getSelection().toString()) readFrom(+p.dataset.i, off); }, 300);
+  setTimeout(() => {
+    if (S.doc && S.doc.id === id && S.page === page && S.loadSeq === seq && p.isConnected && !getSelection().toString()) readFrom(+p.dataset.i, off);
+  }, 300);
+});
+$("textView").addEventListener("keydown", e => {
+  const p = e.target.closest("p[data-i]");
+  if (!p || S.editing || e.target.isContentEditable || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+  const paragraphs = [...$("textView").querySelectorAll("p[data-i]")];
+  const i = paragraphs.indexOf(p);
+  const next = e.key === "ArrowDown" ? Math.min(i + 1, paragraphs.length - 1)
+    : e.key === "ArrowUp" ? Math.max(i - 1, 0)
+    : e.key === "Home" ? 0 : e.key === "End" ? paragraphs.length - 1 : -1;
+  if (next >= 0) {
+    e.preventDefault();
+    paragraphs.forEach((el, at) => el.tabIndex = at === next ? 0 : -1);
+    paragraphs[next].focus();
+  } else if (e.key === "Enter") {
+    e.preventDefault(); ensureAudio(); readFrom(+p.dataset.i);
+  }
 });
 
 /* ---------------- MP3, and PDF of the translation (the same dialog) ---------------- */
@@ -1379,6 +1524,7 @@ function armParagraphs() {
     p.textContent = shown;
     p.dataset.shown = shown;
     p.contentEditable = "plaintext-only";
+    p.tabIndex = 0;
     if (p.contentEditable !== "plaintext-only") p.contentEditable = "true";
     p.setAttribute("role", "textbox"); p.setAttribute("aria-multiline", "true");
     p.setAttribute("aria-label", `بند ${fa(+p.dataset.i + 1)}، قابل ویرایش`);

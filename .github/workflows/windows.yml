@@ -13,7 +13,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [windows-full, release-ready-20261114]
+    branches: [windows-full, accessibility-reading-20261114]
 
 # (the build may only read the repository; only the publishing job below may write to the release page)
 permissions:
@@ -22,7 +22,7 @@ permissions:
 env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: "v1.16"
+  MODELS_RELEASE: "v1.17"
 
 jobs:
   build:
@@ -49,6 +49,9 @@ jobs:
         run: |
           $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader-Android.apk" } else { "KhanaReader-Android-lite.apk" }
           gh release download $env:MODELS_RELEASE --repo $env:GITHUB_REPOSITORY -p $apk -D apk
+          if ($LASTEXITCODE -ne 0) { throw "Model package download failed" }
+          $expected = if ("${{ matrix.edition }}" -eq "full") { "91b355436a3c9d573b988a1bd7cfc195be3fd263f653a1ae41273776e251b20e" } else { "0f89813add99cab943230299e192402b6ded757f8368f03251dc0467dad35faa" }
+          if ((Get-FileHash "apk/$apk" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Model package checksum mismatch" }
           Move-Item "apk/$apk" apk/models.zip
           Expand-Archive apk/models.zip -DestinationPath apk/x
           New-Item -ItemType Directory -Force pack/models | Out-Null
