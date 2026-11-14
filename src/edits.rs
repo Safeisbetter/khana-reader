@@ -119,7 +119,7 @@ impl Edits {
         }
         let v = json!({"paras": self.paras.iter().map(|(a, b)| json!([a, b])).collect::<Vec<_>>(),
                        "words": self.words.iter().map(|(a, b)| json!([a, b])).collect::<Vec<_>>()});
-        std::fs::write(path, serde_json::to_string_pretty(&v).unwrap()).map_err(|e| e.to_string())
+        crate::private_fs::atomic_write(path, serde_json::to_string_pretty(&v).unwrap().as_bytes()).map_err(|e| e.to_string())
     }
 
     pub fn words_applied(&self, p: &str) -> String {

@@ -64,6 +64,7 @@ char* ct2_translate(void* t, const char* tokens, const char* prefix, int beam, i
       }
     }
     char* r = static_cast<char*>(std::malloc(out.size() + 1));
+    if (!r) return nullptr;
     std::memcpy(r, out.c_str(), out.size() + 1);
     return r;
   } catch (...) {
@@ -117,6 +118,7 @@ char* wh_transcribe(void* w, const float* mel, int n_mels, int frames, const cha
       out += h[k];
     }
     char* r = static_cast<char*>(std::malloc(out.size() + 1));
+    if (!r) return nullptr;
     std::memcpy(r, out.c_str(), out.size() + 1);
     return r;
   } catch (...) {

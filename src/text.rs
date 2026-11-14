@@ -976,7 +976,7 @@ pub fn detect_language(pages: &[Vec<String>]) -> &'static str {
     let sample: String = joined.join(" ").chars().take(60000).collect();
     let r = count(RTL_RE, &sample);
     let latin = sample.chars().filter(|c| c.is_ascii_alphabetic()).count();
-    if r >= latin || latin < 40 {
+    if r >= latin || (latin < 40 && r > 0) {
         return "fa";
     }
     let low = sample.to_lowercase();
@@ -1907,6 +1907,7 @@ pub fn paragraphs_from_lines(lines: &[LLine]) -> Vec<String> {
     }
     paras
 }
+
 
 
 

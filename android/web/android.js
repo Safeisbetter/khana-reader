@@ -16,7 +16,11 @@
       port = e.ports[0];
       port.onmessage = m => {
         const d = String(m.data);
-        if (d[0] === "A" && ack.has(d.slice(1))) { ack.get(d.slice(1))(); ack.delete(d.slice(1)); }
+        if (d[0] === "A" && ack.has(d.slice(1))) { ack.get(d.slice(1)).ok(); ack.delete(d.slice(1)); }
+        if (d[0] === "F") {
+          for (const pending of ack.values()) pending.bad(new Error("Upload refused: too large or invalid"));
+          ack.clear();
+        }
       };
       ok();
     });
@@ -34,8 +38,11 @@
     await portReady;
     const blob = body instanceof Blob ? body : new Blob([body]);
     const id = (++seq) + "-" + Math.random().toString(36).slice(2);
+    if (blob.size > 420 * 1024 * 1024) throw new Error("File too large");
+    const done = new Promise((ok, bad) => ack.set(id, { ok, bad }));
+    // Install the rejection handler before asynchronous encoding can yield to the port callback.
+    done.catch(() => {});
     for (let at = 0; at < blob.size; at += CHUNK) port.postMessage("B" + id + ":" + await b64(blob.slice(at, at + CHUNK)));
-    const done = new Promise(ok => ack.set(id, ok));
     port.postMessage("E" + id);
     await done;
     return id;

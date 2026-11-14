@@ -78,9 +78,6 @@ pub fn run() {
             if path == "/api/init" && std::env::var("KHANA_SMOKE").is_ok() {
                 eprintln!("SMOKE page loaded {}", r.status);
             }
-            if khana::app::selftest_on() {
-                eprintln!("request {method} {path} body {} -> {} {}", req.body().len(), r.status, if r.status >= 400 { String::from_utf8_lossy(&r.body).into_owned() } else { String::new() });
-            }
             let mut b = Response::builder()
                 .status(r.status)
                 .header(header::CONTENT_TYPE, r.ctype)
@@ -94,7 +91,6 @@ pub fn run() {
             responder.respond(resp);
         });
     };
-    let selftest = if khana::app::selftest_on() { "" } else { "" };
     let mut web_context = WebContext::new(Some(khana::app::data_dir().join("webview-offline")));
     let webview = WebViewBuilder::new_with_web_context(&mut web_context)
         .with_additional_browser_args(concat!(
@@ -103,7 +99,6 @@ pub fn run() {
             "--proxy-server=\"http://0.0.0.0:1\" --proxy-bypass-list=\"<-loopback>\" ",
             "--disable-background-networking --disable-component-update --disable-domain-reliability --no-pings"
         ))
-        .with_initialization_script(selftest)
         .with_asynchronous_custom_protocol("khana".into(), handler)
         .with_url(START_URL)
         .with_incognito(true)

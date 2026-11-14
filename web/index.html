@@ -20,10 +20,11 @@
         <input id="q" type="search" placeholder="جستجو در این صفحه…" title="کلید ورود: مورد بعدی" aria-label="جستجو">
         <span class="count" id="count"></span>
       </div>
-      <label class="btn primary" for="fileInput">بازکردن فایل</label>
+      <button type="button" class="primary" id="openFileBtn" title="بازکردن فایل (⌘O / Ctrl+O)">بازکردن فایل</button>
       <button type="button" id="libBtn" hidden title="فایل‌های صدایی که ساخته‌اید، داخل خودِ برنامه">🎧 فایل‌های من</button>
       <button type="button" id="typeBtn" title="متن را بنویسید یا بچسبانید تا خوانده شود و به صورت فایل صدا ذخیره شود">✎ نوشتن متن</button>
       <button id="settingsBtn" type="button" aria-label="تنظیمات">⚙︎ تنظیمات</button>
+      <button type="button" id="helpBtn" aria-haspopup="dialog" aria-controls="helpPanel">راهنما</button>
       <input id="fileInput" type="file" hidden multiple accept=".pdf,.doc,.docx,.pptx,.epub,.rtf,.odt,.txt,.md,.html,.htm,.fb2,.png,.jpg,.jpeg,.webp,.gif,.bmp,.heic,image/*">
     </div>
     <!-- the open book's tools, in three groups: how it is shown, working on its text, saving it -->
@@ -35,10 +36,15 @@
       </div>
         <button id="trBtn" type="button" hidden title="ترجمه‌ی ماشینی و آفلاین (انگلیسی، هلندی، آلمانی، فرانسوی، اسپانیایی، ایتالیایی، پرتغالی، ترکی، لهستانی)">ترجمه به فارسی</button>
       </div>
+      <div class="group text-size" role="group" aria-label="اندازه‌ی متن">
+        <button type="button" id="fontDown" aria-label="کوچک‌تر کردن متن" title="متن کوچک‌تر">قلم −</button>
+        <button type="button" id="fontChip" aria-label="اندازه‌ی متن؛ بازگشت به اندازه‌ی معمولی" title="بازگشت به اندازه‌ی معمولی">۲۱</button>
+        <button type="button" id="fontUp" aria-label="بزرگ‌تر کردن متن" title="متن بزرگ‌تر">قلم +</button>
+      </div>
       <div class="group" id="searchRow" role="group" aria-label="کار روی متن">
         <button id="editBtn" type="button" title="تغییر یا حذف یک بند یا کلمه‌ی متن؛ برای خواندن، ذخیره‌ی MP3 و PDF هم اثر می‌کند">✎ ویرایش متن</button>
         <button id="voiceBtn" type="button" hidden title="با صدای خودتان یک کلمه را عوض یا حذف کنید، یا بندی را که می‌شنوید حذف کنید">🎤 ویرایش با صدا</button>
-        <button id="copy" type="button" class="hide-sm">کپی متن صفحه</button>
+        <button id="copy" type="button">کپی متن صفحه</button>
       </div>
       <div class="group" role="group" aria-label="ذخیره">
         <button id="mp3Btn" type="button">ذخیره‌ی صدا</button>
@@ -54,7 +60,7 @@
   </div>
 </header>
 
-<main>
+<main id="mainContent">
   <div class="sheet">
     <section class="welcome" id="welcome">
       <svg class="hero" viewBox="0 0 108 96" width="108" height="96" aria-hidden="true" focusable="false">
@@ -62,15 +68,21 @@
         <path d="M48 26v44M24 36h16M24 46h16M24 56h12M56 36h16M56 46h16M56 56h12" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
         <path d="M84 40c5 5 5 11 0 16M90 34c9 9 9 21 0 30" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
       </svg>
-      <h1>فایل را باز کنید</h1>
-      <p>فایل را روی این صفحه بکشید یا دکمه‌ی «بازکردن فایل» را بزنید. خوانا نوشتار فارسی را نشان می‌دهد و با صدای بلند می‌خواند و می‌تواند صدای آن را به صورت MP3 ذخیره کند.</p>
-      <div class="formats"><span>PDF</span><span>DOCX</span><span>DOC</span><span>EPUB</span><span>RTF</span><span>ODT</span><span>TXT</span><span>تصویر (JPG، PNG…)</span></div>
-      <div class="actions">
-        <label class="btn primary big" for="fileInput">بازکردن فایل</label>
-        <button type="button" class="big" id="typeBtn2">✎ یا یک متن بنویسید</button>
+      <span class="welcome-badge">روی همین دستگاه · بدون نیاز به اینترنت</span>
+      <h1>متن را باز کنید، به آن گوش بدهید</h1>
+      <p>کتاب، نوشته یا عکسِ یک صفحه را انتخاب کنید. خوانا متن فارسی را با صدای بلند برایتان می‌خواند.</p>
+      <div class="actions welcome-actions">
+        <button type="button" class="primary big" id="welcomeOpen">انتخاب فایل برای خواندن</button>
+        <button type="button" class="big" id="typeBtn2">نوشتن یا چسباندن متن</button>
       </div>
-      <p class="note">این برنامه طوری طراحی شده است که برای افرادی که کم می‌بینند یا در خواندن دشواری دارند قابل استفاده باشد: دکمه‌ها و نوشته‌ها بزرگ و واضح‌اند، قلم و رنگ‌ها را می‌توان تنظیم کرد، با صفحه‌خوان کار می‌کند و کارهای اصلی را می‌توان با صدا انجام داد.</p>
-      <p class="hint">کلیدها: <kbd>Space</kbd> خواندن / مکث · <kbd>← →</kbd> صفحه‌ی بعد / قبل · <kbd>⌘[</kbd> <kbd>⌘]</kbd> سرعت · <kbd>⌘0</kbd> سرعت عادی · <kbd>⌘,</kbd> تنظیمات</p>
+      <p class="hint drop-hint">می‌توانید فایل را روی همین صفحه بکشید و رها کنید.</p>
+      <ol class="welcome-steps" aria-label="شروع در سه قدم">
+        <li><span class="step-number" aria-hidden="true">۱</span><div><strong>متن را انتخاب کنید</strong><span>فایل باز کنید یا نوشته‌ی خودتان را بچسبانید.</span></div></li>
+        <li><span class="step-number" aria-hidden="true">۲</span><div><strong>به خواندن گوش بدهید</strong><span>«خواندن» را بزنید؛ برای شروع از جای دیگر، روی جمله بزنید.</span></div></li>
+        <li><span class="step-number" aria-hidden="true">۳</span><div><strong>به دلخواه تنظیم کنید</strong><span>سرعت را کم و زیاد کنید یا با «قلم +» نوشته را بزرگ‌تر کنید.</span></div></li>
+      </ol>
+      <div class="formats" aria-label="فایل‌های پشتیبانی‌شده"><span>PDF</span><span>Word</span><span>EPUB</span><span>TXT</span><span>عکس صفحه</span><span>و قالب‌های دیگر</span></div>
+      <button type="button" id="welcomeHelp" class="welcome-help" aria-haspopup="dialog" aria-controls="helpPanel">اولین بار است؟ راهنمای کوتاه را ببینید</button>
       <p class="thanks">با تشکر از الف و میم، برای تست و ایده‌های سازنده</p>
     </section>
     <div class="note" id="note" role="status" aria-live="polite" hidden></div>
@@ -80,6 +92,7 @@
 </main>
 
 <nav class="dock" id="docTools" aria-label="خواندن، صفحه و سرعت" hidden>
+  <div class="reading-context"><span id="readingState" role="status" aria-live="polite">آماده‌ی خواندن</span><span id="readingTip">برای شروع از هرجا، روی جمله بزنید.</span></div>
   <div class="pager">
         <button id="prev" type="button" aria-label="صفحه قبل">←</button>
         <input id="pageInput" type="text" inputmode="numeric" value="۱" aria-label="شماره صفحه">
@@ -97,6 +110,19 @@
       </div>
   <div class="booktime" id="bookTime" hidden></div>
 </nav>
+
+<!-- A short, local guide, available without leaving the document. -->
+<div class="panel" id="helpPanel" hidden>
+  <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="panel-head"><h2 id="helpTitle">راهنمای کوتاه خوانا</h2><button type="button" data-close>بستن</button></div>
+    <section class="field guide-card"><h3>بازکردن و خواندن</h3><p>«بازکردن فایل» را بزنید یا «نوشتن متن» را انتخاب کنید. سپس با «خواندن» گوش بدهید. «مکث» خواندن را نگه می‌دارد و «ادامه» از همان‌جا پیش می‌رود؛ «توقف» خواندن را تمام می‌کند.</p></section>
+    <section class="field guide-card"><h3>از جمله‌ی دلخواه شروع کنید</h3><p>در نمای «متن»، روی یک جمله بزنید. با دکمه‌های صفحه‌ی قبل و بعد یا نوشتن شماره‌ی صفحه جابه‌جا شوید. نمای «صفحه» شکل اصلی فایل را نشان می‌دهد، اگر در دسترس باشد.</p></section>
+    <section class="field guide-card"><h3>خواندن راحت‌تر</h3><p>با «قلم +» و «قلم −» اندازه‌ی متن را عوض کنید. دکمه‌های + و − کنار درصد سرعت، خواندن را تند و آهسته می‌کنند. روی درصد بزنید تا سرعت عادی شود. صدا، رنگ و گزینه‌های بیشتر در تنظیمات‌اند.</p><button type="button" id="helpSettings">رفتن به تنظیمات</button></section>
+    <section class="field guide-card"><h3>ذخیره برای بعد</h3><p>«ذخیره‌ی صدا» از متن فایل صوتی می‌سازد. در پنجره‌ی ذخیره می‌توانید همه‌ی متن یا چند صفحه را انتخاب کنید.</p></section>
+    <section class="field guide-card"><h3>کلیدهای میانبر</h3><dl class="shortcut-list"><div><dt><kbd>Space</kbd></dt><dd>خواندن، مکث یا ادامه</dd></div><div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>صفحه‌ی قبل و بعد</dd></div><div><dt><kbd>⌘O</kbd> / <kbd>Ctrl+O</kbd></dt><dd>بازکردن فایل</dd></div><div><dt><kbd>⌘F</kbd> / <kbd>Ctrl+F</kbd></dt><dd>جستجو در متن همین صفحه</dd></div><div><dt><kbd>Esc</kbd></dt><dd>بستن پنجره‌ی باز</dd></div></dl><p class="hint">میانبرهای خواندن هنگام نوشتن در کادرها یا باز بودن پنجره‌ها فعال نیستند.</p></section>
+    <p class="privacy">خواندن، تشخیص متن و ترجمه روی همین دستگاه انجام می‌شوند. فایل‌هایتان به جایی فرستاده نمی‌شوند.</p>
+  </div>
+</div>
 
 <!-- Settings -->
 <div class="panel" id="settings" hidden>

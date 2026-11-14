@@ -59,6 +59,13 @@ impl Drop for Translator {
     }
 }
 
+fn whisper_shape(len: usize, n_mels: usize, frames: usize) -> Option<(c_int, c_int)> {
+    if n_mels == 0 || frames == 0 || n_mels.checked_mul(frames)? != len {
+        return None;
+    }
+    Some((c_int::try_from(n_mels).ok()?, c_int::try_from(frames).ok()?))
+}
+
 /// A loaded Whisper model (speech to text). One recognition at a time.
 pub struct Whisper(NonNull<c_void>);
 
@@ -77,12 +84,10 @@ impl Whisper {
     /// `mel`: n_mels rows of `frames` values (30 s = 3000 frames); `prompt`: the start tokens separated by spaces.
     /// Returns the best hypothesis' tokens separated by spaces.
     pub fn transcribe(&mut self, mel: &[f32], n_mels: usize, frames: usize, prompt: &str, beam: i32, max_len: i32) -> Option<String> {
-        if mel.len() != n_mels * frames {
-            return None;
-        }
+        let (n_mels, frames) = whisper_shape(mel.len(), n_mels, frames)?;
         let prompt = CString::new(prompt).ok()?;
         // SAFETY: self.0 is a loaded model; `mel` holds n_mels * frames values, the prompt lives through the call.
-        let r = unsafe { wh_transcribe(self.0.as_ptr(), mel.as_ptr(), n_mels as c_int, frames as c_int, prompt.as_ptr(), beam, max_len) };
+        let r = unsafe { wh_transcribe(self.0.as_ptr(), mel.as_ptr(), n_mels, frames, prompt.as_ptr(), beam, max_len) };
         let r = NonNull::new(r)?;
         // SAFETY: the shim returns a NUL-terminated malloc'd string; it is copied, then freed once.
         let out = unsafe { CStr::from_ptr(r.as_ptr()) }.to_string_lossy().into_owned();
@@ -97,3 +102,4 @@ impl Drop for Whisper {
         unsafe { wh_free(self.0.as_ptr()) }
     }
 }
+

@@ -48,6 +48,10 @@ function applySettings() {
   document.querySelectorAll("input[name=theme]").forEach(r => r.checked = r.value === (THEMES.includes(s.theme) ? s.theme : "auto"));
   document.querySelectorAll("[data-speed]").forEach(b => b.classList.toggle("on", Number(b.dataset.speed) === Number(s.speed) && b.id !== "speedReset"));
   $("fontSize").value = s.fontSize; $("fontVal").textContent = fa(s.fontSize);
+  $("fontChip").textContent = fa(s.fontSize);
+  $("fontChip").setAttribute("aria-label", "اندازه‌ی متن " + fa(s.fontSize) + "؛ بازگشت به ۲۱");
+  $("fontDown").disabled = Number(s.fontSize) <= 14;
+  $("fontUp").disabled = Number(s.fontSize) >= 72;
   $("voice").value = s.voice;
   applyCursor(s.cursor || "large");
   document.querySelectorAll("input[name=cursor]").forEach(r => r.checked = r.value === (s.cursor || "large"));
@@ -104,6 +108,9 @@ $("faster").onclick = () => setSpeed(Number(S.settings.speed) + SPEED_STEP);
 $("speedChip").onclick = resetSpeed;
 document.querySelectorAll("[data-speed]").forEach(b => b.onclick = () => setSpeed(+b.dataset.speed));
 function setFontSize(v) { setSetting("fontSize", Math.min(72, Math.max(14, Math.round(v)))); }
+$("fontDown").onclick = () => setFontSize(Number(S.settings.fontSize) - 2);
+$("fontUp").onclick = () => setFontSize(Number(S.settings.fontSize) + 2);
+$("fontChip").onclick = () => setFontSize(21);
 // commands from the app's menu bar (src/main.rs)
 window.khanaMenu = cmd => {
   if (document.body.classList.contains("locked")) return;
@@ -364,6 +371,9 @@ document.querySelectorAll(".panel").forEach(p => {
 });
 addEventListener("keydown", e => { if (e.key === "Escape") { stopRecording(false); document.querySelectorAll(".panel").forEach(p => p.hidden = true); } });
 $("settingsBtn").onclick = () => openPanel("settings");
+$("helpBtn").onclick = $("welcomeHelp").onclick = () => openPanel("helpPanel");
+$("helpSettings").onclick = () => { $("helpPanel").hidden = true; openPanel("settings"); };
+$("openFileBtn").onclick = $("welcomeOpen").onclick = () => $("fileInput").click();
 
 /* ---------------- opening ---------------- */
 // pictures (a photo of a page, a screenshot): read with the app's text recognition, one page per picture
@@ -395,8 +405,17 @@ async function openImages(files) {
   const name = files.length === 1 ? files[0].name : files[0].name.replace(/\.[^.]+$/, "") + " (+" + (files.length - 1) + ").png";
   return await (await api("/api/open_pages?name=" + encodeURIComponent(name), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pages }) })).json();
 }
+function setOpening(busy) {
+  S.opening = busy;
+  $("mainContent").setAttribute("aria-busy", String(busy));
+  for (const id of ["openFileBtn", "welcomeOpen", "fileInput", "typeBtn", "typeBtn2"]) $(id).disabled = busy;
+  $("openFileBtn").textContent = busy ? "در حال بازکردن…" : "بازکردن فایل";
+  $("welcomeOpen").textContent = busy ? "در حال آماده‌کردن متن…" : "انتخاب فایل برای خواندن";
+}
 async function openFile(file, images) {
   if (!file) return;
+  if (S.opening) return toast("لطفاً صبر کنید تا فایل باز شود.");
+  setOpening(true);
   stopReading();
   note(`در حال بازکردن «${esc(file.name)}»…`);
   try {
@@ -426,6 +445,7 @@ async function openFile(file, images) {
       if (S.paras.length) readFrom(0);
     }
   } catch (e) { note(esc(e.message), true); }
+  finally { setOpening(false); }
 }
 /* ---------------- pdf.js, in its own sandboxed frame (as GrapheneOS's PDF Viewer) ----------------
    The frame (pdfjs/frame.html) has an origin of its own: it cannot read this page, nor make the
@@ -732,6 +752,8 @@ function syncChrome() {
   if (!has) return;
   $("pageInput").value = fa(S.page);
   $("pageCount").textContent = fa(S.doc.pages);
+  $("fileName").title = S.doc.name || "";
+  $("pageInput").setAttribute("aria-label", "شماره صفحه؛ از ۱ تا " + fa(S.doc.pages));
   showBookTime();
   $("prev").disabled = S.page <= 1; $("next").disabled = S.page >= S.doc.pages;
   $("viewPage").disabled = !S.doc.hasImages;
@@ -740,8 +762,12 @@ function syncChrome() {
   $("trBtn").classList.toggle("on", translating());
   $("viewText").classList.toggle("on", S.view === "text");
   $("viewPage").classList.toggle("on", S.view === "page");
+  $("viewText").setAttribute("aria-pressed", String(S.view === "text"));
+  $("viewPage").setAttribute("aria-pressed", String(S.view === "page"));
+  $("trBtn").setAttribute("aria-pressed", String(translating()));
   $("textView").hidden = S.view !== "text";
   $("pageView").hidden = S.view !== "page";
+  $("readingTip").hidden = !S.doc.hasText || S.view !== "text";
 }
 $("prev").onclick = () => { loadPage(S.page - 1); scrollTo(0, 0); };
 $("next").onclick = () => { loadPage(S.page + 1); scrollTo(0, 0); };
@@ -763,11 +789,19 @@ $("q").onkeydown = e => {
   nx.classList.add("cur"); nx.scrollIntoView({ block: "center", behavior: "smooth" });
 };
 addEventListener("keydown", e => {
-  // (not while typing: in a text box, or in a paragraph being edited on the page, «ویرایش متن», where Space is a space between
-  // two words and the arrows move the cursor)
-  if (!S.doc || e.target.closest("input,select,textarea") || e.target.isContentEditable || !$("settings").hidden || !$("mp3").hidden) return;
-  if (e.key === "ArrowLeft") $("prev").click();
-  if (e.key === "ArrowRight") $("next").click();
+  if (e.defaultPrevented || document.body.classList.contains("locked") || document.querySelector(".panel:not([hidden])")) return;
+  const command = e.metaKey || e.ctrlKey;
+  if (command && !e.altKey && !e.shiftKey && e.code === "KeyO") {
+    e.preventDefault(); if (!S.opening) $("fileInput").click(); return;
+  }
+  if (command && !e.altKey && !e.shiftKey && e.code === "KeyF" && S.doc && S.view === "text") {
+    e.preventDefault(); $("q").focus(); $("q").select(); return;
+  }
+  if (e.key === "F1") { e.preventDefault(); openPanel("helpPanel"); return; }
+  // A focused control keeps its own Space/arrow behavior; dialogs and editable text never start playback.
+  if (!S.doc || command || e.altKey || e.target.closest("input,select,textarea,button,a,summary,[role=button]") || e.target.isContentEditable) return;
+  if (e.key === "ArrowLeft") { e.preventDefault(); $("prev").click(); }
+  if (e.key === "ArrowRight") { e.preventDefault(); $("next").click(); }
   if (e.key === " ") { e.preventDefault(); $("play").click(); }
 });
 $("copy").onclick = () => {
@@ -872,6 +906,8 @@ const reader = { active: false, paused: false, run: 0, queue: [], next: 0, playi
 function setPlayButton() {
   $("play").textContent = reader.active && !reader.paused ? "❚❚ مکث" : (reader.paused ? "▶ ادامه" : "▶ خواندن");
   $("stop").disabled = !reader.active;
+  const state = reader.paused ? "خواندن مکث شده" : reader.active ? "در حال خواندن" : "آماده‌ی خواندن";
+  if ($("readingState").textContent !== state) $("readingState").textContent = state;
 }
 // a big mouse pointer for people who see badly: drawn here as pictures (black arrow with a white edge; yellow over things that can be pressed)
 let cursorUrls = [];
@@ -1511,7 +1547,7 @@ $("sttLive").onclick = async () => {
   sttSay("ضبط تمام شد؛ نوشتن شروع می‌شود…");
   await sttRun("/api/stt_start?lang=fa&pcm=1", all.buffer);
 };
-const showType = () => { $("typePanel").hidden = false; $("typeText").focus(); };
+const showType = () => { openPanel("typePanel"); $("typeText").focus(); };
 $("typeBtn").onclick = showType;
 $("typeBtn2").onclick = showType;
 $("typeRead").onclick = async () => { ensureAudio(); if (await openTyped() && S.paras.length) readFrom(0); };
@@ -1731,3 +1767,11 @@ window.khanaBack = function () {
   if (S.doc && S.page > 1) { $("prev").click(); return true; }
   return false;
 };
+
+// Keep the last lines of a document and transient messages above the entire player on every screen size.
+if (typeof ResizeObserver !== "undefined") {
+  const dockObserver = new ResizeObserver(() => {
+    document.documentElement.style.setProperty("--dock-height", Math.ceil($("docTools").getBoundingClientRect().height) + "px");
+  });
+  dockObserver.observe($("docTools"));
+}
