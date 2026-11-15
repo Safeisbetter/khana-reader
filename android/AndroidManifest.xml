@@ -8,8 +8,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.khana.reader"
     android:targetSandboxVersion="2"
-    android:versionCode="5"
-    android:versionName="1.18">
+    android:versionCode="7"
+    android:versionName="1.20">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="37" />
 
@@ -18,10 +18,11 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <application
         android:label="خوانا"
-        android:icon="@drawable/icon"
+        android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/no_backup"
@@ -48,6 +49,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".ReadService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <service
             android:name=".JobService"

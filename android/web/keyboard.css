@@ -1,0 +1,9 @@
+/* A landscape tablet leaves little height above its keyboard. Keep both words and the action in normal flow. */
+.keyboard-open #wordPanel .panel-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 6px; padding-bottom: 8px; }
+.keyboard-open #wordPanel .panel-head, .keyboard-open #wordPanel .edit-context, .keyboard-open #wordPanel .editor-actions { grid-column: 1 / -1; }
+.keyboard-open #wordPanel .panel-head { padding-block: 3px; }
+.keyboard-open #wordPanel .edit-context { max-height: 44px; padding-block: 4px; }
+.keyboard-open #wordPanel .field { min-width: 0; padding: 5px; }
+.keyboard-open #wordPanel .field label { font-size: 13px; line-height: 1.6; }
+.keyboard-open #wordPanel input { width: 100%; min-width: 0; }
+.keyboard-open #wordPanel .editor-actions { position: static; padding-block: 3px; }

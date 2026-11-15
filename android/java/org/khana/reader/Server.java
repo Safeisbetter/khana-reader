@@ -149,6 +149,22 @@ final class Server {
             if (body == null) return text(400, "the request's body did not arrive");
         }
         try {
+            if (path.startsWith("/api/read_")) {
+                if (!tokenOk(tok)) return json(403, "{}");
+                if ("POST".equals(method) && "/api/read_stop".equals(path)) {
+                    ReadService.stop(ctx); return json(200, "{\"ok\":true}");
+                }
+                if (isLocked()) { ReadService.stop(ctx); return json(423, "{\"locked\":true}"); }
+                if ("GET".equals(method) && "/api/read_status".equals(path)) return json(200, ReadService.status());
+                if (!"POST".equals(method) || body == null || body.length > 4096) return json(400, "{}");
+                try {
+                    org.json.JSONObject j = new org.json.JSONObject(Native.text(body));
+                    if ("/api/read_start".equals(path)) ReadService.start(ctx, j);
+                    else if ("/api/read_pause".equals(path)) ReadService.pause(j.optBoolean("paused", true));
+                    else return json(404, "{}");
+                    return json(200, "{\"ok\":true}");
+                } catch (Exception e) { return json(400, "{\"error\":\"خواندن شروع نشد. دوباره تلاش کنید.\"}"); }
+            }
             // a voice sample other than WAV is decoded by Android first (the Mac uses afconvert); only for the page itself
             if ("/api/myvoice".equals(path) && body != null) {
                 if (!tokenOk(tok)) {
@@ -168,7 +184,7 @@ final class Server {
             // The page's «copy page text»: put on the clipboard here, not by the web view, so that it can be marked as sensitive
             // (Android 13 and newer then keep it out of the clipboard preview) and taken off again after a minute and a half
             // (on Android 9 and older any app can read the clipboard for as long as the text lies there).
-            // The page's colours for the shell's own bar at the top («رنگ پس‌زمینه»): the bar is not part of the page, so the page says
+            // The page's colours for the shell's system-bar margins («رنگ پس‌زمینه»): the margins are not part of the page, so the page says
             // what it looks like now, «#rrggbb #rrggbb» (ground, writing). Only two colours are read, nothing else.
             if ("POST".equals(method) && "/api/shellbar".equals(path)) {
                 if (!tokenOk(tok)) return json(403, "{}");
@@ -188,6 +204,7 @@ final class Server {
                 if (body != null) Arrays.fill(body, (byte) 0);
                 return json(200, "{\"ok\":true}");
             }
+            if ("POST".equals(method) && tokenOk(tok) && ("/api/open".equals(path) || "/api/open_layout".equals(path) || "/api/open_pages".equals(path) || "/api/close".equals(path) || "/api/lock_now".equals(path) || "/api/forget".equals(path) || "/api/lock_erase".equals(path))) ReadService.stop(ctx);
             Native.Reply r = new Native.Reply(Native.handle(Native.utf8(method), Native.utf8(path), Native.utf8(query), Native.utf8(tok), body));
             if (body != null) Arrays.fill(body, (byte) 0); // (the document's bytes: the core has its own copy now)
             if ("/api/tts".equals(path)) lastSpeech = android.os.SystemClock.elapsedRealtime();

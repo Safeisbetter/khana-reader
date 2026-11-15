@@ -65,6 +65,8 @@ impl Drop for Document {
             crate::ffi::wipe::string(s);
         }
         self.words.wipe();
+        self.edits.get_mut().unwrap_or_else(|e| e.into_inner()).wipe();
+        if let Some(previous) = self.edit_undo.get_mut().unwrap_or_else(|e| e.into_inner()) { previous.wipe(); }
     }
 }
 
@@ -84,10 +86,12 @@ pub struct Document {
     pub st: Mutex<State>,
     ocr_lock: Mutex<()>,
     mt_lock: Mutex<()>,
+    mt_prefetch: std::sync::atomic::AtomicBool,
     engines: Arc<Engines>,
     pub pdfjs: bool,
     given: Mutex<HashMap<usize, (Vec<u8>, usize, usize)>>,
     pub edits: Mutex<crate::edits::Edits>,
+    pub edit_undo: Mutex<Option<crate::edits::Edits>>,
     pub edits_file: std::path::PathBuf,
 }
 
@@ -157,10 +161,12 @@ impl Document {
             st: Mutex::new(State { pages, scanned, notes_after: HashMap::new(), translated: HashMap::new(), partial: HashMap::new(), title_fa: None }),
             ocr_lock: Mutex::new(()),
             mt_lock: Mutex::new(()),
+            mt_prefetch: std::sync::atomic::AtomicBool::new(false),
             engines,
             pdfjs,
             given: Mutex::new(HashMap::new()),
             edits: Mutex::new(crate::edits::Edits::load_book(&edits_file)),
+            edit_undo: Mutex::new(None),
             edits_file,
         });
         let mut first: Vec<usize> = doc.st.lock().unwrap().scanned.iter().copied().collect();
@@ -269,6 +275,22 @@ impl Document {
     }
 
     fn translated_page(self: &Arc<Self>, n: usize) -> Vec<String> {
+        let done = self.translate_page_only(n);
+        let needed = {
+            let st = self.st.lock().unwrap();
+            n < self.n_pages && !st.translated.contains_key(&(n + 1)) && !st.partial.contains_key(&(n + 1))
+        };
+        if needed && !self.mt_prefetch.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            let d = self.clone();
+            std::thread::spawn(move || {
+                if Arc::strong_count(&d) > 1 { d.translate_page_only(n + 1); }
+                d.mt_prefetch.store(false, std::sync::atomic::Ordering::SeqCst);
+            });
+        }
+        done
+    }
+
+    fn translate_page_only(self: &Arc<Self>, n: usize) -> Vec<String> {
         loop {
             {
                 let mut st = self.st.lock().unwrap();
@@ -306,14 +328,6 @@ impl Document {
             let mut st = self.st.lock().unwrap();
             st.partial.remove(&n);
             st.translated.insert(n, done.clone());
-        }
-        if n < self.n_pages && !self.st.lock().unwrap().translated.contains_key(&(n + 1)) {
-            let d = self.clone();
-            std::thread::spawn(move || {
-                if Arc::strong_count(&d) > 1 {
-                    d.translated_page(n + 1);
-                }
-            });
         }
         done
     }
@@ -664,7 +678,3 @@ pub fn open_pages(name: &str, pages: Vec<Vec<String>>, engines: Arc<Engines>) ->
 pub fn name_is_sayable(title: &str, lang: &str) -> bool {
     lang != "fa" || title.chars().any(|c| ('\u{600}'..='\u{6FF}').contains(&c))
 }
-
-
-
-

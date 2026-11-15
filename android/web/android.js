@@ -75,7 +75,7 @@
   if (st) {
     const tip = document.createElement("p");
     tip.className = "hint";
-    tip.textContent = "تا پایان کار، خوانا را روی صفحه نگه دارید (صفحه خودش روشن می‌ماند). اگر برنامه‌ی دیگری را باز کنید یا صفحه را خاموش کنید، کار ادامه دارد اما چند برابر کندتر.";
+    tip.textContent = "ساختن فایل با صفحهٔ خاموش هم ادامه دارد. اگر سرعت مهم‌تر است، برنامه را روی صفحه نگه دارید؛ در پس‌زمینه ممکن است کندتر شود.";
     st.appendChild(tip);
   }
   // «کپی متن صفحه»: through the shell (Server.copySensitive), which marks the text as sensitive and takes it off the clipboard
@@ -125,8 +125,8 @@ if (window.KHANA_NO_MIC) {
   }
 }
 
-/* The bar at the top of the screen belongs to the Android shell, not to this page: it is told the page's own bar colours
-   (ground and writing) whenever the look changes («رنگ پس‌زمینه», or the device going dark), so the two match. A see-through
+/* The system-bar margins belong to the Android shell: it is told the page's own bar colours
+   (ground and writing) whenever the look changes («رنگ پس‌زمینه», or the device going dark), so they match. A see-through
    ground (the glass looks) is laid over the page's colour first. */
 (function () {
   const rgb = s => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(s || ""); return m ? [+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]] : null; };
@@ -149,4 +149,102 @@ if (window.KHANA_NO_MIC) {
   if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", later);
   addEventListener("load", later);
   setTimeout(send, 1500);
+})();
+
+/* Native playback owns the entire reading session, so turning the screen off never changes
+   player or depends on background JavaScript timers. Only foreground highlighting is polled. */
+(function () {
+  const pageStop = stopReading;
+  let control = Promise.resolve(), timer = null, polling = false, lastPosition = null;
+  const command = (path, body = {}) => (control = control.catch(() => {}).then(() => jpost(path, body)));
+  stopReading = function () {
+    pageStop(); clearTimeout(timer); lastPosition = null; reader.nativePosition = null;
+    command('/api/read_stop').catch(() => {});
+  };
+  function highlight(pos) {
+    clearReadingMarks();
+    if (pos.para < 0) return;
+    const paragraph = document.querySelector(`.text p[data-i="${pos.para}"]`);
+    if (!paragraph) return;
+    paragraph.classList.add('reading');
+    const words = [...paragraph.querySelectorAll('.w')].filter(w => +w.dataset.s >= pos.start && +w.dataset.s < pos.end);
+    words.forEach(w => w.classList.add('sent'));
+    const fraction = Math.min(0.999, Math.max(0, pos.elapsed / Math.max(0.01, pos.duration)));
+    const current = words[Math.floor(fraction * words.length)];
+    if (current) current.classList.add('now');
+  }
+  async function poll(run, waiting = 0) {
+    if (reader.run !== run || !reader.active || document.hidden || polling) return;
+    polling = true;
+    try {
+      const pos = await jget('/api/read_status');
+      if (reader.run !== run) return;
+      if (!pos.active) {
+        if (waiting < 15 && !lastPosition && !pos.error) { timer = setTimeout(() => poll(run, waiting + 1), 200); return; }
+        const error = pos.error; stopReading(); if (error) toast(error); return;
+      }
+      if (!S.doc || pos.doc !== S.doc.id) { stopReading(); return; }
+      lastPosition = pos;
+      reader.nativePosition = pos;
+      if (pos.page !== S.page) {
+        const paras = await getParas(pos.page);
+        if (reader.run !== run) return;
+        showPage(pos.page, paras);
+      }
+      reader.paused = !!pos.paused; setPlayButton(); highlight(pos);
+    } catch (e) { if (reader.run === run) { stopReading(); toast(e.message); } }
+    finally { polling = false; }
+    if (reader.run === run && reader.active) timer = setTimeout(() => poll(run), 250);
+  }
+  readFrom = async function (para, offset = 0) {
+    stopReading(); if (!S.doc) return;
+    const run = reader.run, doc = S.doc, settings = { ...S.settings }, first = S.page;
+    reader.active = true; reader.paused = false; setPlayButton();
+    try {
+      // The sandboxed PDF renderer needs a visible page to prepare scans. OCR them once before
+      // native reading starts; no pictures or book files are written to shared storage.
+      if (doc.engine === 'pdfjs') {
+        const lengths = await jget(`/api/lengths?doc=${doc.id}`);
+        const last = settings.autoNext === false ? first : doc.pages;
+        for (let n = first; n <= last; n++) {
+          if (reader.run !== run || !S.doc || S.doc.id !== doc.id) return;
+          if (lengths.letters[n - 1] < 0) {
+            $('readingState').textContent = `آماده کردن صفحهٔ اسکن‌شده… ${fa(n)} از ${fa(last)}`;
+            await pageReq(`/api/page?doc=${doc.id}&n=${n}&tr=false`, n, doc.id);
+          }
+        }
+      }
+      const announceTitle = para === 0 && offset === 0 && (doc.lang !== 'fa' || /[؀-ۿ]/.test(doc.title || '')) && await atBookStart(first);
+      if (reader.run !== run) return;
+      const request = { doc: doc.id, pages: doc.pages, page: first, para, start: offset,
+        voice: settings.voice, speed: Number(settings.speed) || 1, tr: !!(doc.canTranslate && settings.translate),
+        rev: !!settings.reversed, yeh: !!settings.persianYeh, autoNext: settings.autoNext !== false, announceTitle };
+      control = control.catch(() => {}).then(() => reader.run === run ? jpost('/api/read_start', request) : null);
+      await control;
+      if (reader.run === run) poll(run);
+    } catch (e) { if (reader.run === run) { stopReading(); toast(e.message); } }
+  };
+  async function pause(paused) {
+    reader.paused = paused; setPlayButton();
+    try { await command('/api/read_pause', { paused }); } catch (e) { stopReading(); toast(e.message); }
+  }
+  $('play').onclick = () => {
+    if (!S.doc || !S.paras.length) return toast('متنی برای خواندن نیست.');
+    if (S.view !== 'text') { S.view = 'text'; syncChrome(); }
+    if (reader.active) pause(!reader.paused); else readFrom(0);
+  };
+  $('stop').onclick = stopReading;
+  restartReading = function () {
+    clearTimeout(restartT);
+    if (!reader.active) return;
+    restartT = setTimeout(async () => {
+      if (!reader.active) return;
+      const pos = lastPosition, paused = reader.paused;
+      await readFrom(pos && pos.para >= 0 ? pos.para : 0, pos && pos.para >= 0 ? pos.start : 0);
+      if (paused && reader.active) await pause(true);
+    }, 400);
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && reader.active) { clearTimeout(timer); poll(reader.run); }
+  });
 })();
