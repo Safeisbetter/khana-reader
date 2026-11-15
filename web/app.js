@@ -30,6 +30,13 @@ const S = { settings: {}, voices: [], doc: null, page: 1, view: "text", paras: [
 const THEMES = ["light", "dark", "night", "black", "blackyellow", "glass", "glassdark", "depth", "depthdark"];
 function applySettings() {
   const s = S.settings;
+  const uiScale = [1, 1.15, 1.3].includes(Number(s.uiScale)) ? Number(s.uiScale) : 1;
+  document.documentElement.style.setProperty("--ui-scale", String(uiScale));
+  document.body.classList.toggle("focus-reading", !!s.focusMode);
+  $("focusBtn").textContent = s.focusMode ? "همهٔ ابزارها" : "نمای خلوت";
+  $("focusBtn").setAttribute("aria-pressed", String(!!s.focusMode));
+  document.querySelectorAll('[data-ui-scale]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.uiScale) === uiScale)));
+  document.querySelectorAll('[data-vision-theme]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.visionTheme === s.theme)));
   document.documentElement.style.setProperty("--fs", s.fontSize + "px");
   const lineHeight = Math.min(3, Math.max(1.5, Number(s.lineHeight) || 2.2));
   document.documentElement.style.setProperty("--reader-line-height", String(lineHeight));
@@ -38,7 +45,7 @@ function applySettings() {
   $("lineHeight").setAttribute("aria-valuetext", fa(lineHeight.toFixed(1)) + " برابر اندازه‌ی قلم");
   // (the text's own page: its width in letters' widths, 100 is the whole window; the room round the text, 100 is as it was made)
   const pw = Math.min(100, Math.max(26, Number(s.pageWidth) || 46)), pm = Math.min(200, Math.max(20, Number(s.pageMargin) || 100));
-  document.documentElement.style.setProperty("--pw", pw >= 100 ? "100%" : pw + "em");
+  document.documentElement.style.setProperty("--pw", pw >= 100 ? "100%" : Math.round(pw * 21) + "px");
   document.documentElement.style.setProperty("--pm", String(pm / 100));
   $("pageWidth").value = pw; $("pageWidthVal").textContent = pw >= 100 ? "تمام پهنا" : fa(pw);
   $("pageMargin").value = pm; $("pageMarginVal").textContent = fa(pm) + "٪";
@@ -46,6 +53,8 @@ function applySettings() {
   $("sentenceLines").checked = !!s.sentenceLines;
   $("speed").value = s.speed; $("speedVal").textContent = pct(s.speed);
   $("speedChip").textContent = pct(s.speed);
+  $("quickSpeedValue").textContent = pct(s.speed);
+  $("quickSpeed").setAttribute("aria-label", "سرعت خواندن " + pct(s.speed) + "؛ تنظیم سرعت");
   $("speedChip").classList.toggle("changed", Number(s.speed) !== 1);
   $("speedChip").setAttribute("aria-label", "سرعت " + pct(s.speed) + "؛ برای سرعت عادی بزنید");
   document.documentElement.dataset.theme = THEMES.includes(s.theme) ? s.theme : "auto";
@@ -138,8 +147,8 @@ window.khanaMenu = cmd => {
 $("fontSize").oninput = e => setSetting("fontSize", +e.target.value);
 $("lineHeight").oninput = e => setSetting("lineHeight", +e.target.value);
 document.querySelectorAll("input[name=cursor]").forEach(r => r.onchange = () => setSetting("cursor", r.value));
-$("autoNext").onchange = e => setSetting("autoNext", e.target.checked);
-$("naturalTone").onchange = e => setSetting("naturalTone", e.target.checked);
+$("autoNext").onchange = e => { setSetting("autoNext", e.target.checked); restartReading(); };
+$("naturalTone").onchange = e => { setSetting("naturalTone", e.target.checked); ttsCache.clear(); bufCache.clear(); restartReading(); };
 $("autoPlay").onchange = e => setSetting("autoPlay", e.target.checked);
 document.querySelectorAll("input[name=hl]").forEach(r => r.onchange = () => setSetting("highlight", r.value));
 document.querySelectorAll("input[name=fc]").forEach(r => r.onchange = () => setSetting("frameColor", r.value));
@@ -147,7 +156,21 @@ document.querySelectorAll("input[name=comma]").forEach(r => r.onchange = () => {
 document.querySelectorAll("input[name=theme]").forEach(r => r.onchange = () => setSetting("theme", r.value));
 $("pageWidth").oninput = e => setSetting("pageWidth", Number(e.target.value));
 $("pageMargin").oninput = e => setSetting("pageMargin", Number(e.target.value));
-$("sentenceLines").onchange = e => { setSetting("sentenceLines", e.target.checked); if (S.doc && !S.editing) renderText(); };
+$("sentenceLines").onchange = e => {
+  const position = currentPiece();
+  const anchor = position && position.page === S.page
+    ? $("textView").querySelector(`p[data-i="${position.p}"]`)
+    : [...$("textView").querySelectorAll('p[data-i]')].find(p => p.getBoundingClientRect().bottom > document.querySelector('.bar').getBoundingClientRect().bottom);
+  const index = anchor && anchor.dataset.i, y = anchor && anchor.getBoundingClientRect().top;
+  setSetting("sentenceLines", e.target.checked);
+  if (S.doc && !S.editing) {
+    renderText(true);
+    requestAnimationFrame(() => {
+      const next = index == null ? null : $("textView").querySelector(`p[data-i="${index}"]`);
+      if (next) window.scrollBy(0, next.getBoundingClientRect().top - y);
+    });
+  }
+};
 $("clickSound").onchange = e => { setSetting("clickSound", e.target.checked); if (e.target.checked) clickTone(true); };
 
 /* ---------------- a sound for every tap (Settings; off unless chosen): a short tick, higher when something is switched on, lower when off ---------------- */
@@ -321,6 +344,7 @@ $("lexTest").onclick = async () => {
   if (p) await saveLexicon({ ...(S.settings.lexicon || {}), [w]: p });
   sayWord(w);
 };
+$("lexMarks").onclick = () => openPronunciation($("lexWord").value);
 $("lexList").addEventListener("click", async e => {
   const say = e.target.closest("[data-say]"), del = e.target.closest("[data-del]");
   if (say) sayWord(say.dataset.say);
@@ -333,16 +357,88 @@ document.addEventListener("selectionchange", () => {
   $("fixWord").hidden = !ok;
   if (ok) {
     // (while the text is being edited the button changes the word in the whole book; otherwise it fixes how the word is said)
-    $("fixWord").textContent = S.editing ? `عوض کردن «${t}» در همه‌ی کتاب‌ها` : `اصلاح تلفظ «${t}»`;
+    $("fixWord").textContent = S.editing ? `اصلاح «${t}»` : `اصلاح تلفظ «${t}»`;
     $("fixWord").dataset.word = t;
   }
 });
 $("fixWord").onclick = () => {
   $("fixWord").hidden = true;
   if (S.editing) return openWordEditor($("fixWord").dataset.word);
-  $("lexWord").value = $("fixWord").dataset.word; $("lexSay").value = $("fixWord").dataset.word;
-  openPanel("settings");
-  $("lexField").scrollIntoView({ block: "start" }); $("lexSay").focus();
+  openPronunciation($("fixWord").dataset.word);
+};
+
+// Separate letter selection avoids opening the tablet keyboard just to add vowel marks.
+const pronunciation = { word: "", letters: [], selected: -1, generation: 0 };
+function markedLetters(word) {
+  const letters = [];
+  for (const c of word) {
+    if (/\p{M}/u.test(c) && letters.length) letters[letters.length - 1] += c;
+    else letters.push(c);
+  }
+  return letters;
+}
+function markLetter(letter, mark) {
+  if (!mark) return letter.replace(/[\u064b-\u0652]/g, "");
+  if (mark === "ّ") return letter.includes(mark) ? letter.replace(/ّ/g, "") : letter.replace(/ْ/g, "") + mark;
+  return letter.replace(mark === "ْ" ? /[\u064b-\u0652]/g : /[\u064b-\u0650\u0652]/g, "") + mark;
+}
+function renderPronunciation() {
+  const box = $("pronLetters"); box.replaceChildren();
+  pronunciation.letters.forEach((letter, i) => {
+    const selectable = /\p{Script=Arabic}/u.test(letter) && /\p{L}/u.test(letter);
+    const b = document.createElement(selectable ? "button" : "span");
+    b.textContent = letter;
+    if (selectable) {
+      b.type = "button"; b.dataset.letter = i;
+      b.setAttribute("aria-label", "حرف " + letter);
+      b.setAttribute("aria-pressed", String(i === pronunciation.selected));
+    }
+    box.appendChild(b);
+  });
+  $("pronPreview").textContent = pronunciation.letters.join("");
+  $("pronMarks").querySelectorAll("button").forEach(b => b.disabled = pronunciation.selected < 0);
+  $("pronSave").disabled = pronunciation.selected < 0;
+}
+function openPronunciation(word) {
+  word = (word || "").trim();
+  if (!word || /\s/.test(word) || word.length > 80) return toast("یک کلمه را انتخاب کنید.");
+  stopReading();
+  pronunciation.generation++;
+  pronunciation.word = word;
+  const saved = (S.settings.lexicon || {})[word];
+  pronunciation.letters = markedLetters(saved && /\p{Script=Arabic}/u.test(saved) ? saved : word);
+  pronunciation.selected = pronunciation.letters.findIndex(c => /\p{Script=Arabic}/u.test(c) && /\p{L}/u.test(c));
+  $("pronTitle").textContent = "اصلاح تلفظ «" + word + "»";
+  renderPronunciation();
+  openPanel("pronPanel");
+  const first = $("pronLetters").querySelector('button[aria-pressed="true"]');
+  if (first) first.focus({ preventScroll: true });
+}
+$("pronLetters").onclick = e => {
+  const b = e.target.closest("button[data-letter]");
+  if (!b) return;
+  pronunciation.selected = Number(b.dataset.letter);
+  renderPronunciation();
+  $("pronLetters").querySelector(`button[data-letter="${pronunciation.selected}"]`).focus({ preventScroll: true });
+};
+$("pronMarks").onclick = e => {
+  const b = e.target.closest("button[data-mark]");
+  if (!b || pronunciation.selected < 0) return;
+  const i = pronunciation.selected;
+  pronunciation.letters[i] = markLetter(pronunciation.letters[i], b.dataset.mark);
+  renderPronunciation();
+};
+$("pronListen").onclick = () => sayWord(pronunciation.letters.join(""));
+$("pronSave").onclick = async () => {
+  const word = pronunciation.word, spelling = pronunciation.letters.join("");
+  const generation = pronunciation.generation;
+  $("pronSave").disabled = true;
+  try {
+    await saveLexicon({ ...(S.settings.lexicon || {}), [word]: spelling });
+    if (generation === pronunciation.generation) $("pronPanel").hidden = true;
+    toast("تلفظ «" + word + "» ذخیره شد.");
+  } catch (e) { toast(e.message); }
+  finally { if (generation === pronunciation.generation) $("pronSave").disabled = pronunciation.selected < 0; }
 };
 
 /* ---------------- panels ---------------- */
@@ -375,7 +471,7 @@ function syncModalState() {
 }
 function openPanel(id) {
   if (document.body.classList.contains("locked")) return;
-  if ($(id).hidden) panelOpener.set(id, document.activeElement);
+  if ($(id).hidden) panelOpener.set(id, document.activeElement.closest(".more-tools")?.querySelector("summary") || document.activeElement);
   $(id).hidden = false;
   const at = panelStack.indexOf($(id));
   if (at >= 0) panelStack.splice(at, 1);
@@ -392,7 +488,7 @@ document.querySelectorAll(".panel").forEach(p => {
     const back = panelOpener.get(p.id);
     panelOpener.delete(p.id);
     if (document.body.classList.contains("locked")) return;
-    if (back && back.isConnected && !back.disabled && (document.activeElement === document.body || p.contains(document.activeElement))) back.focus();
+    if (back && back.isConnected && !back.disabled && (document.activeElement === document.body || p.contains(document.activeElement))) back.focus({ preventScroll: true });
   }).observe(p, { attributes: true, attributeFilter: ["hidden"] });
   p.addEventListener("keydown", e => {
     if (e.key !== "Tab") return;
@@ -414,6 +510,17 @@ addEventListener("keydown", e => {
   }
 });
 $("settingsBtn").onclick = () => openPanel("settings");
+$("visionBtn").onclick = () => openPanel("visionPanel");
+$("visionFontDown").onclick = () => setFontSize(Number(S.settings.fontSize) - 2);
+$("visionFontUp").onclick = () => setFontSize(Number(S.settings.fontSize) + 2);
+$("focusBtn").onclick = () => setSetting("focusMode", !S.settings.focusMode);
+document.querySelectorAll('[data-ui-scale]').forEach(b => b.onclick = () => setSetting('uiScale', Number(b.dataset.uiScale)));
+document.querySelectorAll('[data-vision-theme]').forEach(b => b.onclick = () => setSetting('theme', b.dataset.visionTheme));
+$("moreTools").addEventListener('click', e => { if (e.target.closest('button')) $("moreTools").open = false; });
+document.addEventListener('pointerdown', e => { if (!$("moreTools").contains(e.target)) $("moreTools").open = false; });
+$("moreTools").addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $("moreTools").open) { e.preventDefault(); $("moreTools").open = false; $("moreTools").querySelector('summary').focus(); }
+});
 $("helpBtn").onclick = $("welcomeHelp").onclick = () => openPanel("helpPanel");
 $("helpSettings").onclick = () => { $("helpPanel").hidden = true; openPanel("settings"); };
 $("openFileBtn").onclick = $("welcomeOpen").onclick = () => $("fileInput").click();
@@ -767,29 +874,19 @@ function showPage(n, paras, done = true) {  // switch the visible page while rea
 }
 // every word is its own span (data-s = its offset in the paragraph) so reading can light it up
 function paraHtml(p, i, re, found) {
-  // («هر جمله در خط تازه»: the space after a sentence's end becomes a line break; the words keep their places in the paragraph)
+  // Use the same sentence boundaries as read-aloud, keeping original UTF-16 word offsets.
   const lines = !!(S.settings && S.settings.sentenceLines);
-  let ended = false;
-  // (a sentence's end: not a one-letter abbreviation, «ص.», nor a list's number, «۲.», «12.»; a year closing a sentence, «۱۹۷۵.», is one)
-  const endsSentence = t => /[.!?؟…][»"”)\]]?$/.test(t) && !(/^[\d۰-۹.]+$/.test(t) && !/^[\d۰-۹]{3,}\.$/.test(t)) && t.replace(/[.!?؟…»"”)\]]/g, "").length > 1;
-  const word = (tok, off) => {
-    let w = esc(tok);
-    if (re) w = w.replace(re, m => (found(), `<mark>${m}</mark>`));
-    return `<span class="w" data-s="${off}">${w}</span>`;
-  };
-  const h = p.replace(/\S+|\s+/g, (tok, off) => {
-    if (/^\s/.test(tok)) { const br = lines && ended; ended = false; return br ? "<br>" : tok; }
-    // (a full stop with no space after it, «است.بعد», as some PDFs give it: the next sentence on its own line too. Farsi letters on
-    // both sides only: «www.example.com», «e.g.» and «۳.۵» stay whole)
-    const glued = lines ? /^(.*?[\u0621-\u06cc]{2}[.!?؟…])(?=[\u0621-\u06cc])/.exec(tok) : null;
-    if (glued && endsSentence(glued[1])) {
-      const rest = tok.slice(glued[1].length);
-      ended = endsSentence(rest);
-      return word(glued[1], off) + "<br>" + word(rest, off + glued[1].length);
-    }
-    ended = endsSentence(tok);
-    return word(tok, off);
-  });
+  const segments = lines ? spokenSentences(p) : [{start: 0, text: p}];
+  const h = segments.map((segment, index) => {
+    const text = lines ? segment.text.replace(/\s+$/, "") : segment.text;
+    const html = text.replace(/\S+|\s+/g, (tok, off) => {
+      if (/^\s/.test(tok)) return tok;
+      let w = esc(tok);
+      if (re) w = w.replace(re, m => (found(), `<mark>${m}</mark>`));
+      return `<span class="w" data-s="${segment.start + off}">${w}</span>`;
+    });
+    return (index ? "<br>" : "") + html;
+  }).join("");
   return `<p dir="auto" data-i="${i}" tabindex="${i === 0 ? 0 : -1}" aria-keyshortcuts="Enter" title="کلیک یا Enter: خواندن از این بند">${h}</p>`;
 }
 const moreNote = () => S.pageDone === false ? '<p class="empty" id="trMore">در حال ترجمه‌ی ادامه‌ی این صفحه…</p>' : "";
@@ -802,7 +899,7 @@ function appendText(from) {
   const more = $("trMore");
   if (more) more.insertAdjacentHTML("beforebegin", html); else box.insertAdjacentHTML("beforeend", html + moreNote());
 }
-function renderText() {
+function renderText(preservePosition = false) {
   $("play").disabled = !S.paras.length;
   const box = $("textView");
   box.lang = translating() ? "fa" : (S.doc && S.doc.lang || "fa");
@@ -818,14 +915,14 @@ function renderText() {
   }
   $("count").textContent = q ? (count ? fa(count) + " مورد" : "پیدا نشد") : "";
   const first = box.querySelector("mark");
-  if (first) { first.classList.add("cur"); first.scrollIntoView({ block: "center" }); }
+  if (first) { first.classList.add("cur"); if (!preservePosition) first.scrollIntoView({ block: "center" }); }
   reader.shownWord = null;
   armParagraphs();
   if (focusedIndex !== null) {
     const next = box.querySelector(`p[data-i="${focusedIndex}"]`);
     if (next) {
       if (!S.editing) box.querySelectorAll("p[data-i]").forEach(p => p.tabIndex = p === next ? 0 : -1);
-      next.focus();
+      next.focus({ preventScroll: preservePosition });
     }
   }
 }
@@ -856,6 +953,8 @@ function syncChrome() {
   if (!has) return;
   $("pageInput").value = fa(S.page);
   $("pageCount").textContent = fa(S.doc.pages);
+  $("quickPageNumber").textContent = fa(S.page);
+  $("quickPage").setAttribute("aria-label", "صفحه " + fa(S.page) + " از " + fa(S.doc.pages) + "؛ انتخاب صفحه");
   $("fileName").title = S.doc.name || "";
   $("pageInput").setAttribute("aria-label", "شماره صفحه؛ از ۱ تا " + fa(S.doc.pages));
   showBookTime();
@@ -900,7 +999,7 @@ addEventListener("keydown", e => {
     e.preventDefault(); if (!S.opening) $("fileInput").click(); return;
   }
   if (command && !e.altKey && !e.shiftKey && e.code === "KeyF" && S.doc && S.view === "text") {
-    e.preventDefault(); $("q").focus(); $("q").select(); return;
+    e.preventDefault(); if (document.body.classList.contains("is-reading") && !document.body.classList.contains("reading-tools-open")) $("readingToolsBtn").click(); $("moreTools").open = true; $("q").focus(); $("q").select(); return;
   }
   if (e.key === "F1") { e.preventDefault(); openPanel("helpPanel"); return; }
   // A focused control keeps its own Space/arrow behavior; dialogs and editable text never start playback.
@@ -945,7 +1044,27 @@ function ensureAudio() {  // call inside a click/drop so the Mac lets sound star
   return actx;
 }
 const bufCache = new Map();  // voice|speed|text -> Promise<AudioBuffer>
-let ttsChain = Promise.resolve();  // one request at a time, in order: the next sentence is always made first
+// Android can prepare several sentences faster than real time when the requests overlap.
+// Start them in reading order and bound the work; playback still awaits each piece in order.
+const speechConcurrency = /Android/.test(navigator.userAgent) ? Math.max(1, Math.min(3, Math.floor((navigator.hardwareConcurrency || 2) / 2))) : 1;
+const speechTasks = [];
+let speechRunning = 0;
+function queueSpeech(make) {
+  return new Promise((resolve, reject) => {
+    speechTasks.push({ make, resolve, reject });
+    pumpSpeech();
+  });
+}
+function pumpSpeech() {
+  while (speechRunning < speechConcurrency && speechTasks.length) {
+    const task = speechTasks.shift();
+    speechRunning++;
+    Promise.resolve().then(task.make).then(task.resolve, task.reject).finally(() => {
+      speechRunning--;
+      pumpSpeech();
+    });
+  }
+}
 function speechBuffer(text, run) {
   const key = S.settings.voice + "|" + S.settings.speed + "|" + (S.settings.naturalTone !== false) + "|" + (S.settings.commaPause || "normal") + "|" + text;
   if (!bufCache.has(key)) {
@@ -953,7 +1072,7 @@ function speechBuffer(text, run) {
     // a piece queued for reading that was stopped or jumped away from is skipped, so the new
     // position does not wait behind sentences nobody will hear
     const owner = { run };
-    const p = ttsChain.then(() => {
+    const p = queueSpeech(() => {
       if (owner.run !== undefined && reader.run !== owner.run) throw new Error("skipped");
       return api("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body });
     })
@@ -961,7 +1080,6 @@ function speechBuffer(text, run) {
       // «Decoding failed»: a moment's silence, and the reading goes on)
       .then(r => r.arrayBuffer()).then(b => b.byteLength <= 44 ? ensureAudio().createBuffer(1, 1, 22050) : ensureAudio().decodeAudioData(b));
     p.owner = owner;
-    ttsChain = p.catch(() => {});
     p.catch(() => bufCache.delete(key));
     bufCache.set(key, p);
     if (bufCache.size > 80) bufCache.delete(bufCache.keys().next().value);
@@ -988,6 +1106,7 @@ function spokenSentences(text) {
       if (/\p{N}/u.test(text[i - 1] || "") && /\p{N}/u.test(text[i + 1] || "")) continue;
       if (/[a-z]/i.test(text[i - 1] || "") && /[a-z]/i.test(text[i + 1] || "")) continue;
       const head = text.slice(start, i + 1);
+      if (/(?:^|\s)(?:ص|ج|ش|ق|هـ)\.$/.test(head) || /^\s*[\p{N}]{1,2}\.$/u.test(head)) continue;
       if (/(?:^|\s)(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|vs|e\.g|i\.e)\.$/i.test(head) || /(?:^|\s)(?:[A-Z]\.)+$/.test(head)) continue;
     }
     let end = i + 1;
@@ -1028,6 +1147,12 @@ function piecesFor(page, paras, fromPara, fromOff = 0) {
 
 const reader = { active: false, paused: false, run: 0, queue: [], next: 0, playing: [], lastEnd: 0, lastPage: 0, sources: [] };
 function setPlayButton() {
+  const wasReading = document.body.classList.contains("is-reading");
+  const wasPaused = document.body.classList.contains("is-paused");
+  if (reader.active && !reader.paused && (!wasReading || wasPaused)) $("moreTools").open = false;
+  document.body.classList.toggle("is-paused", !!reader.active && !!reader.paused);
+  document.body.classList.toggle("is-reading", !!reader.active);
+  if (!reader.active) { document.body.classList.remove("reading-tools-open"); $("readingToolsBtn").setAttribute("aria-expanded", "false"); $("readingToolsBtn").textContent = "صفحه و سرعت"; }
   $("play").setAttribute("aria-pressed", String(reader.active && !reader.paused));
   $("play").setAttribute("aria-label", reader.active && !reader.paused ? "مکث خواندن" : reader.paused ? "ادامه‌ی خواندن" : "شروع خواندن");
   $("play").textContent = reader.active && !reader.paused ? "❚❚ مکث" : (reader.paused ? "▶ ادامه" : "▶ خواندن");
@@ -1076,16 +1201,6 @@ async function readFrom(i, fromOff = 0) {
   setPlayButton();
   requestAnimationFrame(() => tick(run));
   try {
-    // from the start of the book: its name first (p -1: a piece with no text on screen)
-    // Farsi voice spelled the English letters out and began with a strange sound)
-    const nameable = S.doc.lang !== "fa" || /[؀-ۿ]/.test(S.doc.title || "");
-    if (i === 0 && fromOff === 0 && S.doc.title && nameable && await atBookStart(S.page)) {
-      // (a translated book's name is said in Farsi)
-      const title = translating() ? (await jget(`/api/title?doc=${S.doc.id}&rev=${!!S.settings.reversed}&yeh=${!!S.settings.persianYeh}&tr=true`)).title : S.doc.title;
-      if (reader.run !== run) return;
-      if (reader.queue[0]) reader.queue[0].pause = 0.8;
-      reader.queue.unshift({ page: S.page, p: -1, start: 0, end: 0, text: title + ".", pause: 0 });
-    }
     let ended = false;
     while (reader.run === run) {
       // read on into the next page, prepared before this one ends
@@ -1125,7 +1240,7 @@ async function readFrom(i, fromOff = 0) {
       if (starved) { await sleep(600); continue; }
       if (reader.next >= reader.queue.length) {
         // the last page has been read: say so, so the listener knows the book is finished
-        if (!ended && reader.lastPage >= S.doc.pages && S.doc.name !== "متن من.txt") {
+        if (!ended && reader.lastPage >= S.doc.pages && !S.doc.isTyped) {
           ended = true;
           reader.queue.push({ page: reader.lastPage, p: -1, start: 0, end: 0, text: "پایان متن.", pause: 1.2 });
           continue;
@@ -1319,6 +1434,8 @@ function openSave(kind) {
     document.querySelector(`input[name=scope][value=${kind === "pdf" ? "all" : "page"}]`).checked = true;
   }
   const pdf = saveKind === "pdf";
+  $("mp3Cancel").textContent = pdf ? "لغو" : "توقف و نگه‌داشتن بخش آماده";
+  $("mp3Cancel").disabled = false;
   $("mp3Title").textContent = pdf ? "ذخیره‌ی ترجمه‌ی فارسی به صورت PDF" : "ذخیره به صورت فایل صدا";
   $("fmtField").hidden = pdf; $("fastField").hidden = pdf;
   syncBitrate();
@@ -1402,7 +1519,10 @@ async function poll() {
   if (job.status === "done") {
     $("mp3Text").textContent = (S.library && !pdf ? `فایل ساخته شد و در «فایل‌های من» است: «${job.saved}»` : `فایل در پوشه‌ی دانلودها ذخیره شد: «${job.saved}»`) + (pdf ? "" : ` · ${len}`);
     $("mp3Reveal").hidden = false;
-  } else if (job.status === "cancelled") $("mp3Text").textContent = "لغو شد.";
+  } else if (job.status === "cancelled") {
+    $("mp3Text").textContent = job.saved ? `متوقف شد. صدای آماده‌شده به‌صورت فایل ناقص نگه داشته شد: «${job.saved}» · ${len}` : "متوقف شد؛ هنوز بخشی از صدا آماده نشده بود.";
+    $("mp3Reveal").hidden = !job.saved;
+  }
   else $("mp3Text").textContent = "ساخته نشد: " + job.error;
 }
 
@@ -1440,13 +1560,13 @@ async function libShow() {
         await $("libAudio").play();
       } catch (e) { toast(e.message); } finally { play.disabled = false; }
     };
-    const out = document.createElement("button"); out.type = "button"; out.textContent = "ذخیره در گوشی…";
+    const out = document.createElement("button"); out.type = "button"; out.textContent = "ذخیره در دستگاه";
     out.onclick = () => jpost("/api/library_export?" + q, {}).catch(e => toast(e.message));
     const del = document.createElement("button"); del.type = "button"; del.textContent = "حذف";
     let sure = false;
     del.onclick = async () => {
       // (asked by a second tap, not by a question window)
-      if (!sure) { sure = true; del.textContent = "حذف شود؟ دوباره بزنید"; setTimeout(() => { sure = false; del.textContent = "حذف"; }, 4000); return; }
+      if (!sure) { sure = true; del.textContent = "تأیید حذف"; setTimeout(() => { sure = false; del.textContent = "حذف"; }, 4000); return; }
       try { if ($("libNow").textContent === f.name) libStop(); await jpost("/api/library_delete?" + q, {}); toast("حذف شد."); libShow(); } catch (e) { toast(e.message); }
     };
     acts.append(size, play, out, del);
@@ -1487,23 +1607,28 @@ if (document.readyState === "loading") addEventListener("DOMContentLoaded", init
 const editQuery = () => `doc=${S.doc.id}&rev=${!!S.settings.reversed}&yeh=${!!S.settings.persianYeh}&tr=${translating()}`;
 let editGen = 0, lastFound = null;
 async function sendEdit(body, keep) {
-  const r = await jpost(`/api/edit?${editQuery()}`, { n: S.page, ...body });
-  if (r.error) { toast(r.error); return false; }
-  editGen++;
-  // (a word changed: the reader is told in how many places of the whole book it stood)
-  if (body.kind === "word" && typeof r.found === "number") {
-    lastFound = r.found;
-    toast(r.found ? `در ${fa(r.found)} جای کتاب عوض شد.` : "این کلمه جایی در کتاب پیدا نشد؛ شاید املای آن در کتاب فرق دارد.");
-  }
-  // (the page is shown again with the correction, at the same place: not at the top)
-  const y = window.scrollY;
-  pageCache.clear();
-  stopReading();
-  await loadPage(S.page);
-  window.scrollTo(0, y);
-  $("edInfo").textContent = r.edits ? `${fa(r.edits)} ویرایش در این کتاب` : "";
-  return true;
+  if (!S.doc) return false;
+  const doc = S.doc.id, page = S.page, query = editQuery();
+  try {
+    const r = await jpost(`/api/edit?${query}`, { n: page, ...body });
+    if (r.error) { toast(r.error); return false; }
+    if (!S.doc || S.doc.id !== doc) return false;
+    editGen++;
+    if (body.kind === "word" && typeof r.found === "number") {
+      lastFound = r.found;
+      toast(r.found ? `در ${fa(r.found)} جای کتاب عوض شد.` : "کلمه پیدا نشد. املای آن را بررسی کنید.");
+    }
+    const y = window.scrollY;
+    pageCache.clear(); stopReading();
+    await loadPage(page);
+    if (!S.doc || S.doc.id !== doc) return false;
+    window.scrollTo(0, y);
+    $("edInfo").textContent = r.edits ? `${fa(r.edits)} ویرایش در این کتاب` : "";
+    $("edUndo").disabled = !r.canUndo;
+    return true;
+  } catch (e) { toast(e.message); return false; }
 }
+
 // editing a paragraph: a window with a large box, over the page
 let editing = { shown: null };
 function openParaEditor(p) {
@@ -1523,6 +1648,7 @@ function armParagraphs() {
     if (shown === undefined) return;
     p.textContent = shown;
     p.dataset.shown = shown;
+    p.dataset.doc = S.doc.id;
     p.contentEditable = "plaintext-only";
     p.tabIndex = 0;
     if (p.contentEditable !== "plaintext-only") p.contentEditable = "true";
@@ -1533,13 +1659,14 @@ function armParagraphs() {
 $("textView").addEventListener("focusout", async e => {
   const p = e.target.closest && e.target.closest("p[data-i]");
   if (!S.editing || !p || p.dataset.shown === undefined) return;
+  if (!S.doc || p.dataset.doc !== S.doc.id) return;
   const shown = p.dataset.shown;
   const text = p.innerText.replace(/\u00a0/g, " ").trim();
   p.dataset.shown = text;
   if (text === shown.trim()) return;
   // (all its text erased: the paragraph is taken out at once. No question is asked here: a question put while the focus
   // leaves the paragraph was answered «no» by the window itself, and the text came back)
-  if (await sendEdit({ kind: "paragraph", shown, text })) toast(text ? "بند ذخیره شد." : "بند حذف شد. («بازگرداندن همه» آن را برمی‌گرداند)");
+  if (await sendEdit({ kind: "paragraph", shown, text })) toast(text ? "بند ذخیره شد." : "بند حذف شد. با «برگرداندن آخرین تغییر» آن را برگردانید.");
   else renderText();   // (not saved: the page shows what is kept, not what was typed)
 });
 $("textView").addEventListener("keydown", e => {
@@ -1555,23 +1682,46 @@ $("paraDel").onclick = async () => {
   if (await sendEdit({ kind: "paragraph", shown: editing.shown, text: "" })) $("paraPanel").hidden = true;
 };
 function openWordEditor(from) {
-  if (typeof from === "string") $("edFrom").value = from;
+  const position = currentPiece();
+  const selection = getSelection(), node = selection && selection.anchorNode;
+  const element = node && (node.nodeType === 1 ? node : node.parentElement);
+  const selectedParagraph = element && element.closest('p[data-i]');
+  const paragraph = selectedParagraph ? S.paras[+selectedParagraph.dataset.i] : position && position.page === S.page ? S.paras[position.p] : "";
+  const word = typeof from === "string" ? from : document.querySelector('.w.now')?.textContent || "";
+  $("edFrom").value = word; $("edTo").value = "";
+  const at = paragraph ? Math.max(0, paragraph.indexOf(word)) : 0;
+  $("wordContext").textContent = paragraph ? (at > 90 ? "…" : "") + paragraph.slice(Math.max(0, at - 90), at + 170) + (paragraph.length > at + 170 ? "…" : "") : "";
+  $("wordContext").hidden = !paragraph;
+  stopReading();
   openPanel("wordPanel");
-  ($("edFrom").value ? $("edTo") : $("edFrom")).focus();
+  ($("edFrom").value ? $("edTo") : $("edFrom")).focus({ preventScroll: true });
 }
 $("editBtn").onclick = () => {
+  const position = currentPiece();
+  const paragraphs = [...$("textView").querySelectorAll('p[data-i]')];
+  const anchor = position && position.page === S.page ? paragraphs.find(p => +p.dataset.i === position.p)
+    : paragraphs.find(p => p.getBoundingClientRect().bottom > document.querySelector('.bar').getBoundingClientRect().bottom);
+  const index = anchor && anchor.dataset.i, y = anchor && anchor.getBoundingClientRect().top;
+  stopReading();
   S.editing = !S.editing;
+  document.body.classList.toggle("editing-text", S.editing);
   $("editBar").hidden = !S.editing;
   $("textView").classList.toggle("editing", S.editing);
   $("editBtn").classList.toggle("primary", S.editing);
-  renderText();
+  renderText(true);
+  requestAnimationFrame(() => {
+    const next = index == null ? null : $("textView").querySelector(`p[data-i="${index}"]`);
+    if (next) window.scrollBy(0, next.getBoundingClientRect().top - y);
+  });
   if (S.editing) {
     stopReading();
     if (S.view !== "text") { S.view = "text"; syncChrome(); }
-    if (S.doc) jget(`/api/edits?doc=${S.doc.id}`).then(r => { $("edInfo").textContent = r.edits ? `${fa(r.edits)} ویرایش در این کتاب` : ""; }).catch(() => {});
+    if (S.doc) jget(`/api/edits?doc=${S.doc.id}`).then(r => { $("edInfo").textContent = r.edits ? `${fa(r.edits)} ویرایش در این کتاب` : ""; $("edUndo").disabled = !r.canUndo; }).catch(() => {});
   }
 };
 $("edWordBtn").onclick = () => openWordEditor(getSelection().toString().trim().split(/\s+/)[0] || undefined);
+$("edMarks").onclick = () => openPronunciation($("edFrom").value);
+$("edDone").onclick = () => $("editBtn").click();
 // the word is always read with the linking «ـِ» (ezafe): «کتاب» becomes «کتابِ» in this book's text (a word correction, so it also reaches the MP3 and the PDF)
 async function addEzafe(w) {
   w = (w || "").trim().replace(/\u0650$/, "");
@@ -1587,12 +1737,13 @@ $("edEzafe").onclick = async () => {
   sayWord(w + "\u0650 من");
 };
 $("edWord").onclick = async () => {
-  if (!$("edFrom").value.trim()) return toast("کلمه‌ی غلط را بنویسید.");
-  if (await sendEdit({ kind: "word", from: $("edFrom").value, to: $("edTo").value })) { $("edFrom").value = ""; $("edTo").value = ""; $("wordPanel").hidden = true; toast("در همه‌ی کتاب‌ها عوض شد."); }
+  if (!$("edFrom").value.trim()) return toast("کلمهٔ فعلی را انتخاب کنید یا بنویسید.");
+  if (await sendEdit({ kind: "word", from: $("edFrom").value, to: $("edTo").value })) { $("edFrom").value = ""; $("edTo").value = ""; $("wordPanel").hidden = true; toast("اصلاح کلمه ذخیره شد."); }
 };
 $("edReset").onclick = async () => {
   if (confirm("همه‌ی ویرایش‌های این کتاب و همه‌ی کلمه‌های اصلاح‌شده‌ی کتاب‌ها پاک شود؟") && await sendEdit({ kind: "reset" })) toast("ویرایش‌ها پاک شد.");
 };
+$("edUndo").onclick = async () => { if (await sendEdit({ kind: "undo" })) toast("آخرین تغییر برگردانده شد."); };
 
 
 /* ---------------- a text typed or pasted: read aloud and saved as sound ---------------- */
@@ -1614,7 +1765,7 @@ async function openTyped() {
   const t = $("typeText").value.trim();
   if (!t) { toast("اول متنی بنویسید."); return false; }
   stopReading();
-  const d = await (await api("/api/open?name=" + encodeURIComponent("متن من.txt"), { method: "POST", body: new TextEncoder().encode(t).buffer })).json();
+  const d = await (await api("/api/open?source=typed&name=" + encodeURIComponent("متن من.txt"), { method: "POST", body: new TextEncoder().encode(t).buffer })).json();
   if (d.error) { toast(d.error); return false; }
   S.doc = d; S.page = 1; S.view = "text"; S.letters = null;
   loadLengths();
@@ -1713,25 +1864,34 @@ async function speakWait(text) {
 // one recording from the microphone, until the user stops speaking (or the time is up); the recognizer's answer: {text, cmd, yes}
 async function listenOnce(maxMs, mode, endQuiet = 1.2) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  try { await ctx.resume(); } catch (e) {}
-  const src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(4096, 1, 1);
+  let ctx, src, node, rate = 16000, hidden = document.hidden;
   const chunks = [], t0 = Date.now();
-  // the level of the room is measured in the first third of a second; speech is anything clearly above it
-  let heard = false, quiet = 0, floor = 0, nFloor = 0, seen = 0;
-  node.onaudioprocess = e => {
-    const d = e.inputBuffer.getChannelData(0);
-    chunks.push(new Float32Array(d));
-    let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
-    const rms = Math.sqrt(sum / d.length), secs = d.length / ctx.sampleRate;
-    seen += secs;
-    if (seen < 0.35) { floor = Math.max(floor, rms); nFloor++; return; }
-    if (rms > Math.max(0.008, floor * 2.5)) { heard = true; quiet = 0; } else if (heard) quiet += secs;
-  };
-  src.connect(node); node.connect(ctx.destination);
-  while (Date.now() - t0 < maxMs && !(heard && quiet > endQuiet) && !(!heard && Date.now() - t0 > 7000)) await sleep(100);
-  node.disconnect(); src.disconnect(); stream.getTracks().forEach(t => t.stop());
-  const rate = ctx.sampleRate; ctx.close();
+  let heard = false, quiet = 0, floor = 0, seen = 0;
+  const left = () => { if (document.hidden) { hidden = true; stream.getTracks().forEach(track => track.stop()); } };
+  document.addEventListener('visibilitychange', left);
+  try {
+    if (hidden) throw new Error("برای ویرایش با صدا، برنامه را روی صفحه نگه دارید.");
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    try { await ctx.resume(); } catch (e) {}
+    rate = ctx.sampleRate;
+    src = ctx.createMediaStreamSource(stream); node = ctx.createScriptProcessor(4096, 1, 1);
+    node.onaudioprocess = e => {
+      const d = e.inputBuffer.getChannelData(0); chunks.push(new Float32Array(d));
+      let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
+      const rms = Math.sqrt(sum / d.length), secs = d.length / ctx.sampleRate;
+      seen += secs;
+      if (seen < 0.35) { floor = Math.max(floor, rms); return; }
+      if (rms > Math.max(0.008, floor * 2.5)) { heard = true; quiet = 0; } else if (heard) quiet += secs;
+    };
+    src.connect(node); node.connect(ctx.destination);
+    while (!hidden && Date.now() - t0 < maxMs && !(heard && quiet > endQuiet) && !(!heard && Date.now() - t0 > 7000)) await sleep(100);
+    if (hidden) throw new Error("ضبط با خروج از برنامه متوقف شد. دوباره تلاش کنید.");
+  } finally {
+    document.removeEventListener('visibilitychange', left);
+    stream.getTracks().forEach(track => track.stop());
+    if (node) node.disconnect(); if (src) src.disconnect(); if (ctx) ctx.close().catch(() => {});
+    if (hidden) chunks.forEach(chunk => chunk.fill(0));
+  }
   const all = new Float32Array(chunks.reduce((n, c) => n + c.length, 0)); let at = 0;
   for (const c of chunks) { all.set(c, at); at += c.length; }
   if (!heard) return { text: "", cmd: null, yes: false, go: null, silent: true };
@@ -1751,6 +1911,8 @@ async function listenOnce(maxMs, mode, endQuiet = 1.2) {
   return r;
 }
 function currentPiece() {
+  const native = reader.nativePosition;
+  if (native && native.para >= 0) return { page: native.page, p: native.para, start: native.start, end: native.end };
   const now = actx ? actx.currentTime : 0;
   const p = reader.playing.find(u => now >= u.t0 && now < u.t1) || reader.playing[reader.playing.length - 1];
   return p && p.p >= 0 ? { page: p.page, p: p.p } : null;
@@ -1760,7 +1922,7 @@ async function voiceEdit() {
   if (voiceBusy || !S.doc) return;
   voiceBusy = true;
   // «این کلمه» is the word being read now (marked on the page)
-  const curEl = document.querySelector(".w.cur");
+  const curEl = document.querySelector(".w.now");
   const curWord = curEl ? clean(curEl.textContent.replace(/[^\p{L}\u200c]/gu, "")) : "";
   const cur = currentPiece();
   stopReading();
@@ -1921,3 +2083,19 @@ if (typeof ResizeObserver !== "undefined") {
   });
   dockObserver.observe($("docTools"));
 }
+
+// Track the visual viewport rather than hiding editing controls behind the soft keyboard.
+(function () {
+  let normalHeight = window.innerHeight;
+  function fit() {
+    const viewport = window.visualViewport, height = viewport ? viewport.height : window.innerHeight;
+    if (!document.activeElement || !document.activeElement.matches('input,textarea,[contenteditable]')) normalHeight = window.innerHeight;
+    document.documentElement.style.setProperty('--visual-height', height + 'px');
+    document.documentElement.style.setProperty('--visual-top', (viewport ? viewport.offsetTop : 0) + 'px');
+    document.body.classList.toggle('keyboard-open', height < normalHeight * 0.8);
+  }
+  window.addEventListener('resize', fit);
+  if (window.visualViewport) { visualViewport.addEventListener('resize', fit); visualViewport.addEventListener('scroll', fit); }
+  document.addEventListener('focusin', fit); document.addEventListener('focusout', fit);
+  fit();
+})();

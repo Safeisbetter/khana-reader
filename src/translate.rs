@@ -351,15 +351,21 @@ fn model_words(sentences: &[String], lang: &str) -> Option<Vec<String>> {
         .collect();
     let opts = Options { beam: 3, max_batch: 16, max_len: 300, repetition_penalty: 1.1 };
     let out = with_model(|m| m.translate(&lines.join("\n"), "pes_Arab", &opts))??;
-    Some(
+    complete_model_output(sentences,
         out.split('\n')
-            .take(sentences.len())
             .map(|h| {
                 let toks: Vec<String> = h.split(' ').filter(|t| !t.is_empty() && *t != "pes_Arab" && *t != "</s>").map(|t| t.to_string()).collect();
                 sp.decode_pieces(&toks)
             })
             .collect(),
     )
+}
+
+fn complete_model_output(sentences: &[String], words: Vec<String>) -> Option<Vec<String>> {
+    if words.len() != sentences.len() || words.iter().zip(sentences).any(|(out, src)| out.trim().is_empty() && !src.trim().is_empty()) {
+        return None;
+    }
+    Some(words)
 }
 
 fn word_count(s: &str) -> usize {

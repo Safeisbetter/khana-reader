@@ -74,6 +74,18 @@ pub fn global_words_file() -> PathBuf {
 }
 
 impl Edits {
+    pub fn wipe(&mut self) {
+        for (source, replacement) in &mut self.paras {
+            crate::ffi::wipe::string(source);
+            crate::ffi::wipe::strings(replacement);
+        }
+        for (from, to) in &mut self.words {
+            crate::ffi::wipe::string(from);
+            crate::ffi::wipe::string(to);
+        }
+        self.paras.clear();
+        self.words.clear();
+    }
     pub fn load_book(path: &Path) -> Edits {
         let mut e = Edits::load(path);
         let g = Edits::load(&global_words_file());

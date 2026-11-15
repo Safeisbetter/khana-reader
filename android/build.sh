@@ -58,7 +58,8 @@ rm -rf "$A"
 mkdir -p "$A/app" "$A/fonts"
 cp -Rc "$ROOT/web" "$A/app/web"
 cp "$HERE/web/android.js" "$A/app/web/"
-if [ -n "${KHANA_PUBLIC:-}" ]; then printf '\nwindow.KHANA_NO_MIC = true;\n' >> "$A/app/web/android.js"; fi
+cat "$HERE/web/keyboard.css" >> "$A/app/web/app.css"
+if [ -n "${KHANA_PUBLIC:-}" ] && [ -n "${KHANA_LITE:-}" ]; then printf '\nwindow.KHANA_NO_MIC = true;\n' >> "$A/app/web/android.js"; fi
 cp -RcL "$ROOT/models" "$A/app/models"
 find "$A" -name '.DS_Store' -delete
 # (as tools/make_app.sh: not the model's Python helper nor Vosk's own example)
@@ -84,8 +85,8 @@ cp "$OUT/fonts/Vazirmatn.ttf" "$A/fonts/"
 rm -f "$OUT/res.zip" "$OUT/unsigned.apk" "$OUT/aligned.apk"
 "$BT/aapt2" compile --dir "$HERE/res" -o "$OUT/res.zip"
 MANIFEST="$HERE/AndroidManifest.xml"
-if [ -n "${KHANA_PUBLIC:-}" ]; then
-  # (the public download asks for no microphone at all: a voice sample is chosen as a file instead, and the page hides recording)
+if [ -n "${KHANA_PUBLIC:-}" ] && [ -n "${KHANA_LITE:-}" ]; then
+  # (the light download asks for no microphone at all: a voice sample is chosen as a file instead, and the page hides recording)
   MANIFEST="$OUT/AndroidManifest.public.xml"
   grep -v -E 'android.permission.(RECORD_AUDIO|MODIFY_AUDIO_SETTINGS)' "$HERE/AndroidManifest.xml" > "$MANIFEST"
 fi
