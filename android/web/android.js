@@ -290,7 +290,11 @@ function bookSwipeDelta(dx, dy, elapsed, width, rtl) {
     $('readingToolsBtn').setAttribute('aria-expanded', 'false');
     $('readingToolsBtn').textContent = 'صفحه و سرعت';
     $('moreTools').open = false;
-    if (open) { document.body.classList.add(kind); button.setAttribute('aria-expanded', 'true'); }
+    if (open) {
+      document.body.classList.add(kind); button.setAttribute('aria-expanded', 'true');
+      const first = kind === 'quick-page-open' ? (!$('prev').disabled ? $('prev') : !$('next').disabled ? $('next') : button) : $('slower');
+      requestAnimationFrame(() => { if (document.body.classList.contains(kind)) first.focus({ preventScroll: true }); });
+    }
   }
   page.onclick = () => toggle('quick-page-open', page);
   speed.onclick = () => toggle('quick-speed-open', speed);
