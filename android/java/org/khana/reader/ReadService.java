@@ -178,10 +178,7 @@ public final class ReadService extends Service {
             String options = "doc=" + doc + "&rev=" + q.optBoolean("rev") + "&yeh=" + q.optBoolean("yeh", true) + "&tr=" + q.optBoolean("tr");
             int first = q.getInt("page"), pages = q.getInt("pages"), firstPara = q.optInt("para"), offset = q.optInt("start");
             boolean beginning = true;
-            if (q.optBoolean("announceTitle")) {
-                String title = json("/api/title", options).optString("title");
-                if (!title.trim().isEmpty()) { submit(r, title, first, -1, null, 0); beginning = false; }
-            }
+            int lastPage = first - 1;
             for (int page = first; page <= pages && !r.cancelled; page++) {
                 JSONObject result = json("/api/page", options + "&n=" + page);
                 if (result.optBoolean("needsPicture")) throw new Exception("Scanned page was not prepared");
@@ -194,10 +191,11 @@ public final class ReadService extends Service {
                         beginning = false; paragraphStart = false;
                     }
                 }
+                lastPage = page;
                 if (!q.optBoolean("autoNext", true)) break;
             }
             if (!r.cancelled) {
-                if (q.optBoolean("autoNext", true)) submit(r, "پایان متن.", pages, -1, null, 1.2);
+                if (lastPage == pages && q.optBoolean("announceEnd", true)) submit(r, "پایان متن.", pages, -1, null, 1.2);
                 FutureTask<Sound> end = new FutureTask<>(() -> { Sound s = new Sound(); s.endOfBook = true; return s; }); end.run();
                 while (!r.cancelled && !r.queue.offer(end, 200, TimeUnit.MILLISECONDS)) { }
             }

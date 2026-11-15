@@ -744,3 +744,52 @@ button:active:not(:disabled) { transform: none; }
 }
 .brand-mark { background: transparent; }
 .brand-icon { width: 48px; height: 48px; }
+/* Quiet navigation with controls grouped on demand. */
+.top .brand { flex: 1 1 0; }
+.top > button, .top > .more-tools { flex: 0 0 auto; }
+.more-menu .search { display: flex; max-width: 100%; width: 100%; flex: none; }
+.more-menu .search input { width: 100%; }
+.book-tools > summary { cursor: pointer; padding: 6px 12px; border: 2px solid var(--line); border-radius: 12px; width: fit-content; min-height: 48px; display: flex; align-items: center; gap: 10px; }
+.book-tools > summary::after { content: '⌄'; }
+.book-tools > summary::-webkit-details-marker { display: none; }
+:root[data-theme="light"], :root[data-theme="auto"] { --lapis: #A71930; --lapis-ink: #FFFFFF; --reading: #FBE5E9; }
+:root[data-theme="dark"] { --lapis: #FFAFBA; --lapis-ink: #291018; --reading: #47212B; }
+@media (prefers-color-scheme: dark) { :root[data-theme="auto"] { --lapis: #FFAFBA; --lapis-ink: #291018; --reading: #47212B; } }
+.primary { background: linear-gradient(160deg, color-mix(in srgb, var(--lapis) 85%, white), var(--lapis) 45%, color-mix(in srgb, var(--lapis) 80%, black)); box-shadow: inset 0 1px 0 #FFFFFF50, 0 3px 0 color-mix(in srgb, var(--lapis) 65%, black); }
+.primary:active:not(:disabled) { box-shadow: inset 0 2px 4px #00000030; }
+.brand-icon { filter: drop-shadow(0 2px 1px #00000030); }
+@media (prefers-reduced-motion: no-preference) {
+ .welcome .hero { animation: welcome-rise .45s ease-out both; }
+ button { transition: box-shadow .15s, background-color .15s; }
+ @keyframes welcome-rise { from { opacity: .6; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+}
+:root[data-theme="black"] .primary, :root[data-theme="blackyellow"] .primary { background: var(--lapis); box-shadow: none; }
+@media (max-width: 680px) { .top .brand .logo { display: none; } }
+/* Open settings sections, with emphasis reserved for actions and selected choices. */
+.more-tools > summary::after, .book-tools > summary::after { content: none; }
+.panel-body > .field { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; padding: 18px 0; }
+.panel-body > .field:last-child { border-bottom: 0; }
+.panel-body > .field > label, .panel-body > .field > .lbl { font-weight: 750; }
+.panel-body .inline > button:not(.primary):not(.theme-sample) { background: var(--tone); border-color: transparent; box-shadow: none; }
+.panel-head button { border-color: transparent; background: transparent; color: var(--ink); box-shadow: none; }
+.panel-body button:hover:not(:disabled), .panel-head button:focus-visible { outline: 3px solid var(--lapis); outline-offset: 2px; }
+#myDel, #forgetAll, #edReset { color: var(--danger); border-color: var(--danger); background: var(--surface); }
+.pron-letters button[aria-pressed="true"], .vision-options button[aria-pressed="true"] { border-color: var(--lapis); }
+.book-tools[open] > summary { background: var(--reading); border-color: var(--lapis); font-weight: 700; }
+.more-tools > summary { min-width: 52px; min-height: 52px; justify-content: center; padding-inline: 12px; }
+.more-tools > summary .ui-icon { width: 28px; height: 28px; }
+/* One compact navigation row on tablet and phone. */
+.bar { padding: 4px 12px; }
+.bar-inner { gap: 0; }
+.brand-mark, .brand-icon { width: 40px; height: 40px; }
+.logo { font-size: 26px; }
+.top { gap: 8px; }
+.more-tools > summary { min-width: 48px; min-height: 48px; }
+.more-menu { max-height: calc(var(--visual-height, 100dvh) - 72px); overflow-y: auto; overflow-x: hidden; }
+.more-menu .book-tools { min-width: 0; width: 100%; }
+.more-menu .book-tools > summary { width: 100%; }
+.more-menu .tools { width: 100%; }
+.more-menu .tools > .group { width: 100%; padding: 0; border: 0; }
+.more-menu .tools button { white-space: normal; }
+.focus-reading .more-menu .tools > .group { display: flex; }
+.more-tools:not([open]) > .more-menu, .book-tools:not([open]) > .tools { display: none; }

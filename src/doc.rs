@@ -75,6 +75,7 @@ pub const PICTURE_PAGE: &str = "در این صفحه فقط تصویر هست.";
 pub struct Document {
     pub id: String,
     pub name: String,
+    pub is_typed: std::sync::atomic::AtomicBool,
     pub n_pages: usize,
     pub had_scans: bool,
     pub pictures: HashSet<usize>,
@@ -150,6 +151,7 @@ impl Document {
         let doc = Arc::new(Document {
             id: new_id(),
             name: name.to_string(),
+            is_typed: std::sync::atomic::AtomicBool::new(false),
             n_pages,
             had_scans,
             pictures,
@@ -229,10 +231,6 @@ impl Document {
         let ext = ext_of(base);
         let stem = &base[..base.len() - ext.len()];
         split_ws(&sub(r"[-_]+", " ", stem)).join(" ")
-    }
-
-    pub fn title_is_said(&self) -> bool {
-        name_is_sayable(&self.title(), self.lang())
     }
 
     pub fn spoken_title(self: &Arc<Self>, opts: Opts) -> String {
@@ -675,6 +673,6 @@ pub fn open_pages(name: &str, pages: Vec<Vec<String>>, engines: Arc<Engines>) ->
     Document::new(name, pages, Vec::new(), Vec::new(), engines, None)
 }
 
-pub fn name_is_sayable(title: &str, lang: &str) -> bool {
-    lang != "fa" || title.chars().any(|c| ('\u{600}'..='\u{6FF}').contains(&c))
-}
+
+
+

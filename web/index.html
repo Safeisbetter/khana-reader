@@ -14,21 +14,16 @@
     <!-- the app's own row: its name, the open book, and what is always at hand -->
     <div class="row top">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true"><svg class="brand-icon" viewBox="0 0 108 108" focusable="false"><path d="M28,6H80Q102,6 102,28V80Q102,102 80,102H28Q6,102 6,80V28Q6,6 28,6Z" fill="#183D91"/><path d="M22,35Q36,32 49,41V78Q36,69 22,72Z" fill="#FFFFFF"/><path d="M53,41Q65,32 78,35V72Q65,69 53,78Z" fill="#FFFFFF"/><path d="M82,42Q89,49 82,56 M88,35Q101,49 88,63" fill="none" stroke="#FFE168" stroke-width="4.5" stroke-linecap="round"/><path d="M30 44Q38 44 42 48M30 53Q38 53 42 57" fill="none" stroke="#183D91" stroke-width="3" stroke-linecap="round"/></svg></span><span class="logo">خوانا</span>
+        <span class="brand-mark" aria-hidden="true"><svg class="brand-icon" viewBox="0 0 108 108" focusable="false"><defs><linearGradient id="red" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#D93650"/><stop offset="1" stop-color="#950C28"/></linearGradient></defs><rect x="6" y="8" width="96" height="96" rx="22" fill="#740B20"/><rect x="6" y="4" width="96" height="95" rx="22" fill="url(#red)"/><path d="M22,35Q36,32 49,41V78Q36,69 22,72Z" fill="#FFFFFF"/><path d="M53,41Q65,32 78,35V72Q65,69 53,78Z" fill="#FFFFFF"/><path d="M82,42Q89,49 82,56 M88,35Q101,49 88,63" fill="none" stroke="#FFE168" stroke-width="4.5" stroke-linecap="round"/><path d="M30 44Q38 44 42 48M30 53Q38 53 42 57" fill="none" stroke="#A71930" stroke-width="3" stroke-linecap="round"/></svg></span><span class="logo">خوانا</span>
         <span class="file" id="fileName"></span>
       </div>
-      <div class="search needs-text">
-        <input id="q" type="search" placeholder="جستجو در این صفحه…" title="کلید ورود: مورد بعدی" aria-label="جستجو">
-        <span class="count" id="count"></span>
-      </div>
-      <button type="button" class="primary" id="openFileBtn" title="بازکردن فایل (⌘O / Ctrl+O)"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 7h7l2 3h9v10H3z M3 7V4h6l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>بازکردن فایل</button>
-      <button id="settingsBtn" type="button" aria-label="تنظیمات"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>تنظیمات</button>
-      <button id="visionBtn" type="button" aria-haspopup="dialog" aria-controls="visionPanel"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12 M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>دید بهتر</button>
-      <button id="focusBtn" class="needs-doc" type="button" aria-pressed="false">نمای خلوت</button>
-      <details class="more-tools" id="moreTools"><summary>ابزارهای بیشتر</summary><div class="more-menu"><button type="button" id="libBtn" hidden title="فایل‌های صدایی که ساخته‌اید، داخل خودِ برنامه">🎧 فایل‌های من</button><button type="button" id="typeBtn" title="متن را بنویسید یا بچسبانید تا خوانده شود و به صورت فایل صدا ذخیره شود">✎ نوشتن متن</button><button type="button" id="helpBtn" aria-haspopup="dialog" aria-controls="helpPanel">راهنما</button></div></details>
-      <input id="fileInput" type="file" hidden multiple accept=".pdf,.doc,.docx,.pptx,.epub,.rtf,.odt,.txt,.md,.html,.htm,.fb2,.png,.jpg,.jpeg,.webp,.gif,.bmp,.heic,image/*">
-    </div>
-    <!-- the open book's tools, in three groups: how it is shown, working on its text, saving it -->
+
+      <button type="button" class="primary" id="openFileBtn" title="بازکردن فایل (⌘O / Ctrl+O)"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 7h7l2 3h9v10H3z M3 7V4h6l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>بازکردن</button>
+
+
+
+
+      <details class="more-tools" id="moreTools"><summary aria-label="تنظیمات و ابزارها" title="تنظیمات و ابزارها"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></summary><div class="more-menu">    <details id="bookTools" class="needs-doc book-tools"><summary>ابزارهای متن</summary>
     <div class="row tools needs-doc">
       <div class="group" role="group" aria-label="نمایش">
         <div class="seg" role="group" aria-label="نما">
@@ -53,6 +48,14 @@
         <button id="pdfBtn" type="button" hidden title="ترجمه‌ی فارسی سند را به صورت PDF ذخیره می‌کند (⇧⌘S)">ذخیرهٔ PDF</button>
       </div>
     </div>
+    </details>
+<button id="readingToolsBtn" type="button" hidden aria-expanded="false">صفحه و سرعت</button><button id="settingsBtn" type="button" aria-label="تنظیمات"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>تنظیمات</button><button id="visionBtn" type="button" aria-haspopup="dialog" aria-controls="visionPanel"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12 M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>دید بهتر</button><button id="focusBtn" hidden class="needs-doc" type="button" aria-pressed="false">نمای خلوت</button><div class="search needs-text">
+        <input id="q" type="search" placeholder="جستجو در این صفحه…" title="کلید ورود: مورد بعدی" aria-label="جستجو">
+        <span class="count" id="count"></span>
+      </div><button type="button" id="libBtn" hidden title="فایل‌های صدایی که ساخته‌اید، داخل خودِ برنامه">🎧 فایل‌های من</button><button type="button" id="typeBtn" title="متن را بنویسید یا بچسبانید تا خوانده شود و به صورت فایل صدا ذخیره شود">✎ نوشتن متن</button><button type="button" id="helpBtn" aria-haspopup="dialog" aria-controls="helpPanel">راهنما</button></div></details>
+      <input id="fileInput" type="file" hidden multiple accept=".pdf,.doc,.docx,.pptx,.epub,.rtf,.odt,.txt,.md,.html,.htm,.fb2,.png,.jpg,.jpeg,.webp,.gif,.bmp,.heic,image/*">
+    </div>
+    <!-- the open book's tools, in three groups: how it is shown, working on its text, saving it -->
     <div class="row" id="editBar" hidden>
 
       <button id="edWordBtn" type="button">اصلاح کلمه</button>
@@ -80,11 +83,7 @@
         <button type="button" class="big" id="typeBtn2">نوشتن متن</button>
       </div>
       <p class="hint drop-hint">کاملاً آفلاین · می‌توانید فایل را اینجا بکشید و رها کنید.</p>
-      <ol class="welcome-steps" aria-label="شروع در سه قدم">
-        <li><span class="step-number" aria-hidden="true">۱</span><div><strong>متن را انتخاب کنید</strong><span>فایل باز کنید یا نوشته‌ی خودتان را بچسبانید.</span></div></li>
-        <li><span class="step-number" aria-hidden="true">۲</span><div><strong>به خواندن گوش بدهید</strong><span>«خواندن» را بزنید؛ برای شروع از جای دیگر، روی جمله بزنید.</span></div></li>
-        <li><span class="step-number" aria-hidden="true">۳</span><div><strong>به دلخواه تنظیم کنید</strong><span>سرعت را کم و زیاد کنید یا با «متن +» نوشته را بزرگ‌تر کنید.</span></div></li>
-      </ol>
+
       <div class="formats" aria-label="فایل‌های پشتیبانی‌شده"><span>PDF</span><span>Word</span><span>EPUB</span><span>TXT</span><span>عکس صفحه</span><span>و قالب‌های دیگر</span></div>
       <button type="button" id="welcomeHelp" class="welcome-help" aria-haspopup="dialog" aria-controls="helpPanel">اولین بار است؟ راهنمای کوتاه را ببینید</button>
       <p class="thanks">با تشکر از الف و میم، برای تست و ایده‌های سازنده</p>
@@ -131,7 +130,7 @@
     <section class="field"><h3>اندازهٔ نوشتهٔ کتاب</h3><div class="inline"><button type="button" id="visionFontDown">متن کوچک‌تر −</button><button type="button" id="visionFontUp">متن بزرگ‌تر +</button></div></section>
     <section class="field"><h3>اندازهٔ دکمه‌ها و منوها</h3><div class="vision-options" role="group" aria-label="اندازهٔ ابزارها"><button type="button" data-ui-scale="1">معمولی</button><button type="button" data-ui-scale="1.15">بزرگ</button><button type="button" data-ui-scale="1.3">خیلی بزرگ</button></div></section>
     <section class="field"><h3>رنگ و تضاد</h3><div class="vision-options" role="group" aria-label="رنگ صفحه"><button type="button" class="theme-sample sample-light" data-vision-theme="light">روشن</button><button type="button" class="theme-sample sample-dark" data-vision-theme="dark">تیره</button><button type="button" class="theme-sample sample-yellow" data-vision-theme="blackyellow">زرد روی سیاه</button></div></section>
-    <p class="hint">«نمای خلوت» ابزارهای کم‌کاربرد را جمع می‌کند. اندازهٔ متن و دکمه‌های خواندن همیشه در دسترس‌اند. برای بازگرداندن ابزارها «همهٔ ابزارها» را بزنید.</p>
+    <p class="hint">برای ابزارهای متن، صفحه و سرعت، آیکون تنظیمات بالای صفحه را بزنید.</p>
   </div>
 </div>
 

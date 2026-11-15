@@ -486,8 +486,7 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
         'pages: for n in r.first..=r.last {
             if cancel() { interrupted = true; break; }
             let mut paras: Vec<String> = r.doc.page_text(n, r.opts).into_iter().filter(|p| p != crate::doc::PICTURE_PAGE).collect();
-            if n == 1 && !paras.is_empty() && r.doc.title_is_said() { paras.insert(0, format!("{}.", r.doc.spoken_title(r.opts))); }
-            if n == r.doc.n_pages && !paras.is_empty() && r.doc.name != TYPED_NAME { paras.push(END_WORD.into()); }
+            if n == r.doc.n_pages && !paras.is_empty() && !r.doc.is_typed.load(Ordering::Relaxed) { paras.push(END_WORD.into()); }
             let groups = export_groups(&paras);
             let group_count = groups.len().max(1);
             for (index, text) in groups.into_iter().enumerate() {
@@ -611,7 +610,7 @@ fn audio_seconds(p: &std::path::Path) -> Option<f64> {
 }
 
 fn doc_info(d: &Arc<Document>) -> Value {
-    json!({"id": d.id, "name": d.name, "title": d.title(), "pages": d.n_pages, "lang": d.lang(),
+    json!({"id": d.id, "name": d.name, "isTyped": d.is_typed.load(Ordering::Relaxed), "title": d.title(), "pages": d.n_pages, "lang": d.lang(),
            "canTranslate": d.can_translate(), "hasImages": d.pdfjs, "hasText": d.has_text(), "scanned": d.had_scans,
            "engine": if d.pdfjs { "pdfjs" } else { "text" }})
 }
@@ -1026,6 +1025,7 @@ impl App {
                 }
                 *self.docs.lock().unwrap() = None;
                 let d = open_document(&name, body, self.engines.clone()).map_err(bad)?;
+                d.is_typed.store(q.get("source").is_some_and(|s| s == "typed"), Ordering::Relaxed);
                 crate::vocab::set_source_lang(d.lang());
                 *self.docs.lock().unwrap() = Some(d.clone());
                 Ok(reply_json(&doc_info(&d)))
@@ -1452,3 +1452,6 @@ impl App {
         }
     }
 }
+
+
+

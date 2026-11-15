@@ -250,7 +250,9 @@ final class Server {
             int cs = ctype.toLowerCase(Locale.ROOT).indexOf("charset=");
             if (cs >= 0) charset = ctype.substring(cs + 8).trim();
         }
-        Map<String, String> headers = new HashMap<>(r.headers);
+        Map<String, String> headers = new HashMap<>(noStore());
+        headers.put("Referrer-Policy", "no-referrer");
+        headers.putAll(r.headers);
         headers.remove("Content-Type");
         int status = r.status >= 300 && r.status < 400 || r.status < 100 || r.status > 599 ? 500 : r.status;
         return new WebResourceResponse(mime, charset, status, reason(status), headers, new WipingStream(r.body));

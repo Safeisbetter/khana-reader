@@ -469,7 +469,7 @@ function syncModalState() {
 }
 function openPanel(id) {
   if (document.body.classList.contains("locked")) return;
-  if ($(id).hidden) panelOpener.set(id, document.activeElement);
+  if ($(id).hidden) panelOpener.set(id, document.activeElement.closest(".more-tools")?.querySelector("summary") || document.activeElement);
   $(id).hidden = false;
   const at = panelStack.indexOf($(id));
   if (at >= 0) panelStack.splice(at, 1);
@@ -995,7 +995,7 @@ addEventListener("keydown", e => {
     e.preventDefault(); if (!S.opening) $("fileInput").click(); return;
   }
   if (command && !e.altKey && !e.shiftKey && e.code === "KeyF" && S.doc && S.view === "text") {
-    e.preventDefault(); $("q").focus(); $("q").select(); return;
+    e.preventDefault(); if (document.body.classList.contains("is-reading") && !document.body.classList.contains("reading-tools-open")) $("readingToolsBtn").click(); $("moreTools").open = true; $("q").focus(); $("q").select(); return;
   }
   if (e.key === "F1") { e.preventDefault(); openPanel("helpPanel"); return; }
   // A focused control keeps its own Space/arrow behavior; dialogs and editable text never start playback.
@@ -1143,6 +1143,12 @@ function piecesFor(page, paras, fromPara, fromOff = 0) {
 
 const reader = { active: false, paused: false, run: 0, queue: [], next: 0, playing: [], lastEnd: 0, lastPage: 0, sources: [] };
 function setPlayButton() {
+  const wasReading = document.body.classList.contains("is-reading");
+  const wasPaused = document.body.classList.contains("is-paused");
+  if (reader.active && !reader.paused && (!wasReading || wasPaused)) $("moreTools").open = false;
+  document.body.classList.toggle("is-paused", !!reader.active && !!reader.paused);
+  document.body.classList.toggle("is-reading", !!reader.active);
+  if (!reader.active) { document.body.classList.remove("reading-tools-open"); $("readingToolsBtn").setAttribute("aria-expanded", "false"); $("readingToolsBtn").textContent = "صفحه و سرعت"; }
   $("play").setAttribute("aria-pressed", String(reader.active && !reader.paused));
   $("play").setAttribute("aria-label", reader.active && !reader.paused ? "مکث خواندن" : reader.paused ? "ادامه‌ی خواندن" : "شروع خواندن");
   $("play").textContent = reader.active && !reader.paused ? "❚❚ مکث" : (reader.paused ? "▶ ادامه" : "▶ خواندن");
@@ -1191,16 +1197,6 @@ async function readFrom(i, fromOff = 0) {
   setPlayButton();
   requestAnimationFrame(() => tick(run));
   try {
-    // from the start of the book: its name first (p -1: a piece with no text on screen)
-    // Farsi voice spelled the English letters out and began with a strange sound)
-    const nameable = S.doc.lang !== "fa" || /[؀-ۿ]/.test(S.doc.title || "");
-    if (i === 0 && fromOff === 0 && S.doc.title && nameable && await atBookStart(S.page)) {
-      // (a translated book's name is said in Farsi)
-      const title = translating() ? (await jget(`/api/title?doc=${S.doc.id}&rev=${!!S.settings.reversed}&yeh=${!!S.settings.persianYeh}&tr=true`)).title : S.doc.title;
-      if (reader.run !== run) return;
-      if (reader.queue[0]) reader.queue[0].pause = 0.8;
-      reader.queue.unshift({ page: S.page, p: -1, start: 0, end: 0, text: title + ".", pause: 0 });
-    }
     let ended = false;
     while (reader.run === run) {
       // read on into the next page, prepared before this one ends
@@ -1240,7 +1236,7 @@ async function readFrom(i, fromOff = 0) {
       if (starved) { await sleep(600); continue; }
       if (reader.next >= reader.queue.length) {
         // the last page has been read: say so, so the listener knows the book is finished
-        if (!ended && reader.lastPage >= S.doc.pages && S.doc.name !== "متن من.txt") {
+        if (!ended && reader.lastPage >= S.doc.pages && !S.doc.isTyped) {
           ended = true;
           reader.queue.push({ page: reader.lastPage, p: -1, start: 0, end: 0, text: "پایان متن.", pause: 1.2 });
           continue;
@@ -1765,7 +1761,7 @@ async function openTyped() {
   const t = $("typeText").value.trim();
   if (!t) { toast("اول متنی بنویسید."); return false; }
   stopReading();
-  const d = await (await api("/api/open?name=" + encodeURIComponent("متن من.txt"), { method: "POST", body: new TextEncoder().encode(t).buffer })).json();
+  const d = await (await api("/api/open?source=typed&name=" + encodeURIComponent("متن من.txt"), { method: "POST", body: new TextEncoder().encode(t).buffer })).json();
   if (d.error) { toast(d.error); return false; }
   S.doc = d; S.page = 1; S.view = "text"; S.letters = null;
   loadLengths();

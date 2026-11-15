@@ -171,7 +171,17 @@ if (window.KHANA_NO_MIC) {
     words.forEach(w => w.classList.add('sent'));
     const fraction = Math.min(0.999, Math.max(0, pos.elapsed / Math.max(0.01, pos.duration)));
     const current = words[Math.floor(fraction * words.length)];
-    if (current) current.classList.add('now');
+    if (current) {
+      current.classList.add('now');
+      if (!reader.paused && !getSelection().toString().trim()) {
+        const rect = current.getBoundingClientRect();
+        const top = document.querySelector('.bar').getBoundingClientRect().bottom + 12;
+        const bottom = $('docTools').getBoundingClientRect().top - 12;
+        if (bottom > top && (rect.top < top || rect.bottom > bottom)) {
+          window.scrollBy(0, rect.top - (top + Math.max(0, bottom - top - rect.height) * 0.35));
+        }
+      }
+    }
   }
   async function poll(run, waiting = 0) {
     if (reader.run !== run || !reader.active || document.hidden || polling) return;
@@ -214,11 +224,11 @@ if (window.KHANA_NO_MIC) {
           }
         }
       }
-      const announceTitle = para === 0 && offset === 0 && (doc.lang !== 'fa' || /[؀-ۿ]/.test(doc.title || '')) && await atBookStart(first);
+      const announceTitle = false;
       if (reader.run !== run) return;
       const request = { doc: doc.id, pages: doc.pages, page: first, para, start: offset,
         voice: settings.voice, speed: Number(settings.speed) || 1, tr: !!(doc.canTranslate && settings.translate),
-        rev: !!settings.reversed, yeh: !!settings.persianYeh, autoNext: settings.autoNext !== false, announceTitle };
+        rev: !!settings.reversed, yeh: !!settings.persianYeh, autoNext: settings.autoNext !== false, announceEnd: !doc.isTyped, announceTitle };
       control = control.catch(() => {}).then(() => reader.run === run ? jpost('/api/read_start', request) : null);
       await control;
       if (reader.run === run) poll(run);
@@ -247,4 +257,14 @@ if (window.KHANA_NO_MIC) {
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && reader.active) { clearTimeout(timer); poll(reader.run); }
   });
+})();
+
+(function () {
+ document.documentElement.classList.add('android-reader');
+ const button = $('readingToolsBtn'); button.hidden = false;
+ button.onclick = () => {
+  const open = document.body.classList.toggle('reading-tools-open');
+  button.setAttribute('aria-expanded', String(open));
+  button.textContent = open ? 'بستن ابزارها' : 'صفحه و سرعت';
+ };
 })();
