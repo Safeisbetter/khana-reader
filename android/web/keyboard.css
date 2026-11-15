@@ -35,3 +35,27 @@
 .android-reader body.has-doc .dock .reading-context { display: flex; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none; }
 .android-reader .is-reading:not(.reading-tools-open) .more-menu #bookTools { display: block; }
 .android-reader .is-reading:not(.reading-tools-open) .more-menu .tools { display: flex; }
+
+/* Page and speed stay beside Play in one compact phone row. Expanded controls are temporary. */
+@media (max-width: 680px) {
+ .android-reader body.has-doc .dock { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.15fr) minmax(0,1fr) 48px; gap: 6px; width: calc(100% - 16px); max-width: 520px; padding: 6px; }
+ .android-reader body.has-doc .dock .transport { display: contents; }
+ .android-reader body.has-doc .dock .mobile-dock-button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; min-width: 0; min-height: 52px; padding: 3px; font-size: calc(14px * var(--ui-scale)); line-height: 1.35; grid-row: 1; background: var(--tone); }
+ .android-reader body.has-doc .dock #quickPage { grid-column: 1; }
+ .android-reader body.has-doc .dock #play { grid-column: 2; grid-row: 1; min-width: 0; min-height: 52px; padding-inline: 4px; font-size: calc(18px * var(--ui-scale)); }
+ .android-reader body.has-doc .dock #quickSpeed { grid-column: 3; }
+ .android-reader body.has-doc .dock #stop { grid-column: 4; grid-row: 1; min-width: 48px; min-height: 52px; padding: 4px; font-size: 0; }
+ .android-reader body.has-doc .dock #stop::before { content: "■"; font-size: 20px; }
+ .android-reader body.has-doc .dock .pager, .android-reader body.has-doc .dock .speedctl { display: none; position: absolute; inset-inline: 0; bottom: calc(100% + 8px); background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 10px; justify-content: center; box-shadow: 0 4px 16px #0003; }
+ .android-reader body.has-doc.quick-page-open .dock .pager { display: flex; }
+ .android-reader body.has-doc.quick-speed-open .dock .speedctl { display: flex; }
+ .android-reader body.has-doc .dock .booktime, .android-reader #readingToolsBtn { display: none; }
+ .android-reader body.has-doc #mainContent { touch-action: pan-y pinch-zoom; }
+}
+.android-reader body.has-doc #mainContent { touch-action: pan-y pinch-zoom; }
+.android-reader .mobile-dock-button[aria-expanded="true"] { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+@media (max-width: 680px) {
+ .android-reader body.has-doc:not(.reading-tools-open) .dock { width: calc(100% - 16px); max-width: 520px; }
+}
+.android-reader body.has-doc.keyboard-open.editing-text .dock { display: none; }

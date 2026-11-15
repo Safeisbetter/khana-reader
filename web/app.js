@@ -53,6 +53,8 @@ function applySettings() {
   $("sentenceLines").checked = !!s.sentenceLines;
   $("speed").value = s.speed; $("speedVal").textContent = pct(s.speed);
   $("speedChip").textContent = pct(s.speed);
+  $("quickSpeedValue").textContent = pct(s.speed);
+  $("quickSpeed").setAttribute("aria-label", "سرعت خواندن " + pct(s.speed) + "؛ تنظیم سرعت");
   $("speedChip").classList.toggle("changed", Number(s.speed) !== 1);
   $("speedChip").setAttribute("aria-label", "سرعت " + pct(s.speed) + "؛ برای سرعت عادی بزنید");
   document.documentElement.dataset.theme = THEMES.includes(s.theme) ? s.theme : "auto";
@@ -951,6 +953,8 @@ function syncChrome() {
   if (!has) return;
   $("pageInput").value = fa(S.page);
   $("pageCount").textContent = fa(S.doc.pages);
+  $("quickPageNumber").textContent = fa(S.page);
+  $("quickPage").setAttribute("aria-label", "صفحه " + fa(S.page) + " از " + fa(S.doc.pages) + "؛ انتخاب صفحه");
   $("fileName").title = S.doc.name || "";
   $("pageInput").setAttribute("aria-label", "شماره صفحه؛ از ۱ تا " + fa(S.doc.pages));
   showBookTime();

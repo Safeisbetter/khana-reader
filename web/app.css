@@ -793,3 +793,6 @@ button:active:not(:disabled) { transform: none; }
 .more-menu .tools button { white-space: normal; }
 .focus-reading .more-menu .tools > .group { display: flex; }
 .more-tools:not([open]) > .more-menu, .book-tools:not([open]) > .tools { display: none; }
+
+/* Phone-only quick controls are enabled by the Android shell. */
+.mobile-dock-button { display: none; }

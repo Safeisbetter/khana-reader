@@ -268,3 +268,70 @@ if (window.KHANA_NO_MIC) {
   button.textContent = open ? 'بستن ابزارها' : 'صفحه و سرعت';
  };
 })();
+
+// Positive means the next page in the reader's writing direction. Long presses, taps and vertical scrolls stay untouched.
+function bookSwipeDelta(dx, dy, elapsed, width, rtl) {
+  const threshold = Math.max(56, Math.min(96, width * 0.18));
+  if (![dx, dy, elapsed, width].every(Number.isFinite) || elapsed < 0 || elapsed > 700 || Math.abs(dx) < threshold || Math.abs(dx) < Math.abs(dy) * 1.6) return 0;
+  return (dx > 0 ? 1 : -1) * (rtl ? 1 : -1);
+}
+(function () {
+  const page = $('quickPage'), speed = $('quickSpeed'), content = $('mainContent');
+  page.hidden = speed.hidden = false;
+  $('paragraphHelp').textContent += ' برای صفحهٔ بعد به راست و برای صفحهٔ قبل به چپ بکشید.';
+  function close() {
+    document.body.classList.remove('quick-page-open', 'quick-speed-open');
+    page.setAttribute('aria-expanded', 'false'); speed.setAttribute('aria-expanded', 'false');
+  }
+  function toggle(kind, button) {
+    const open = !document.body.classList.contains(kind);
+    close();
+    document.body.classList.remove('reading-tools-open');
+    $('readingToolsBtn').setAttribute('aria-expanded', 'false');
+    $('readingToolsBtn').textContent = 'صفحه و سرعت';
+    $('moreTools').open = false;
+    if (open) { document.body.classList.add(kind); button.setAttribute('aria-expanded', 'true'); }
+  }
+  page.onclick = () => toggle('quick-page-open', page);
+  speed.onclick = () => toggle('quick-speed-open', speed);
+  document.addEventListener('pointerdown', e => {
+    if (!e.target.closest('#quickPage,#quickSpeed,#pageControls,#speedControls')) close();
+  });
+  document.addEventListener('focusin', e => { if (!e.target.closest('#docTools')) close(); });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const back = document.body.classList.contains('quick-page-open') ? page : document.body.classList.contains('quick-speed-open') ? speed : null;
+    if (back) { close(); back.focus({ preventScroll: true }); e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
+  let gesture = null, suppressClickUntil = 0;
+  const selectable = () => !getSelection() || getSelection().isCollapsed;
+  const ready = () => S.doc && S.doc.pages > 1 && !S.editing && !document.body.classList.contains('keyboard-open') && !$('moreTools').open && !document.querySelector('.panel:not([hidden])') && selectable();
+  content.addEventListener('pointerdown', e => {
+    gesture = null;
+    if (e.pointerType !== 'touch' || !e.isPrimary || !ready() || !e.target.closest('#textView,#pageView') || e.target.closest('input,textarea,button,a,[contenteditable="true"]')) return;
+    gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, time: performance.now(), doc: S.doc.id, page: S.page, seq: S.loadSeq };
+  }, { passive: true });
+  content.addEventListener('pointermove', e => {
+    if (!gesture || e.pointerId !== gesture.id) return;
+    const dx = Math.abs(e.clientX - gesture.x), dy = Math.abs(e.clientY - gesture.y);
+    if (dy > 12 && dy > dx || !selectable()) gesture = null;
+  }, { passive: true });
+  content.addEventListener('pointercancel', () => { gesture = null; }, { passive: true });
+  content.addEventListener('pointerup', e => {
+    const g = gesture; gesture = null;
+    if (!g || e.pointerId !== g.id || !ready() || S.doc.id !== g.doc || S.page !== g.page || S.loadSeq !== g.seq) return;
+    const delta = bookSwipeDelta(e.clientX - g.x, e.clientY - g.y, performance.now() - g.time, content.clientWidth, getComputedStyle(content).direction === 'rtl');
+    const next = S.page + delta;
+    if (!delta) return;
+    suppressClickUntil = performance.now() + 500;
+    e.preventDefault();
+    if (next < 1 || next > S.doc.pages) return;
+    close();
+    loadPage(next).catch(e => toast(e.message));
+    scrollTo({ top: 0, behavior: 'instant' });
+  });
+  content.addEventListener('click', e => {
+    if (performance.now() < suppressClickUntil) { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
+  addEventListener('resize', () => { gesture = null; });
+})();

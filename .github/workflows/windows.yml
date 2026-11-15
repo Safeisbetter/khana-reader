@@ -13,7 +13,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [windows-full, release-review-1.21]
+    branches: [windows-full, release-review-1.21, release-review-1.22]
 
 # (the build may only read the repository; only the publishing job below may write to the release page)
 permissions:
