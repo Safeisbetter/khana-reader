@@ -124,6 +124,47 @@ jobs:
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           if (-not $ok) { throw "the window did not load the page" }
 
+      - name: Split full package for size-limited artifact transfers
+        if: matrix.edition == 'full'
+        shell: pwsh
+        run: |
+          $inputStream = [System.IO.File]::OpenRead('KhanaReader-Windows-full-experimental.zip')
+          try {
+            $buffer = New-Object byte[] (1024 * 1024)
+            $part = 0
+            while ($inputStream.Position -lt $inputStream.Length) {
+              $part++
+              $outputStream = [System.IO.File]::Create("windows-full-part-$part.bin")
+              try {
+                $remaining = 480L * 1024 * 1024
+                while ($remaining -gt 0) {
+                  $count = $inputStream.Read($buffer, 0, [int][Math]::Min($remaining, $buffer.Length))
+                  if ($count -eq 0) { break }
+                  $outputStream.Write($buffer, 0, $count)
+                  $remaining -= $count
+                }
+              } finally { $outputStream.Dispose() }
+            }
+            if ($part -ne 2) { throw 'Unexpected transfer part count' }
+          } finally { $inputStream.Dispose() }
+          Get-FileHash KhanaReader-Windows-full-experimental.zip -Algorithm SHA256
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: matrix.edition == 'full'
+        with:
+          name: Windows-full-transfer-1
+          path: windows-full-part-1.bin
+          compression-level: 0
+          retention-days: 14
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: matrix.edition == 'full'
+        with:
+          name: Windows-full-transfer-2
+          path: windows-full-part-2.bin
+          compression-level: 0
+          retention-days: 14
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: KhanaReader-Windows-${{ matrix.edition }}-experimental
