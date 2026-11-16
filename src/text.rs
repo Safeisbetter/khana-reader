@@ -1000,6 +1000,13 @@ pub fn latin_only_paragraph(p: &str) -> bool {
 
 const PARAGRAPH_OPENER: &str = r"^\s*(?:و\s+اما|اما|ولی|و\s+برای|به\s+(?:این|همین)\s+دلیل|از\s+(?:این|همین)\s*\x{200c}?رو|بنابراین|با\s+این\s+(?:حال|همه)|از\s+(?:سوی|طرف)\s+دیگر)(?:[\s،,]|$)";
 
+/// An archive or catalogue path, «MIA > آرشیو > Pannekoek > فیلسوف»: two or more separators in a short line. It is a source,
+/// not text to read aloud.
+pub fn archive_path(p: &str) -> bool {
+    let t = p.trim();
+    t.chars().count() < 200 && t.chars().filter(|c| *c == '>' || *c == '›').count() >= 2
+}
+
 pub fn price_line(p: &str) -> bool {
     const AMOUNT: &str = r"(?:US|CAN|CDN|UK|AUS|NZ|EUR)?\s*[$£€¥]\s*[\d۰-۹٠-٩]+(?:[.,٫٬][\d۰-۹٠-٩]+)?\s*(?:USA|USD|US|CAND|CAN|CAD|CDN|UK|GBP|AUS|AUD|NZ|EUR)?";
     fullmatch(&format!(r"\s*{AMOUNT}(?:\s*[/|،,;·\-–]?\s*{AMOUNT})*\s*[.،]?\s*"), p)
@@ -1796,9 +1803,6 @@ pub fn drop_footnote_lines(lines: &mut Vec<LLine>, page_h: f64) -> Vec<u32> {
     let is_note = |l: &LLine| below(l) && l.top >= first_top;
     let mut numbers: Vec<u32> = lines.iter().filter(|l| is_note(l)).filter_map(|l| note_number(&l.text)).collect();
     numbers.append(&mut mid_marks);
-    if std::env::var("KHANA_PIECES").is_ok() {
-        lines.iter().filter(|l| is_note(l)).for_each(|l| eprintln!("footnote line: {}", l.text));
-    }
     lines.retain(|l| !is_note(l));
     numbers
 }

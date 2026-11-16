@@ -667,10 +667,6 @@ impl Engine {
             if heard_clean {
                 dur_ok = solid <= 1.6 * expected_loose;
             }
-            if std::env::var("KHANA_TAKES").is_ok() {
-                eprintln!("TAKE {} {}: loud {} same_voice {} words {} dur {} pace {} (ratio {:.2}) solid {:.2} dead {:.2} heard {:?} missing {} len {:.1}s",
-                          voice.id, take, loud_ok, same_voice, words_ok, dur_ok, pace_ok, ratio, frac, dead, heard.map(|h| (h * 100.0).round()), missing.len(), dur);
-            }
             let solid_ok = frac >= 0.55 || heard_clean && frac >= 0.40;
             if loud_ok && same_voice && words_ok && dur_ok && (pace_ok || heard_clean) && solid_ok && dead <= 0.35 {
                 if pace_ok && tokens >= 6 && solid > 0.2 {

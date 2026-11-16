@@ -129,6 +129,9 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("پژوهش‌گران", "pa;uheSgarAn"),
     ("ماکیان", "mAkiyAn"),
     ("علیرغم", "?alA raqme"),
+    ("سحر", "sahar"),
+    ("قرمه‌سبزی", "qormesabzi"),
+    ("استریت", "?estreyt"),
 ];
 
 const RUST_LEXICON: &[(&str, &str)] = &[

@@ -93,7 +93,7 @@ fn all_voices() -> Vec<(String, String, String, String)> {
 fn default_settings() -> Map<String, Value> {
     let first = voices().first().map(|v| v.id).unwrap_or("");
     let v = json!({"voice": first, "speed": 1.0, "fontSize": 21, "lineHeight": 2.2, "reversed": false, "persianYeh": true, "autoNext": true,
-                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "normal", "cursor": "large"});
+                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "font": "vazir", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "normal", "cursor": "large"});
     v.as_object().unwrap().clone()
 }
 
@@ -189,7 +189,7 @@ impl Speech {
         let settings = load_settings();
         eng.g2p.set_lexicon(&lexicon_pairs(&settings));
         eng.natural.store(settings.get("naturalTone").and_then(|v| v.as_bool()).unwrap_or(true), Ordering::Relaxed);
-        tts::set_comma_pause(settings.get("commaPause").and_then(|v| v.as_str()).unwrap_or("normal"));
+        tts::set_comma_pause(settings.get("commaPause").and_then(|v| v.as_str()).unwrap_or("short"));
         let recent = self.last_play.lock().unwrap().map_or(false, |t| t.elapsed() < Duration::from_secs(30));
         let workers = if recent { 3 } else { 5 };
         let workers = std::env::var("KHANA_WORKERS").ok().and_then(|v| v.parse::<usize>().ok()).filter(|n| (1..=8).contains(n)).unwrap_or(workers);

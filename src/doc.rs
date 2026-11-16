@@ -397,6 +397,7 @@ impl Document {
             paras = paras.iter().map(|p| drop_repeated_phrase(p)).collect();
         }
         paras.retain(|p| !crate::text::price_line(p));
+        paras.retain(|p| !crate::text::archive_path(p));
         if self.lang() == "fa" {
             paras.retain(|p| rtl(p) || !search(CITATION_LINE, p));
             paras.retain(|p| !latin_only_paragraph(p));

@@ -60,8 +60,11 @@ function applySettings() {
   $("speedChip").setAttribute("aria-label", "سرعت " + pct(s.speed) + "؛ برای سرعت عادی بزنید");
   const chosenTheme = s.theme === undefined ? "modern" : s.theme;
   document.documentElement.dataset.theme = THEMES.includes(chosenTheme) ? chosenTheme : "auto";
-  document.querySelectorAll("input[name=comma]").forEach(r => r.checked = r.value === (s.commaPause || "normal"));
+  document.querySelectorAll("input[name=comma]").forEach(r => r.checked = r.value === (s.commaPause || "short"));
   document.querySelectorAll("input[name=theme]").forEach(r => r.checked = r.value === (THEMES.includes(chosenTheme) ? chosenTheme : "auto"));
+  const chosenFont = ["vazir", "naskh"].includes(s.font) ? s.font : "vazir";
+  document.documentElement.dataset.font = chosenFont;
+  document.querySelectorAll("input[name=font]").forEach(r => r.checked = r.value === chosenFont);
   document.querySelectorAll("[data-speed]").forEach(b => b.classList.toggle("on", Number(b.dataset.speed) === Number(s.speed) && b.id !== "speedReset"));
   $("fontSize").value = s.fontSize; $("fontVal").textContent = fa(s.fontSize);
   $("fontChip").textContent = fa(s.fontSize);
@@ -156,6 +159,7 @@ document.querySelectorAll("input[name=hl]").forEach(r => r.onchange = () => setS
 document.querySelectorAll("input[name=fc]").forEach(r => r.onchange = () => setSetting("frameColor", r.value));
 document.querySelectorAll("input[name=comma]").forEach(r => r.onchange = () => { setSetting("commaPause", r.value); ttsCache.clear(); restartReading(); });
 document.querySelectorAll("input[name=theme]").forEach(r => r.onchange = () => setSetting("theme", r.value));
+document.querySelectorAll("input[name=font]").forEach(r => r.onchange = () => setSetting("font", r.value));
 $("pageWidth").oninput = e => setSetting("pageWidth", Number(e.target.value));
 $("pageMargin").oninput = e => setSetting("pageMargin", Number(e.target.value));
 $("sentenceLines").onchange = e => {
@@ -526,6 +530,40 @@ $("moreTools").addEventListener('keydown', e => {
 $("helpBtn").onclick = $("welcomeHelp").onclick = () => openPanel("helpPanel");
 $("helpSettings").onclick = () => { $("helpPanel").hidden = true; openPanel("settings"); };
 $("openFileBtn").onclick = $("welcomeOpen").onclick = () => $("fileInput").click();
+// a soft bell when the start page opens: three rising notes, made here (no sound file). Browsers may hold it back until the first tap.
+function startChime() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    [523.25, 659.25, 783.99].forEach((f, i) => {
+      const t = ctx.currentTime + i * 0.22;
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = f;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 1.15);
+    });
+    setTimeout(() => ctx.close && ctx.close(), 2000);
+  } catch (e) { /* no sound is fine */ }
+}
+startChime();
+// the fish in the water: a press shows or hides the quotation in the water
+{
+  const jump = $("jumpArt");
+  const toggleQuote = () => {
+    const open = jump.classList.toggle("show-quote");
+    jump.setAttribute("aria-expanded", String(open));
+  };
+  jump.addEventListener("click", toggleQuote);
+  jump.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleQuote(); }
+  });
+}
 
 /* ---------------- opening ---------------- */
 // pictures (a photo of a page, a screenshot): read with the app's text recognition, one page per picture
@@ -1073,7 +1111,7 @@ function pumpSpeech() {
   }
 }
 function speechBuffer(text, run) {
-  const key = S.settings.voice + "|" + S.settings.speed + "|" + (S.settings.naturalTone !== false) + "|" + (S.settings.commaPause || "normal") + "|" + text;
+  const key = S.settings.voice + "|" + S.settings.speed + "|" + (S.settings.naturalTone !== false) + "|" + (S.settings.commaPause || "short") + "|" + text;
   if (!bufCache.has(key)) {
     const body = JSON.stringify({ text, voice: S.settings.voice, speed: S.settings.speed });
     // a piece queued for reading that was stopped or jumped away from is skipped, so the new

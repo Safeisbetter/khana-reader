@@ -57,7 +57,7 @@ input[type=number], input[type=search], select {
 .speedctl { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .speedctl button { border: 0; border-radius: 0; padding: 6px 10px; font-variant-numeric: tabular-nums; }
 .speedctl button + button { border-inline-start: 1px solid var(--line); }
-#speedChip { min-width: 4.6em; justify-content: center; font-size: 13px; }
+#speedChip { min-width: 4.6em; justify-content: center; font-size: 20px; font-weight: 700; }
 #speedChip.changed { color: var(--lapis); font-weight: 700; }
 .presets { display: flex; gap: 6px; flex-wrap: wrap; }
 .presets button { padding: 3px 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -359,11 +359,11 @@ input[type="text"], input[type="search"], input[type="password"], select, textar
 /* (how long the rest of the book takes to listen to: a small line under the controls) */
 .dock .booktime { flex: 1 1 100%; text-align: center; font-size: 13px; color: var(--muted); margin-top: -2px; }
 #play { min-height: 56px; min-width: 156px; justify-content: center; font-size: 19px; border-radius: 99px; }
-#stop { min-height: 48px; border-radius: 99px; }
-.pager button { border-radius: 99px; min-width: 46px; justify-content: center; }
-.pager input { border-radius: 12px; background: var(--tone); border-color: transparent; }
+#stop { min-height: 56px; min-width: 120px; border-radius: 99px; font-size: 20px; font-weight: 700; }
+.pager button { border-radius: 99px; min-width: 60px; min-height: 56px; justify-content: center; font-size: 28px; font-weight: 700; }
+.pager input { border-radius: 12px; background: var(--tone); border-color: transparent; min-height: 56px; font-size: 22px; font-weight: 700; }
 .speedctl { border: 0; background: var(--tone); border-radius: 99px; padding: 3px; box-shadow: none; }
-.speedctl button { border-radius: 99px; min-width: 44px; justify-content: center; background: transparent; }
+.speedctl button { border-radius: 99px; min-width: 56px; min-height: 56px; justify-content: center; background: transparent; font-size: 24px; font-weight: 700; }
 .speedctl button + button { border-inline-start: 0; }
 body.has-doc main { padding-bottom: 130px; }
 body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: 108px; }
@@ -394,9 +394,9 @@ body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: 108p
   .dock { gap: 6px 8px; }
   .pager { gap: 4px; }
   .pager input { width: 3.3em; }
-  .pager button { min-width: 42px; padding-inline: 8px; }
-  .speedctl button { min-width: 38px; padding: 6px 8px; }
-  #speedChip { min-width: 3.7em; }
+  .pager button { min-width: 52px; min-height: 52px; padding-inline: 8px; font-size: 26px; }
+  .speedctl button { min-width: 48px; min-height: 52px; padding: 6px 8px; font-size: 22px; }
+  #speedChip { min-width: 3.7em; font-size: 19px; }
   body.has-doc main { padding-bottom: 160px; }
   body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: 150px; }
   .panel-body { border-radius: 0; }
@@ -864,3 +864,149 @@ button:active:not(:disabled) { transform: none; }
 :root[data-theme="modern"] input[type=search], :root[data-theme="modern"] .more-tools > summary { min-height: 44px; }
 :root[data-theme="modern"] .row { gap: 8px; }
 @media (prefers-reduced-motion: reduce) { :root[data-theme="modern"] button:active:not(:disabled) { transform: none; } }
+
+/* ---------------- iOS look (the "modern" theme, last layer): Apple's system colours, a blurred top bar, pill buttons,
+   grouped settings cards with separators, and a floating dock. Light and dark follow the phone's setting. ---------------- */
+:root[data-theme="modern"] {
+  --paper: #F2F2F7; --surface: #FFFFFF; --ink: #000000; --muted: rgba(60, 60, 67, .6); --line: rgba(60, 60, 67, .18);
+  --lapis: #007AFF; --lapis-ink: #FFFFFF; --reading: #E5F0FF; --brand: #A71930; --shade: rgba(0, 0, 0, .3);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="modern"] {
+    --paper: #000000; --surface: #1C1C1E; --ink: #FFFFFF; --muted: rgba(235, 235, 245, .6); --line: rgba(84, 84, 88, .65);
+    --lapis: #0A84FF; --lapis-ink: #FFFFFF; --reading: #0B2A4A; --brand: #FF9DAE; --shade: rgba(0, 0, 0, .6);
+  }
+}
+:root[data-theme="modern"] body { font-size: 16px; line-height: 1.5; }
+:root[data-theme="modern"] .bar {
+  background: color-mix(in srgb, var(--surface) 78%, transparent); backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: none; border-bottom: .5px solid var(--line); padding: 10px 16px;
+}
+:root[data-theme="modern"] .logo { color: var(--brand); font-weight: 700; font-size: 24px; letter-spacing: -.02em; }
+:root[data-theme="modern"] button, :root[data-theme="modern"] .btn {
+  background: transparent; color: var(--lapis); border: 0; border-radius: 10px; padding: 8px 12px; font-weight: 500; min-height: 44px; box-shadow: none;
+}
+:root[data-theme="modern"] button:hover:not(:disabled), :root[data-theme="modern"] .btn:hover { background: rgba(120, 120, 128, .12); border-color: transparent; }
+:root[data-theme="modern"] .primary, :root[data-theme="modern"] .primary:hover:not(:disabled) {
+  background: var(--lapis); color: #FFFFFF; border: 0; border-radius: 999px; padding: 8px 18px; font-weight: 600; box-shadow: none;
+}
+:root[data-theme="modern"] .seg, :root[data-theme="modern"] .speedctl {
+  background: rgba(118, 118, 128, .12); border: 0; border-radius: 9px; padding: 2px;
+}
+:root[data-theme="modern"] .seg button, :root[data-theme="modern"] .speedctl button { color: var(--ink); border-radius: 7px; padding: 6px 12px; }
+:root[data-theme="modern"] .on { background: var(--surface); color: var(--ink); box-shadow: 0 2px 6px rgba(0, 0, 0, .14); }
+:root[data-theme="modern"] .text, :root[data-theme="modern"] .welcome {
+  background: var(--surface); border: 0; border-radius: 14px; box-shadow: none;
+}
+:root[data-theme="modern"] .note { background: var(--surface); border: 0; border-radius: 12px; color: var(--muted); }
+:root[data-theme="modern"] input[type=search], :root[data-theme="modern"] input[type=number], :root[data-theme="modern"] select {
+  background: rgba(118, 118, 128, .12); border: 0; border-radius: 10px; color: var(--ink); min-height: 36px;
+}
+:root[data-theme="modern"] .dock {
+  background: color-mix(in srgb, var(--surface) 82%, transparent); border: 0; border-radius: 999px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .14); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+/* settings: grouped cards, separators between rows, section titles in the grey of iOS */
+:root[data-theme="modern"] .panel-body { background: var(--paper); }
+:root[data-theme="modern"] .panel-body > .field {
+  background: var(--surface); border: 0; border-radius: 12px; box-shadow: none; margin: 0 16px 20px; padding: 12px 16px;
+}
+:root[data-theme="modern"] .panel-body > .field > label, :root[data-theme="modern"] .panel-body > .field > .lbl {
+  display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px;
+}
+:root[data-theme="modern"] .hlpick { flex-direction: column; gap: 0; }
+:root[data-theme="modern"] .hlpick label { width: 100%; padding: 11px 0; border-bottom: .5px solid var(--line); font-size: 16px; }
+:root[data-theme="modern"] .hlpick label:last-child { border-bottom: 0; }
+:root[data-theme="modern"] .hlpick input, :root[data-theme="modern"] input[type=radio], :root[data-theme="modern"] input[type=checkbox] { accent-color: var(--lapis); }
+:root[data-theme="modern"] :focus-visible { outline: 2px solid var(--lapis); outline-offset: 2px; }
+/* the settings button: a round grey button with the gear in it, as on an iPhone */
+:root[data-theme="modern"] #settingsBtn {
+  width: 44px; height: 44px; padding: 0; justify-content: center; border-radius: 50%;
+  background: rgba(120, 120, 128, .14); color: var(--ink);
+}
+:root[data-theme="modern"] #settingsBtn .ui-icon { width: 24px; height: 24px; stroke-width: 2; }
+:root[data-theme="modern"] #settingsBtn:hover:not(:disabled) { background: rgba(120, 120, 128, .24); }
+/* inside the tools menu the settings item is a full-width row, like the others, not the round top-bar button */
+:root[data-theme="modern"] .more-menu #settingsBtn { width: 100%; height: auto; min-height: 44px; padding: 8px 12px; border-radius: 12px; justify-content: flex-start; background: transparent; white-space: normal; }
+:root[data-theme="modern"] .more-menu #settingsBtn .ui-icon { width: 26px; height: 26px; flex: none; }
+:root[data-theme="modern"] .more-tools > summary { border-radius: 50%; }
+/* the start page in another Persian face (Noto Naskh Arabic, SIL Open Font License; bundled, works offline); the rest of the page keeps Vazirmatn */
+@font-face { font-family: "KhanaNaskh"; src: url("NotoNaskhArabic-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+:root[data-theme="modern"] .welcome, :root[data-theme="modern"] .welcome h1, :root[data-theme="modern"] .welcome p, :root[data-theme="modern"] .welcome-badge {
+  font-family: var(--font);
+}
+
+/* ---------------- text font (Settings > قلم متن): all fonts are bundled in the app, nothing is downloaded ---------------- */
+:root[data-font="naskh"] { --font: "KhanaNaskh", serif; }
+
+/* ---------------- 3D icons: each icon sits on a glossy tile with a highlight and a shadow ---------------- */
+svg.ui-icon {
+  box-sizing: border-box; padding: 5px; border-radius: 28%; color: #FFFFFF; stroke-width: 2;
+  background: linear-gradient(180deg, #6FB2FF 0%, #0A6CFF 55%, #0055D4 100%);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .6), inset 0 -2px 3px rgba(0, 0, 0, .22), 0 3px 6px rgba(0, 0, 0, .28);
+}
+.primary svg.ui-icon { background: linear-gradient(180deg, #FFFFFF 0%, #E3ECFB 100%); color: #0A6CFF; }
+#settingsBtn svg.ui-icon, .more-tools > summary svg.ui-icon {
+  background: linear-gradient(180deg, #A8A8AE 0%, #8E8E93 55%, #6E6E73 100%); color: #FFFFFF;
+}
+.hero { filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .22)); }
+
+/* start page: one title (the line under the fish), one description, the actions, the formats, then the help and the footer */
+.welcome { gap: 16px; padding: 40px 24px 32px; }
+.welcome .welcome-badge { font-size: 24px; font-weight: 700; color: var(--ink); line-height: 1.5; }
+.welcome > p { font-size: 17px; line-height: 1.9; margin: 0; }
+.welcome .welcome-actions { margin-top: 8px; }
+.welcome-help { margin-top: 8px; }
+
+/* a short quotation at the foot of the start page, with its source */
+.page-quote { margin: 8px 0 0; padding: 12px 16px; border-inline-start: 3px solid var(--line); color: var(--muted); max-width: 46ch; }
+.page-quote p { margin: 0 0 6px; font-size: 15px; line-height: 1.9; }
+.page-quote cite { font-style: normal; font-size: 13px; }
+.page-quote { display: flex; align-items: flex-start; gap: 12px; }
+.page-quote .quote-fish { flex: none; margin-top: 4px; }
+.page-quote p { margin: 0; }
+
+/* the fish above the quotation */
+.quote-wrap { display: grid; justify-items: center; gap: 4px; margin-top: 12px; }
+.quote-wrap .quote-fish { display: block; }
+.page-quote { display: block; }
+/* Settings: each choice is shown in its own face as a sample */
+.font-sample { font-size: 18px; }
+.f-vazir { font-family: "Vazirmatn", sans-serif; }
+.f-naskh { font-family: "KhanaNaskh", serif; }
+
+/* the fish sits on a warm round tile, so it shows in light and dark themes */
+.quote-wrap .quote-fish {
+  width: 84px !important; height: 76px !important; padding: 10px; box-sizing: border-box; border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #FFF6D6 0%, #F4D98C 100%);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .7), 0 4px 10px rgba(0, 0, 0, .18);
+}
+
+/* the fish leaping out of the water, at the foot of the start page */
+.jump-art { width: min(100%, 320px); margin: 20px auto 0; padding: 14px 14px 0; box-sizing: border-box; border-radius: 22px; overflow: hidden; background: radial-gradient(circle at 50% 35%, #FFF6D6 0%, #F4D98C 100%); box-shadow: 0 4px 12px rgba(0, 0, 0, .2); cursor: pointer; }
+.jump-art:focus-visible { outline: 3px solid var(--lapis, #1E6091); outline-offset: 3px; }
+/* a bigger card on a tablet, a window or a Mac; the phone keeps the small one */
+@media (min-width: 700px) { .jump-art { width: min(100%, 480px); } .jump-art .water-quote { font-size: 19px; } }
+@media (min-width: 1000px) { .jump-art { width: min(100%, 600px); } .jump-art .water-quote { font-size: 22px; } }
+/* the text in the water appears when the fish is pressed: it rises and fades in; off for people who ask for less motion */
+.jump-art .water-quote { opacity: 0; transform: translateY(14px); transition: opacity .7s ease, transform .7s ease; }
+.jump-art.show-quote .water-quote { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .jump-art .water-quote { transition: none; transform: none; } }
+.quote-in-water { margin: 0 -14px; padding: 12px 18px 16px; background: linear-gradient(180deg, #2F7FD0 0%, #1F5FA8 100%); color: #FFFFFF; font-size: 15px; line-height: 1.9; text-align: center; }
+.jump-art svg { display: block; }
+.jump-art .jump-deco { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+.jump-art .jump-fish { position: relative; }
+.jump-art { position: relative; }
+.water-quote { position: absolute; left: 12px; right: 12px; bottom: 14px; margin: 0; padding: 10px 14px; box-sizing: border-box; border-radius: 14px; background: rgba(8, 34, 70, .72); text-align: center; direction: rtl; font-family: "Vazirmatn", "KhanaNaskh", sans-serif; font-size: 15px; font-weight: 700; line-height: 1.8; color: #FFFFFF; }
+
+/* the quotation inside the water: its own strong rules, so the page's paragraph rules do not override them */
+/* the quotation in the water: the page's paragraph rules (.welcome p) set a grey colour and narrow width, so this one wins */
+.welcome .jump-art .water-quote { color: #FFFFFF; max-width: none; margin: 0; font-weight: 700; }
+.welcome .jump-art .quote-in-water {
+  display: block !important; margin: 0 -14px !important; padding: 14px 18px 18px !important; max-width: none !important;
+  background: linear-gradient(180deg, #2F7FD0 0%, #1F5FA8 100%) !important; color: #FFFFFF !important;
+  font-size: 15px !important; line-height: 1.9 !important; text-align: center !important;
+}
+
+/* the quotation drawn inside the water of the start-page graphic (SVG text, Noto Naskh Arabic) */
+.jump-art svg text { font-family: "KhanaNaskh", serif; }
