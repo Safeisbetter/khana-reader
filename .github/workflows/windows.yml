@@ -13,7 +13,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [windows-full, accessibility-reading-20261114]
+    branches: [windows-full, release-review-1.21, release-review-1.22]
 
 # (the build may only read the repository; only the publishing job below may write to the release page)
 permissions:
@@ -22,7 +22,7 @@ permissions:
 env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: "v1.17"
+  MODELS_RELEASE: "v1.20"
 
 jobs:
   build:
@@ -50,7 +50,7 @@ jobs:
           $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader-Android.apk" } else { "KhanaReader-Android-lite.apk" }
           gh release download $env:MODELS_RELEASE --repo $env:GITHUB_REPOSITORY -p $apk -D apk
           if ($LASTEXITCODE -ne 0) { throw "Model package download failed" }
-          $expected = if ("${{ matrix.edition }}" -eq "full") { "91b355436a3c9d573b988a1bd7cfc195be3fd263f653a1ae41273776e251b20e" } else { "0f89813add99cab943230299e192402b6ded757f8368f03251dc0467dad35faa" }
+          $expected = if ("${{ matrix.edition }}" -eq "full") { "6aae1480ded35b67c3eb1083eb952c8ce1382014e73d903374b14afba7e6b287" } else { "aff486d3cb57afbbb267462849beee51ed4a39ce0c9ca423b8668d5a8c803b62" }
           if ((Get-FileHash "apk/$apk" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Model package checksum mismatch" }
           Move-Item "apk/$apk" apk/models.zip
           Expand-Archive apk/models.zip -DestinationPath apk/x
@@ -124,9 +124,70 @@ jobs:
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           if (-not $ok) { throw "the window did not load the page" }
 
+      - name: Split full package for size-limited artifact transfers
+        if: matrix.edition == 'full'
+        shell: pwsh
+        run: |
+          $inputStream = [System.IO.File]::OpenRead('KhanaReader-Windows-full-experimental.zip')
+          try {
+            $buffer = New-Object byte[] (1024 * 1024)
+            $part = 0
+            while ($inputStream.Position -lt $inputStream.Length) {
+              $part++
+              $outputStream = [System.IO.File]::Create("windows-full-part-$part.bin")
+              try {
+                $remaining = 480L * 1024 * 1024
+                while ($remaining -gt 0) {
+                  $count = $inputStream.Read($buffer, 0, [int][Math]::Min($remaining, $buffer.Length))
+                  if ($count -eq 0) { break }
+                  $outputStream.Write($buffer, 0, $count)
+                  $remaining -= $count
+                }
+              } finally { $outputStream.Dispose() }
+            }
+            if ($part -ne 2) { throw 'Unexpected transfer part count' }
+          } finally { $inputStream.Dispose() }
+          Get-FileHash KhanaReader-Windows-full-experimental.zip -Algorithm SHA256
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: matrix.edition == 'full'
+        with:
+          name: Windows-full-transfer-1
+          path: windows-full-part-1.bin
+          compression-level: 0
+          retention-days: 14
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: matrix.edition == 'full'
+        with:
+          name: Windows-full-transfer-2
+          path: windows-full-part-2.bin
+          compression-level: 0
+          retention-days: 14
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: KhanaReader-Windows-${{ matrix.edition }}-experimental
           path: KhanaReader-Windows-${{ matrix.edition }}-experimental.zip
           retention-days: 14
           compression-level: 0
+
+  release:
+    needs: build
+    if: ${{ inputs.release }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: zips
+          merge-multiple: true
+      - name: Add the packages to the release page
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v1.16"
+          ls -la zips
+          gh release upload "$tag" zips/*.zip --clobber

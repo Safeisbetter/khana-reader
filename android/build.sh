@@ -41,6 +41,14 @@ export CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=$ROOT=/khana"$'\x1f'"--remap
 rm -rf "$OUT/classes" "$OUT/dex"
 mkdir -p "$OUT/classes" "$OUT/dex"
 JAVA_SRC="$HERE/java/org/khana/reader"
+if [ -n "${KHANA_DEV:-}" ] && [ -z "${KHANA_PUBLIC:-}" ]; then
+  # (KHANA_DEV=1: a developer's build with the speed test and UI checks; never for distribution: its APK is named KhanaReader-dev.apk)
+  JAVA_SRC="$OUT/java-dev"
+  rm -rf "$JAVA_SRC"; mkdir -p "$JAVA_SRC"
+  cp "$HERE"/java/org/khana/reader/*.java "$JAVA_SRC/"
+  sed -i '' 's/static final boolean DEV_TOOLS = false;/static final boolean DEV_TOOLS = true;/' "$JAVA_SRC/MainActivity.java"
+  grep -q 'DEV_TOOLS = true;' "$JAVA_SRC/MainActivity.java" || { echo "DEV_TOOLS switch not found"; exit 1; }
+fi
 if [ -n "${KHANA_PUBLIC:-}" ]; then
   # (the public download: the developer's USB tests are compiled out, so no other app on the phone can start them)
   JAVA_SRC="$OUT/java-public"
@@ -58,7 +66,8 @@ rm -rf "$A"
 mkdir -p "$A/app" "$A/fonts"
 cp -Rc "$ROOT/web" "$A/app/web"
 cp "$HERE/web/android.js" "$A/app/web/"
-if [ -n "${KHANA_PUBLIC:-}" ]; then printf '\nwindow.KHANA_NO_MIC = true;\n' >> "$A/app/web/android.js"; fi
+cat "$HERE/web/keyboard.css" >> "$A/app/web/app.css"
+if [ -n "${KHANA_PUBLIC:-}" ] && [ -n "${KHANA_LITE:-}" ]; then printf '\nwindow.KHANA_NO_MIC = true;\n' >> "$A/app/web/android.js"; fi
 cp -RcL "$ROOT/models" "$A/app/models"
 find "$A" -name '.DS_Store' -delete
 # (as tools/make_app.sh: not the model's Python helper nor Vosk's own example)
@@ -84,8 +93,8 @@ cp "$OUT/fonts/Vazirmatn.ttf" "$A/fonts/"
 rm -f "$OUT/res.zip" "$OUT/unsigned.apk" "$OUT/aligned.apk"
 "$BT/aapt2" compile --dir "$HERE/res" -o "$OUT/res.zip"
 MANIFEST="$HERE/AndroidManifest.xml"
-if [ -n "${KHANA_PUBLIC:-}" ]; then
-  # (the public download asks for no microphone at all: a voice sample is chosen as a file instead, and the page hides recording)
+if [ -n "${KHANA_PUBLIC:-}" ] && [ -n "${KHANA_LITE:-}" ]; then
+  # (the light download asks for no microphone at all: a voice sample is chosen as a file instead, and the page hides recording)
   MANIFEST="$OUT/AndroidManifest.public.xml"
   grep -v -E 'android.permission.(RECORD_AUDIO|MODIFY_AUDIO_SETTINGS)' "$HERE/AndroidManifest.xml" > "$MANIFEST"
 fi
@@ -117,6 +126,7 @@ cp "$OUT/dex/classes.dex" "$OUT/extra/"
 # 6. signed with the app's own key (made once, kept in android/keystore: back it up; an update must
 # be signed with the same key)
 APK=KhanaReader.apk; [ -n "${KHANA_LITE:-}" ] && APK=KhanaReader-lite.apk
+if [ -n "${KHANA_DEV:-}" ] && [ -z "${KHANA_PUBLIC:-}" ]; then APK=KhanaReader-dev.apk; fi
 K="$HERE/keystore"
 if [ ! -f "$K/khana.jks" ]; then
   mkdir -p "$K"

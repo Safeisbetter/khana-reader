@@ -11,8 +11,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.system.Os;
 import android.view.Gravity;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.webkit.CookieManager;
@@ -29,7 +27,6 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.Toolbar;
 import android.window.OnBackInvokedDispatcher;
 import android.widget.TextView;
 import java.io.File;
@@ -51,22 +48,17 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     /** (as GrapheneOS's PDF Viewer: an older WebView is not used) */
     private static final int MIN_WEBVIEW_MAJOR = 133;
     private static final int PICK_FILE = 1, ASK_MIC = 2, SAVE = 3;
-    /** the Mac menu's commands (window.khanaMenu in app.js) */
-    private static final String[][] MENU = {
-            {"settings", "تنظیمات"}, {"mp3", "ذخیره‌ی صدا"}, {"pdf", "ذخیره PDF ترجمه"},
-            {"speed-down", "آهسته‌تر"}, {"speed-up", "تندتر"}, {"speed-reset", "سرعت عادی"},
-            {"font-up", "قلم بزرگ‌تر"}, {"font-down", "قلم کوچک‌تر"}};
-
     private static Server server;
-    /** the bar and, under it, the page (or a message) */
+    /** The page (or a startup message), kept clear of system bars. */
     private LinearLayout outer;
-    private Toolbar bar;
     private FrameLayout root;
     private WebView web;
     private WebMessagePort pagePort;
     private ValueCallback<Uri[]> picking;
     private PermissionRequest micRequest;
     private Exporter.Saved saving;
+    private boolean pageBarPainted;
+    private int barGround, barInk;
 
     // the page's own dark colours (web/app.css, --paper)
     private static final int DARK_PAPER = Color.rgb(16, 20, 27);
@@ -85,27 +77,25 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         if (outer != null) outer.setBackgroundColor(n ? DARK_PAPER : Color.WHITE);
         if (root != null) root.setBackgroundColor(n ? DARK_PAPER : Color.WHITE);
         if (web != null) web.setBackgroundColor(n ? DARK_PAPER : Color.WHITE);
-        if (bar != null) bar.setBackgroundColor(n ? Color.rgb(20, 62, 52) : Color.rgb(31, 111, 92));
+        // Keep a chosen page theme until the page supplies its updated colours. Resetting to
+        // green here left the bar green when the page's colour had not changed (and was cached).
+        if (outer != null) applyBarColors(pageBarPainted ? barGround : defaultBarGround(), pageBarPainted ? barInk : defaultBarInk());
     }
+
+    private int defaultBarGround() { return night() ? Color.rgb(24, 30, 40) : Color.WHITE; }
+    private int defaultBarInk() { return night() ? Color.rgb(231, 235, 242) : Color.rgb(26, 33, 48); }
 
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        current = this;
         // (secure from the first moment; applyScreenGuard lifts it only if the reader chose so)
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
         outer.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
-        // the app's bar (its menu: the Mac menu's commands) is the window's own Toolbar, so that both it
-        // and the page are kept clear of the system bars here (edge to edge: Android 15 and newer)
-        bar = new Toolbar(this);
-        // (no title of its own: the page right under it shows the app's name; the bar keeps the menu)
-        bar.setTitle("");
-        bar.setContentDescription("خوانا");
-        bar.setBackgroundColor(night() ? Color.rgb(20, 62, 52) : Color.rgb(31, 111, 92));
-        bar.setTitleTextColor(Color.WHITE);
-        outer.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        setActionBar(bar);
+        // The page already has settings, export, font and speed controls. A second, empty native
+        // toolbar wasted a full row, especially in landscape. Keep just the system-safe insets.
         root = new FrameLayout(this);
         root.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
         outer.addView(root, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -119,6 +109,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
             return in;
         });
         setContentView(outer);
+        applyBarColors(defaultBarGround(), defaultBarInk());
         if (Build.VERSION.SDK_INT >= 33) {
             // (the back gesture, Android 13 and newer; for an app made for Android 16 and newer the only way)
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::goBack);
@@ -129,6 +120,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
             return;
         }
         if (server != null) {
+            applyScreenGuard();
             showPage();
             return;
         }
@@ -407,28 +399,31 @@ public final class MainActivity extends Activity implements Exporter.Asker {
      * photograph or record this screen (a screen recorder, a «screen sharing» app), and the list of recent apps shows a blank
      * card instead of the page being read. Asked again whenever the settings are saved (Server).
      */
-    /** The bar at the top in the page's own colours (its ground and writing), so it matches «رنگ پس‌زمینه»; the status bar's icons
+    /** The system-bar margins in the page's own colours, so they match «رنگ پس‌زمینه»; the status bar's icons
      *  dark on a light bar and light on a dark one. */
     static void paintBar(final int ground, final int ink) {
         final MainActivity a = current;
         if (a == null) return;
         android.util.Log.i("KhanaBar", String.format("bar painted #%06x #%06x", ground & 0xFFFFFF, ink & 0xFFFFFF));
         a.runOnUiThread(() -> {
-            if (a.bar == null) return;
-            a.bar.setBackgroundColor(ground);
-            a.bar.setTitleTextColor(ink);
-            android.graphics.drawable.Drawable more = a.bar.getOverflowIcon();
-            if (more != null) more.setTint(ink);
-            a.outer.setBackgroundColor(ground);
-            boolean light = (0.299 * Color.red(ground) + 0.587 * Color.green(ground) + 0.114 * Color.blue(ground)) > 150;
-            if (Build.VERSION.SDK_INT >= 30) {
-                android.view.WindowInsetsController c = a.getWindow().getInsetsController();
-                if (c != null) {
-                    int f = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
-                    c.setSystemBarsAppearance(light ? f : 0, f);
-                }
-            }
+            if (a.outer == null) return;
+            a.pageBarPainted = true;
+            a.applyBarColors(ground, ink);
         });
+    }
+
+    private void applyBarColors(int ground, int ink) {
+        barGround = ground;
+        barInk = ink;
+        outer.setBackgroundColor(ground);
+        boolean light = (0.299 * Color.red(ground) + 0.587 * Color.green(ground) + 0.114 * Color.blue(ground)) > 150;
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowInsetsController c = getWindow().getInsetsController();
+            if (c != null) {
+                int f = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                c.setSystemBarsAppearance(light ? f : 0, f);
+            }
+        }
     }
 
     static void applyScreenGuard() {
@@ -449,7 +444,8 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     }
 
     /** A developer's speed test (Bench), only when it is asked for over USB with USB debugging switched on. */
-    /** The developer's tests (Bench) exist only in a developer's own build: the public download is built with this false (android/build.sh). */
+    /** The developer's tests (Bench) exist only in a developer's own build: false by default, so every build that leaves this computer
+     *  is safe; android/build.sh switches it on only for KHANA_DEV=1, into a separately named APK. */
     static final boolean DEV_TOOLS = false;
 
     private void maybeBench(Intent it) {}
@@ -460,50 +456,16 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         if (server != null) maybeBench(it);
     }
 
-    // While a file is being made, or the book is being read aloud, the screen stays on. Not for the look of it: Android gives
-    // the app on the screen every processor core, but an app behind another, or with the screen off, only the four small ones
-    // (seen on one tablet: cores 0-3 of 8), where making speech is several times slower: a 20-page MP3 took two hours.
-    // Reading with the screen off (tried 2026-11-13): Android 16+'s «audio hardening» mutes the web view's sound in the background;
-    // the shell playing the speech itself works (checked on a tablet), the hand-over from the page is not finished: dist/screen-off-reading.
-    private final android.os.Handler awake = new android.os.Handler(android.os.Looper.getMainLooper());
-    private final Runnable keepAwake = new Runnable() {
-        @Override
-        public void run() {
-            boolean working = Native.busy() || android.os.SystemClock.elapsedRealtime() - Server.lastSpeech < 20000 && Server.lastSpeech != 0;
-            if (working) getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            else getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            awake.postDelayed(this, 3000);
-        }
-    };
-
     @Override
     protected void onResume() {
         super.onResume();
         if (server != null) Exporter.setAsker(this);
-        awake.removeCallbacks(keepAwake);
-        awake.post(keepAwake);
     }
 
     @Override
     protected void onPause() {
-        awake.removeCallbacks(keepAwake);
         if (saving == null) Exporter.setAsker(null); // (the «save as» screen itself pauses this window)
         super.onPause();
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu m) {
-        for (int i = 0; i < MENU.length; i++) m.add(0, i, i, MENU[i][1]);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        int i = item.getItemId();
-        if (web == null || i < 0 || i >= MENU.length) return super.onOptionsItemSelected(item);
-        // (the command is one of the fixed names above)
-        web.evaluateJavascript("window.khanaMenu && window.khanaMenu('" + MENU[i][0] + "')", null);
-        return true;
     }
 
     /** (Android 12 and older; newer ones: the callback in onCreate) */
@@ -528,7 +490,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     protected void onDestroy() {
         if (server != null) server.clearBodies();
         Exporter.setAsker(null);
-        if (isFinishing() && server != null) {
+        if (isFinishing() && server != null && !ReadService.reading()) {
             // (the window is ending: the open book is let go, its text overwritten, not left for the process's remaining life)
             try {
                 Native.handle(Native.utf8("POST"), Native.utf8("/api/close"), Native.utf8(""), Native.utf8(server.token()), null);

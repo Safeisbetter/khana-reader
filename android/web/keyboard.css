@@ -1,0 +1,61 @@
+/* A landscape tablet leaves little height above its keyboard. Keep both words and the action in normal flow. */
+.keyboard-open #wordPanel .panel-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 6px; padding-bottom: 8px; }
+.keyboard-open #wordPanel .panel-head, .keyboard-open #wordPanel .edit-context, .keyboard-open #wordPanel .editor-actions { grid-column: 1 / -1; }
+.keyboard-open #wordPanel .panel-head { padding-block: 3px; }
+.keyboard-open #wordPanel .edit-context { max-height: 44px; padding-block: 4px; }
+.keyboard-open #wordPanel .field { min-width: 0; padding: 5px; }
+.keyboard-open #wordPanel .field label { font-size: 13px; line-height: 1.6; }
+.keyboard-open #wordPanel input { width: 100%; min-width: 0; }
+.keyboard-open #wordPanel .editor-actions { position: static; padding-block: 3px; }
+
+/* Keep the book visible during playback; all controls remain available on demand. */
+.android-reader body:not(.has-doc) #readingToolsBtn { display: none; }
+.android-reader .is-reading:not(.reading-tools-open) .top > :not(.brand):not(.more-tools) { display: none; }
+.android-reader .is-reading:not(.reading-tools-open) .tools { display: none; }
+.android-reader .is-reading:not(.reading-tools-open) .dock .pager,
+.android-reader .is-reading:not(.reading-tools-open) .dock .speedctl,
+.android-reader .is-reading:not(.reading-tools-open) .dock .booktime,
+.android-reader .is-reading:not(.reading-tools-open) .reading-context { display: none; }
+.android-reader .is-reading .top .brand { flex: 1 1 0; }
+.android-reader .is-reading #readingToolsBtn { flex: 0 0 auto; }
+.android-reader .is-reading:not(.reading-tools-open) .dock { width: max-content; max-width: calc(100% - 16px); padding: 6px 10px; }
+.android-reader .is-reading:not(.reading-tools-open) #play { min-height: 50px; min-width: 130px; }
+.android-reader .is-reading:not(.reading-tools-open) #bookTools { display: none; }
+.keyboard-open.editing-text #bookTools { display: none; }
+
+/* The ready state must leave as much room for the book as playback does. */
+.android-reader .has-doc:not(.reading-tools-open) .dock .pager,
+.android-reader .has-doc:not(.reading-tools-open) .dock .speedctl,
+.android-reader .has-doc:not(.reading-tools-open) .dock .booktime,
+.android-reader .has-doc:not(.reading-tools-open) .reading-context { display: none; }
+.android-reader .has-doc:not(.reading-tools-open) .dock { width: max-content; max-width: calc(100% - 16px); padding: 6px 10px; }
+.android-reader .has-doc:not(.reading-tools-open) #play { min-height: 50px; min-width: 130px; }
+.android-reader .has-doc:not(.reading-tools-open) .dock .transport { flex: 0 1 auto; }
+/* Keep playback status available to screen readers without using a visible row. */
+.android-reader body.has-doc .dock .reading-context { display: flex; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none; }
+.android-reader .is-reading:not(.reading-tools-open) .more-menu #bookTools { display: block; }
+.android-reader .is-reading:not(.reading-tools-open) .more-menu .tools { display: flex; }
+
+/* Page and speed stay beside Play in one compact phone row. Expanded controls are temporary. */
+@media (max-width: 680px) {
+ .android-reader body.has-doc .dock { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.15fr) minmax(0,1fr) 48px; gap: 6px; width: calc(100% - 16px); max-width: 520px; padding: 6px; }
+ .android-reader body.has-doc .dock .transport { display: contents; }
+ .android-reader body.has-doc .dock .mobile-dock-button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; min-width: 0; min-height: 52px; padding: 3px; font-size: calc(14px * var(--ui-scale)); line-height: 1.35; grid-row: 1; background: var(--tone); }
+ .android-reader body.has-doc .dock #quickPage { grid-column: 1; }
+ .android-reader body.has-doc .dock #play { grid-column: 2; grid-row: 1; min-width: 0; min-height: 52px; padding-inline: 4px; font-size: calc(18px * var(--ui-scale)); }
+ .android-reader body.has-doc .dock #quickSpeed { grid-column: 3; }
+ .android-reader body.has-doc .dock #stop { grid-column: 4; grid-row: 1; min-width: 48px; min-height: 52px; padding: 4px; font-size: 0; }
+ .android-reader body.has-doc .dock #stop::before { content: "■"; font-size: 20px; }
+ .android-reader body.has-doc .dock .pager, .android-reader body.has-doc .dock .speedctl { display: none; position: absolute; inset-inline: 0; bottom: calc(100% + 8px); background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 10px; justify-content: center; box-shadow: 0 4px 16px #0003; }
+ .android-reader body.has-doc.quick-page-open .dock .pager { display: flex; }
+ .android-reader body.has-doc.quick-speed-open .dock .speedctl { display: flex; }
+ .android-reader body.has-doc .dock .booktime, .android-reader #readingToolsBtn { display: none; }
+ .android-reader body.has-doc #mainContent { touch-action: pan-y pinch-zoom; }
+}
+.android-reader body.has-doc #mainContent { touch-action: pan-y pinch-zoom; }
+.android-reader .mobile-dock-button[aria-expanded="true"] { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+@media (max-width: 680px) {
+ .android-reader body.has-doc:not(.reading-tools-open) .dock { width: calc(100% - 16px); max-width: 520px; }
+}
+.android-reader body.has-doc.keyboard-open.editing-text .dock { display: none; }
