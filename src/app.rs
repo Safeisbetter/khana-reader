@@ -55,6 +55,13 @@ fn library_dir() -> Option<PathBuf> {
     if cfg!(shell) { Some(save_dir()) } else { None }
 }
 
+fn output_stem(name: &std::path::Path) -> String {
+    let s = name.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let clean: String = s.chars().map(|c| if c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') { '_' } else { c }).collect();
+    let clean = clean.trim().trim_matches('.').to_string();
+    if clean.is_empty() { "khana".to_string() } else { clean }
+}
+
 fn library_file(name: &str) -> Option<PathBuf> {
     let dir = library_dir()?;
     let plain = !name.is_empty() && !name.contains('/') && !name.contains('\\') && !name.starts_with('.') && name.chars().count() <= 200;
@@ -312,6 +319,9 @@ pub struct Job {
     total_chars: Mutex<usize>,
     seconds: Mutex<f64>,
     cancelled: AtomicBool,
+    keep_partial: AtomicBool,
+    discard_partial: AtomicBool,
+    publication: Mutex<()>,
     pub path: Mutex<Option<PathBuf>>,
     pub saved: Mutex<Option<PathBuf>>,
 }
@@ -327,6 +337,9 @@ impl Job {
             total_chars: Mutex::new(1),
             seconds: Mutex::new(0.0),
             cancelled: AtomicBool::new(false),
+            keep_partial: AtomicBool::new(false),
+            discard_partial: AtomicBool::new(false),
+            publication: Mutex::new(()),
             path: Mutex::new(None),
             saved: Mutex::new(None),
         }
@@ -433,6 +446,25 @@ impl Drop for ListenAgain {
     }
 }
 
+fn export_groups(paras: &[String]) -> Vec<String> {
+    let mut groups = Vec::new();
+    let mut group = String::new();
+    for paragraph in paras {
+        let mut rest = paragraph.trim();
+        while !rest.is_empty() {
+            let at = rest.char_indices().nth(600).map(|(i, _)| i).unwrap_or(rest.len());
+            let cut = if at < rest.len() { rest[..at].rfind(char::is_whitespace).filter(|&i| i > 0).unwrap_or(at) } else { at };
+            let piece = rest[..cut].trim();
+            if !group.is_empty() && group.chars().count() + piece.chars().count() > 600 { groups.push(std::mem::take(&mut group)); }
+            if !group.is_empty() { group.push_str("\n\n"); }
+            group.push_str(piece);
+            rest = rest[cut..].trim_start();
+        }
+    }
+    if !group.is_empty() { groups.push(group); }
+    groups
+}
+
 fn run_job(job: Arc<Job>, r: Mp3Req) {
     let _listen = ListenAgain;
     JOB_RUNNING.store(true, Ordering::Relaxed);
@@ -447,28 +479,8 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
     *job.path.lock().unwrap() = Some(path.clone());
     let _awake = crate::platform::awake(c"Khana Reader is saving an MP3");
     let res = (|| -> Result<(), String> {
-        let mut paras = Vec::new();
-        for n in r.first..=r.last {
-            paras.extend(r.doc.page_text(n, r.opts).into_iter().filter(|p| p != crate::doc::PICTURE_PAGE));
-        }
-        if r.first == 1 && !paras.is_empty() && r.doc.title_is_said() {
-            paras.insert(0, format!("{}.", r.doc.spoken_title(r.opts)));
-        }
-        if r.last >= r.doc.n_pages && !paras.is_empty() && r.doc.name != TYPED_NAME {
-            paras.push(END_WORD.into());
-        }
-        *job.total_chars.lock().unwrap() = paras.iter().map(|p| len(p)).sum::<usize>().max(1);
-        let mut groups: Vec<Vec<String>> = Vec::new();
-        let mut cur: Vec<String> = Vec::new();
-        for p in paras {
-            if !cur.is_empty() && cur.iter().map(|x| len(x)).sum::<usize>() + len(&p) > 1500 {
-                groups.push(std::mem::take(&mut cur));
-            }
-            cur.push(p);
-        }
-        if !cur.is_empty() {
-            groups.push(cur);
-        }
+        let cancel = || job.cancelled.load(Ordering::SeqCst);
+        *job.total_chars.lock().unwrap() = (r.last - r.first + 1).saturating_mul(1000).max(1);
         let mut out = std::fs::File::create(&path).map_err(|e| e.to_string())?;
         use std::io::{Seek, SeekFrom, Write};
         let mut enc: Option<crate::mp3::Mp3> = None;
@@ -477,33 +489,39 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
         if wav {
             out.write_all(&[0u8; 44]).map_err(|e| e.to_string())?;
         }
-        let cancel = || job.cancelled.load(Ordering::SeqCst);
-        for group in groups {
-            tts::wait_for_power(&cancel);
-            if cancel() {
-                return Err("cancelled".into());
+        let mut interrupted = false;
+        'pages: for n in r.first..=r.last {
+            if cancel() { interrupted = true; break; }
+            let mut paras: Vec<String> = r.doc.page_text(n, r.opts).into_iter().filter(|p| p != crate::doc::PICTURE_PAGE).collect();
+            if n == r.doc.n_pages && !paras.is_empty() && !r.doc.is_typed.load(Ordering::Relaxed) { paras.push(END_WORD.into()); }
+            let groups = export_groups(&paras);
+            let group_count = groups.len().max(1);
+            for (index, text) in groups.into_iter().enumerate() {
+                tts::wait_for_power(&cancel);
+                if cancel() { interrupted = true; break 'pages; }
+                let (mut pcm, rate) = match speech().synthesize(&text, &r.voice, r.speed, &cancel) {
+                    Ok(audio) => audio,
+                    Err(_) if cancel() => { interrupted = true; break 'pages; }
+                    Err(error) => return Err(error),
+                };
+                if cancel() { interrupted = true; break 'pages; }
+                if !wav && enc.is_none() { enc = Some(crate::mp3::Mp3::new(rate as u32, r.bitrate)?); }
+                pcm.extend(std::iter::repeat(0f32).take((rate as f64 * 0.45) as usize));
+                if wav {
+                    wav_rate = rate as u32;
+                    let bytes: Vec<u8> = audio::to_pcm16(&pcm).iter().flat_map(|x| x.to_le_bytes()).collect();
+                    wav_bytes_written = wav_bytes_written.checked_add(u32::try_from(bytes.len()).map_err(|_| "فایل WAV خیلی بزرگ است.")?).filter(|&n| n <= u32::MAX - 36).ok_or("فایل WAV خیلی بزرگ است.")?;
+                    out.write_all(&bytes).map_err(|e| e.to_string())?;
+                } else { out.write_all(&enc.as_mut().unwrap().encode(&audio::to_pcm16(&pcm))).map_err(|e| e.to_string())?; }
+                *job.seconds.lock().unwrap() += pcm.len() as f64 / rate as f64;
+                *job.done_chars.lock().unwrap() = (n - r.first) * 1000 + (index + 1) * 1000 / group_count;
+                out.flush().map_err(|e| e.to_string())?;
             }
-            let text = group.join("\n\n");
-            let (a, rate) = speech().synthesize(&text, &r.voice, r.speed, &cancel)?;
-            if cancel() {
-                return Err("cancelled".into());
-            }
-            if !wav && enc.is_none() {
-                enc = Some(crate::mp3::Mp3::new(rate as u32, r.bitrate)?);
-            }
-            let mut pcm = a.clone();
-            pcm.extend(std::iter::repeat(0f32).take((rate as f64 * 0.45) as usize));
-            if wav {
-                wav_rate = rate as u32;
-                let bytes: Vec<u8> = audio::to_pcm16(&pcm).iter().flat_map(|x| x.to_le_bytes()).collect();
-                wav_bytes_written += bytes.len() as u32;
-                out.write_all(&bytes).map_err(|e| e.to_string())?;
-            } else {
-                out.write_all(&enc.as_mut().unwrap().encode(&audio::to_pcm16(&pcm))).map_err(|e| e.to_string())?;
-            }
-            *job.seconds.lock().unwrap() += pcm.len() as f64 / rate as f64;
-            *job.done_chars.lock().unwrap() += group.iter().map(|x| len(x)).sum::<usize>();
+            *job.done_chars.lock().unwrap() = (n - r.first + 1) * 1000;
         }
+        let partial = interrupted || cancel();
+        if partial && (!job.keep_partial.load(Ordering::SeqCst) || job.discard_partial.load(Ordering::SeqCst)) { return Err("cancelled".into()); }
+        if partial && *job.seconds.lock().unwrap() <= 0.0 { return Err("cancelled".into()); }
         if wav {
             if wav_bytes_written == 0 {
                 return Err("در این صفحه\u{200c}ها متنی برای خواندن نیست.".into());
@@ -528,6 +546,9 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
             out.write_all(&e.flush()).map_err(|e| e.to_string())?;
         }
         drop(out);
+        let _publication = job.publication.lock().unwrap();
+        if cancel() && (!job.keep_partial.load(Ordering::SeqCst) || job.discard_partial.load(Ordering::SeqCst)) { return Err("cancelled".into()); }
+        let partial = partial || cancel();
         let mut from = path.clone();
         if r.format == "m4a" {
             let m4a = path.with_extension("m4a");
@@ -538,11 +559,23 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
             *job.path.lock().unwrap() = Some(m4a.clone());
             from = m4a;
         }
-        let saved = unique_path(save_dir().join(&job.filename));
-        std::fs::copy(&from, &saved).map_err(|e| e.to_string())?;
+        let filename = if partial {
+            let name = std::path::Path::new(&job.filename);
+            format!("{} - ناقص.{}", name.file_stem().unwrap_or_default().to_string_lossy(), name.extension().unwrap_or_default().to_string_lossy())
+        } else { job.filename.clone() };
+        let saved = unique_path(save_dir().join(filename));
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
+        let mut source = std::fs::File::open(&from).map_err(|e| e.to_string())?;
+        let mut destination = options.open(&saved).map_err(|e| e.to_string())?;
+        let copied = std::io::copy(&mut source, &mut destination).and_then(|_| destination.sync_all());
+        if let Err(error) = copied { drop(destination); let _ = std::fs::remove_file(&saved); return Err(error.to_string()); }
+        drop(destination);
         let _ = std::fs::remove_file(&from);
         crate::platform::saved(&saved, if r.format == "wav" { "wav" } else { "mp3" });
         *job.saved.lock().unwrap() = Some(saved);
+        if partial { return Err("cancelled".into()); }
         Ok(())
     })();
     job.finish(res);
@@ -584,7 +617,7 @@ fn audio_seconds(p: &std::path::Path) -> Option<f64> {
 }
 
 fn doc_info(d: &Arc<Document>) -> Value {
-    json!({"id": d.id, "name": d.name, "title": d.title(), "pages": d.n_pages, "lang": d.lang(),
+    json!({"id": d.id, "name": d.name, "isTyped": d.is_typed.load(Ordering::Relaxed), "title": d.title(), "pages": d.n_pages, "lang": d.lang(),
            "canTranslate": d.can_translate(), "hasImages": d.pdfjs, "hasText": d.has_text(), "scanned": d.had_scans,
            "engine": if d.pdfjs { "pdfjs" } else { "text" }})
 }
@@ -967,6 +1000,8 @@ impl App {
             "forget_post" => {
                 *self.docs.lock().unwrap() = None;
                 for j in self.jobs.lock().unwrap().values() {
+                    let _publication = j.publication.lock().unwrap();
+                    j.discard_partial.store(true, Ordering::SeqCst);
                     j.cancelled.store(true, Ordering::SeqCst);
                     j.cleanup();
                 }
@@ -997,6 +1032,7 @@ impl App {
                 }
                 *self.docs.lock().unwrap() = None;
                 let d = open_document(&name, body, self.engines.clone()).map_err(bad)?;
+                d.is_typed.store(q.get("source").is_some_and(|s| s == "typed"), Ordering::Relaxed);
                 crate::vocab::set_source_lang(d.lang());
                 *self.docs.lock().unwrap() = Some(d.clone());
                 Ok(reply_json(&doc_info(&d)))
@@ -1094,7 +1130,11 @@ impl App {
                     return Err(bad("متن خیلی بزرگ است."));
                 }
                 let kind = get("kind");
-                let mut ed = d.edits.lock().unwrap().clone();
+                let mut current = d.edits.lock().unwrap();
+                let mut history = d.edit_undo.lock().unwrap();
+                let mut ed = if kind == "undo" {
+                    history.as_ref().cloned().ok_or_else(|| bad("ویرایشی برای بازگرداندن نیست."))?
+                } else { current.clone() };
                 let mut found: Option<usize> = None;
                 match kind.as_str() {
                     "paragraph" => {
@@ -1115,12 +1155,16 @@ impl App {
                         }
                     }
                     "reset" => ed = crate::edits::Edits::default(),
+                    "undo" => {},
                     _ => return Err(bad("درخواست ناشناخته.")),
                 }
                 ed.save_book(&d.edits_file).map_err(ApiError::Internal)?;
                 let count = ed.paras.len() + ed.words.len();
-                *d.edits.lock().unwrap() = ed;
-                Ok(reply_json(&json!({"edits": count, "found": found})))
+                if let Some(mut old) = history.take() { old.wipe(); }
+                if kind != "undo" { *history = Some(current.clone()); }
+                current.wipe();
+                *current = ed;
+                Ok(reply_json(&json!({"edits": count, "found": found, "canUndo": history.is_some()})))
             }
             "listen_post" => {
                 if !crate::asr::ready() {
@@ -1237,7 +1281,7 @@ impl App {
             "edits_get" => {
                 let d = self.doc(q)?;
                 let ed = d.edits.lock().unwrap();
-                Ok(reply_json(&json!({"edits": ed.paras.len() + ed.words.len(), "words": ed.words.iter().map(|(a, b)| json!([a, b])).collect::<Vec<_>>()})))
+                Ok(reply_json(&json!({"edits": ed.paras.len() + ed.words.len(), "canUndo": d.edit_undo.lock().unwrap().is_some(), "words": ed.words.iter().map(|(a, b)| json!([a, b])).collect::<Vec<_>>()})))
             }
             "title_get" => {
                 let d = self.doc(q)?;
@@ -1302,7 +1346,7 @@ impl App {
                 let speed = num("speed", s["speed"].as_f64().unwrap_or(1.0));
                 let bitrate = (num("bitrate", s["bitrate"].as_f64().unwrap_or(64.0)) as i64).clamp(32, 320) as u32;
                 let opts = Opts { reversed: flag("reversed"), persian_yeh: flag("persianYeh"), translate: flag("translate") };
-                let stem = std::path::Path::new(&d.name).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                let stem = output_stem(std::path::Path::new(&d.name));
                 let rng = if first == last { format!("{first}") } else { format!("{first}-{last}") };
                 let format = match req.get("format").and_then(|v| v.as_str()) { Some("wav") => "wav", Some("m4a") => "m4a", _ => "mp3" }.to_string();
                 let job = self.add_job(Job::new(format!("{stem} - p{rng}.{format}")));
@@ -1327,7 +1371,7 @@ impl App {
                 if first > last {
                     return Err(bad("بازه صفحه\u{200c}ها درست نیست."));
                 }
-                let stem = std::path::Path::new(&d.name).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                let stem = output_stem(std::path::Path::new(&d.name));
                 let rng = if first == 1 && last == d.n_pages { String::new() } else if first == last { format!(" - p{first}") } else { format!(" - p{first}-{last}") };
                 let job = self.add_job(Job::new(format!("{stem} - فارسی{rng}.pdf")));
                 let info = job.info();
@@ -1342,6 +1386,7 @@ impl App {
             }
             "cancel_post" => {
                 if let Some(j) = self.jobs.lock().unwrap().get(q.get("id").map(|s| s.as_str()).unwrap_or("")) {
+                    if !j.discard_partial.load(Ordering::SeqCst) { j.keep_partial.store(true, Ordering::SeqCst); }
                     j.cancelled.store(true, Ordering::SeqCst);
                 }
                 Ok(reply_json(&json!({"ok": true})))
@@ -1407,10 +1452,13 @@ impl App {
 
     pub fn shutdown(&self) {
         for j in self.jobs.lock().unwrap().values() {
+            let _publication = j.publication.lock().unwrap();
+            j.discard_partial.store(true, Ordering::SeqCst);
             j.cancelled.store(true, Ordering::SeqCst);
             j.cleanup();
         }
     }
 }
+
 
 

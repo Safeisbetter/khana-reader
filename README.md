@@ -31,8 +31,11 @@ open the `.dmg`. Drag the app to Applications. The first time, macOS warns you, 
 Apple Developer ID: try to open the app, then go to **System Settings → Privacy & Security** and choose **Open Anyway**.
 The full version needs about 7 GB of disk and 16 GB of memory is recommended; the light one runs on any Apple Silicon Mac.
 
-**Android, for speed:** keep Khana on the screen while it reads or saves a file (the screen stays on by itself). Behind another app, or with
-the screen off, Android leaves it only the slow processor cores and the work takes several times longer.
+**Android:** reading and MP3 export continue with the screen off. Reading has a private notification with pause, resume and stop;
+it never shows the book's title or text. Scanned PDF pages are prepared with OCR before background reading starts, so keep the app visible
+until preparation finishes. Keep Khana on screen when export speed matters: Android may give background work less processing time.
+Cancelling audio export keeps completed audio as a playable file marked «ناقص»; nothing is saved if no audio is ready.
+Text editing keeps your reading position, and «بازگرداندن آخرین ویرایش» reverses the last paragraph or word change while the book stays open.
 
 **Android:** an arm64 phone with Android 8 or newer and Android System WebView 133 or newer. Open the file and allow installing
 from this source when Android asks. Both versions are signed with the same key, so one can be installed over the other.
@@ -150,7 +153,7 @@ Everything runs on your device; nothing is sent anywhere.
 ## Privacy
 
 - Your books stay on your device. There is no account, no analytics and no server, anywhere.
-- The Android app has no internet, no storage and no microphone permission. Files are opened and saved through Android's own screens.
+- The Android app has no internet or storage permission. Android full asks for microphone access only when you choose voice editing or recording; Android lite has no microphone permission. Files are opened and saved through Android's own screens.
 - The text of the open book is kept in memory while it is open and overwritten when the book is closed.
 - **App lock** (Settings, «قفل برنامه»), like the screen lock of Signal and off unless you turn it on: the app asks for a password
   you chose when it starts and after the time you pick without being touched (1 minute to 1 hour, or only at start). While it is
@@ -199,7 +202,7 @@ Everything runs on your device; nothing is sent anywhere.
 | ویندوز، کامل (آزمایشی) | `KhanaReader-Windows-full-experimental.zip` | حدود ۰٫۷۵ گیگابایت | با ترجمه (مدل کوچک‌تر). |
 
 - **مک:** مک با تراشه‌ی اپل (M1 یا جدیدتر) و macOS 13 یا جدیدتر. برای نسخه‌ی کامل هر سه فایل را در یک پوشه بگذارید و بعد `.dmg` را باز کنید. بار اول macOS هشدار می‌دهد، چون این برنامه‌ی رایگان امضای پولی اپل ندارد: برنامه را باز کنید، بعد در **System Settings → Privacy & Security** گزینه‌ی **Open Anyway** را بزنید.
-- **اندروید، برای سرعت:** تا وقتی خوانا می‌خواند یا فایل می‌سازد، آن را روی صفحه نگه دارید (صفحه خودش روشن می‌ماند). اگر برنامه‌ی دیگری باز کنید یا صفحه خاموش شود، اندروید فقط هسته‌های کُند پردازنده را به آن می‌دهد و کار چند برابر طول می‌کشد.
+- **اندروید:** خواندن و ساخت MP3 با صفحه‌ی خاموش ادامه دارد. برای فایل اسکن‌شده، تا آماده‌شدن متن صفحه‌ها برنامه را باز نگه دارید. ساخت صدا با صفحه‌ی روشن ممکن است سریع‌تر باشد. اگر ساخت صدا را لغو کنید، بخش آماده‌شده در یک فایل قابل‌پخش با نام «ناقص» می‌ماند؛ اگر هنوز صدایی آماده نشده باشد، فایلی ذخیره نمی‌شود.
 - **اندروید:** گوشی ۶۴ بیتی (arm64) با اندروید ۸ یا بالاتر و «Android System WebView» نسخه‌ی ۱۳۳ یا جدیدتر. هنگام نصب، اندروید اجازه‌ی «نصب از این منبع» را می‌خواهد.
 - **ویندوز:** ویندوز ۱۰ یا ۱۱ (۶۴ بیتی). پوشه را کامل از حالت فشرده درآورید و `KhanaReader.exe` را باز کنید.
 

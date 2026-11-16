@@ -56,8 +56,8 @@ fn menu() -> muda::Menu {
     ]);
     let view = Submenu::new("نما", true);
     let _ = view.append_items(&[
-        &item("font-up", "قلم بزرگ‌تر", cmd, Code::Equal),
-        &item("font-down", "قلم کوچک‌تر", cmd, Code::Minus),
+        &item("font-up", "متن بزرگ‌تر", cmd, Code::Equal),
+        &item("font-down", "متن کوچک‌تر", cmd, Code::Minus),
         &PredefinedMenuItem::separator(),
         &PredefinedMenuItem::fullscreen(None),
     ]);
@@ -100,7 +100,7 @@ pub fn run() {
         let _ = proxy.send_event(UserEvent::Menu(e));
     }));
     let window = WindowBuilder::new()
-        .with_title("خوانا (Rust)")
+        .with_title("خوانا")
         .with_inner_size(tao::dpi::LogicalSize::new(1100.0, 820.0))
         .with_min_inner_size(tao::dpi::LogicalSize::new(420.0, 560.0))
         .build(&event_loop)

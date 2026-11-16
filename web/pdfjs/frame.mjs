@@ -49,6 +49,10 @@ async function open(bytes, requestId) {
 // coordinates (points, top left at 0,0); images: whether a page without text has pictures
 async function text(n) {
   const page = await doc.getPage(n);
+  // (the page's memory is let go even when reading it fails: a damaged page must not stay in memory)
+  try { return await textOf(page); } finally { page.cleanup(); }
+}
+async function textOf(page) {
   const vp = page.getViewport({ scale: 1 });
   // (unnormalized: a «لا» ligature stays one character; pdf.js's own expansion came out reversed
   // after its right-to-left reordering, «پلاسچی» → «پالسچی»; the app's repair expands it)
@@ -66,7 +70,6 @@ async function text(n) {
     const ops = await page.getOperatorList();
     images = ops.fnArray.some(f => IMAGE_OPS.has(f));
   }
-  page.cleanup();
   return { w: vp.width, h: vp.height, items, images };
 }
 
@@ -76,6 +79,9 @@ const MAX_RENDER_PIXELS = 8_388_608;
 
 async function draw(n, scale) {
   const page = await doc.getPage(n);
+  try { return await drawPage(page, scale); } finally { page.cleanup(); }
+}
+async function drawPage(page, scale) {
   let vp = page.getViewport({ scale });
   const pixels = vp.width * vp.height;
   if (!(pixels > 0) || !Number.isFinite(pixels)) throw new Error("this page has no usable size");
@@ -87,7 +93,6 @@ async function draw(n, scale) {
   // (intent "print": drawn at once, not frame by frame with requestAnimationFrame, which WebKit holds
   // back while the window is not in front: the picture never came)
   await page.render({ canvasContext: ctx, viewport: vp, intent: "print" }).promise;
-  page.cleanup();
   return canvas;
 }
 
