@@ -9,9 +9,14 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: "Also publish the packages as the experimental release"
+        description: "Also upload the packages to the release named in 'tag' (the release must already exist)"
         type: boolean
         default: false
+      tag:
+        description: "Existing release tag to upload the Windows packages to, for example v1.22"
+        type: string
+        required: false
+        default: ""
   push:
     branches: [windows-full, release-review-1.21, release-review-1.22]
 
@@ -22,7 +27,7 @@ permissions:
 env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: "v1.20"
+  MODELS_RELEASE: "v1.23"
 
 jobs:
   build:
@@ -47,10 +52,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader-Android.apk" } else { "KhanaReader-Android-lite.apk" }
+          $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader.apk" } else { "KhanaReader-lite.apk" }
           gh release download $env:MODELS_RELEASE --repo $env:GITHUB_REPOSITORY -p $apk -D apk
           if ($LASTEXITCODE -ne 0) { throw "Model package download failed" }
-          $expected = if ("${{ matrix.edition }}" -eq "full") { "6aae1480ded35b67c3eb1083eb952c8ce1382014e73d903374b14afba7e6b287" } else { "aff486d3cb57afbbb267462849beee51ed4a39ce0c9ca423b8668d5a8c803b62" }
+          $expected = if ("${{ matrix.edition }}" -eq "full") { "78e4bbe934ce320e327b6a391c850058a392ffacd69080d455174b2168263bb8" } else { "d3136d0b3be57f61f8af5b675b08810b4367470f1c90ead8cb2c3a8ecfa48f92" }
           if ((Get-FileHash "apk/$apk" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Model package checksum mismatch" }
           Move-Item "apk/$apk" apk/models.zip
           Expand-Archive apk/models.zip -DestinationPath apk/x
@@ -88,7 +93,21 @@ jobs:
         shell: pwsh
         run: |
           if ("${{ matrix.edition }}" -eq "full") { $env:KHANA_CT2_DIR = "${{ github.workspace }}\ct2build\Release" }
-          cargo build --release --bin khana
+          cargo build --release --bin khana --example ci_check
+
+      - name: Check of the core (voice, text, WAV, picture, translation)
+        shell: pwsh
+        env:
+          KHANA_MODELS: ${{ github.workspace }}/pack/models
+        run: |
+          $dll = (Get-ChildItem -Recurse ort -Filter onnxruntime.dll | Select-Object -First 1).FullName
+          Copy-Item $dll target/release/examples/
+          if ("${{ matrix.edition }}" -eq "full") {
+            Copy-Item ct2build/Release/ctranslate2.dll target/release/examples/
+            $env:KHANA_EXPECT_TRANSLATE = "1"
+          }
+          .\target\release\examples\ci_check.exe
+          if ($LASTEXITCODE -ne 0) { throw "the check failed" }
 
       - name: Package
         shell: pwsh
@@ -187,7 +206,9 @@ jobs:
       - name: Add the packages to the release page
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
         run: |
-          tag="v1.16"
+          if [ -z "$TAG" ]; then echo "Set the 'tag' input to an existing release tag."; exit 1; fi
+          if ! gh release view "$TAG" >/dev/null 2>&1; then echo "No release named $TAG. Create it first; this step does not create releases."; exit 1; fi
           ls -la zips
-          gh release upload "$tag" zips/*.zip --clobber
+          gh release upload "$TAG" zips/*.zip --clobber
