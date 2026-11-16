@@ -137,6 +137,34 @@ can follow this repository's releases (we did not make or audit it). The Farsi g
 
 Everything runs on your device; nothing is sent anywhere.
 
+```mermaid
+flowchart LR
+  A["Book, PDF or scanned page"] --> B["Rust engine"]
+  B --> C["Lines, paragraphs and word repair"]
+  B --> D["Translation (NLLB, CTranslate2)"]
+  B --> E["Speech (ONNX Runtime)"]
+  B --> F["Scanned pages (PaddleOCR)"]
+  C --> G["Reading page in the system web view"]
+  D --> G
+  E --> G
+  F --> G
+  H["pdf.js in a sandboxed frame"] --> G
+  I["GrapheneOS PDF Viewer design"] -.-> H
+  G --> J["Android shell (Java)"]
+  G --> K["Mac and Windows shells"]
+```
+
+| Language | Used for |
+| --- | --- |
+| Rust | The engine: text, translation, speech, OCR, and the core of the Mac and Windows apps |
+| Java | The Android app shell: the main screen, background services, and export |
+| JavaScript, HTML and CSS | The reading page and the sandboxed PDF frame |
+| Shell and PowerShell | Building the Android, Mac and Windows packages, and the Windows checks |
+
+Python is used only in the developer tools, not in the app.
+
+GrapheneOS: the safety design of the PDF handling follows the [GrapheneOS PDF Viewer](https://github.com/GrapheneOS/PdfViewer) (MIT licence). See the [credits](THIRD_PARTY_NOTICES.md).
+
 - **The engine is written in Rust.** It works out a page's lines and paragraphs, decides what is body text, repairs words the PDF
   broke, translates, and makes the speech. All of it is safe Rust except one folder, `src/ffi`, where each call into a native
   library is wrapped once; the compiler refuses `unsafe` anywhere else.
