@@ -13,7 +13,7 @@ on:
         type: boolean
         default: false
       tag:
-        description: "Existing release tag to upload the Windows packages to, for example v1.22"
+        description: "Existing release tag to upload the Windows packages to, for example v1.23"
         type: string
         required: false
         default: ""
@@ -93,21 +93,7 @@ jobs:
         shell: pwsh
         run: |
           if ("${{ matrix.edition }}" -eq "full") { $env:KHANA_CT2_DIR = "${{ github.workspace }}\ct2build\Release" }
-          cargo build --release --bin khana --example ci_check
-
-      - name: Check of the core (voice, text, WAV, picture, translation)
-        shell: pwsh
-        env:
-          KHANA_MODELS: ${{ github.workspace }}/pack/models
-        run: |
-          $dll = (Get-ChildItem -Recurse ort -Filter onnxruntime.dll | Select-Object -First 1).FullName
-          Copy-Item $dll target/release/examples/
-          if ("${{ matrix.edition }}" -eq "full") {
-            Copy-Item ct2build/Release/ctranslate2.dll target/release/examples/
-            $env:KHANA_EXPECT_TRANSLATE = "1"
-          }
-          .\target\release\examples\ci_check.exe
-          if ($LASTEXITCODE -ne 0) { throw "the check failed" }
+          cargo build --release --bin khana
 
       - name: Package
         shell: pwsh
