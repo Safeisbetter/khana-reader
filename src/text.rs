@@ -1000,8 +1000,6 @@ pub fn latin_only_paragraph(p: &str) -> bool {
 
 const PARAGRAPH_OPENER: &str = r"^\s*(?:و\s+اما|اما|ولی|و\s+برای|به\s+(?:این|همین)\s+دلیل|از\s+(?:این|همین)\s*\x{200c}?رو|بنابراین|با\s+این\s+(?:حال|همه)|از\s+(?:سوی|طرف)\s+دیگر)(?:[\s،,]|$)";
 
-/// An archive or catalogue path, «MIA > آرشیو > Pannekoek > فیلسوف»: two or more separators in a short line. It is a source,
-/// not text to read aloud.
 pub fn archive_path(p: &str) -> bool {
     let t = p.trim();
     t.chars().count() < 200 && t.chars().filter(|c| *c == '>' || *c == '›').count() >= 2
