@@ -314,6 +314,9 @@ final class Server {
         Map<String, String> h = new HashMap<>();
         h.put("Cache-Control", "no-store");
         h.put("X-Content-Type-Options", "nosniff");
+        // Content-Security-Policy: strict defense-in-depth layer. The app already blocks network loads and has no JS interface,
+        // but CSP prevents any bypasses. 'unsafe-inline' is needed for the page's own CSS; external loads are blocked anyway.
+        h.put("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src 'self'; object-src 'none'");
         return h;
     }
 }

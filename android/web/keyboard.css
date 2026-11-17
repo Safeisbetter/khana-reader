@@ -8,16 +8,13 @@
 .keyboard-open #wordPanel input { width: 100%; min-width: 0; }
 .keyboard-open #wordPanel .editor-actions { position: static; padding-block: 3px; }
 
-/* Keep the book visible during playback; all controls remain available on demand. */
+/* Keep the book visible during playback; all controls remain available on demand. The top bar stays exactly as it is when not reading, so the book never moves. */
 .android-reader body:not(.has-doc) #readingToolsBtn { display: none; }
-.android-reader .is-reading:not(.reading-tools-open) .top > :not(.brand):not(.more-tools):not(.top-save) { display: none; }
 .android-reader .is-reading:not(.reading-tools-open) .tools { display: none; }
 .android-reader .is-reading:not(.reading-tools-open) .dock .pager,
 .android-reader .is-reading:not(.reading-tools-open) .dock .speedctl,
 .android-reader .is-reading:not(.reading-tools-open) .dock .booktime,
 .android-reader .is-reading:not(.reading-tools-open) .reading-context { display: none; }
-.android-reader .is-reading .top .brand { flex: 1 1 0; }
-.android-reader .is-reading #readingToolsBtn { flex: 0 0 auto; }
 .android-reader .is-reading:not(.reading-tools-open) .dock { width: max-content; max-width: calc(100% - 16px); padding: 6px 10px; }
 .android-reader .is-reading:not(.reading-tools-open) #play { min-height: 50px; min-width: 130px; }
 .android-reader .is-reading:not(.reading-tools-open) #bookTools { display: none; }
@@ -67,7 +64,39 @@
 .android-reader body.has-doc .dock .quick-voice select { flex: 1 1 auto; width: 100%; max-width: none; min-width: 0; }
 /* the reading bar: even padding around the buttons and the voice row, and the stop button is a tile like the others */
 @media (max-width: 680px) {
-  .android-reader body.has-doc .dock { padding: 8px 8px 14px; row-gap: 8px; }
+  .android-reader body.has-doc .dock { padding: 6px 8px 8px; row-gap: 6px; }
+  .android-reader body.has-doc .dock .mobile-dock-button, .android-reader body.has-doc .dock #play, .android-reader body.has-doc .dock #stop { min-height: 46px; }
   .android-reader body.has-doc .dock .quick-voice select { border-radius: 14px; }
   .android-reader body.has-doc .dock #stop { background: var(--tone); border-radius: 14px; }
+}
+
+/* the page and speed panels open above the dock: the dock must not clip them (web/app.css clips its corners) */
+.android-reader .dock { overflow: visible; }
+
+/* the top bar stays at the top of the screen while the book scrolls (web/app.css makes it scroll away on phones) */
+html.android-reader:root .bar { position: sticky; top: 0; z-index: 50; }
+
+/* the reading bar, calmer: one thin outline, flat tiles without their own borders, no underline on the play word */
+@media (max-width: 680px) {
+  html.android-reader:root body.has-doc .dock { border: 1px solid var(--line); border-radius: 22px; box-shadow: 0 2px 12px rgba(16, 24, 40, .14); padding: 6px; }
+  html.android-reader:root body.has-doc .dock .mobile-dock-button, html.android-reader:root body.has-doc .dock #stop { border: 0; box-shadow: none; background: var(--tone); border-radius: 14px; }
+  /* glass looks: the tiles stay frosted, not grey */
+  html.android-reader:root[data-theme^="glass"] body.has-doc .dock .mobile-dock-button, html.android-reader:root[data-theme^="glass"] body.has-doc .dock #stop { background: var(--glass-btn); border: 1px solid var(--glass-edge); }
+  html.android-reader:root[data-theme^="glass"] body.has-doc .dock { background: var(--glass); border-color: var(--glass-edge); }
+  html.android-reader:root body.has-doc .dock #play { border-radius: 14px; text-decoration: none; }
+  html.android-reader:root body.has-doc .dock #play * { text-decoration: none; }
+}
+
+/* lighter outlines on the phone, as on iOS: 1 px, not 2 px (the high-contrast looks and "increase contrast" keep their strong borders) */
+@media not (prefers-contrast: more) {
+  html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]) :is(button, .btn, summary, .search input, select) { border-width: 1px; }
+}
+
+/* a smaller reading bar, as wide as the text board (not wider), with slimmer tiles and voice picker */
+@media (max-width: 680px) {
+  html.android-reader:root body.has-doc .dock { width: calc(100% - 32px); max-width: 520px; padding: 5px; row-gap: 4px; gap: 5px; border-radius: 18px; }
+  html.android-reader:root body.has-doc .dock .mobile-dock-button, html.android-reader:root body.has-doc .dock #play, html.android-reader:root body.has-doc .dock #stop { min-height: 42px; border-radius: 12px; }
+  html.android-reader:root body.has-doc .dock .mobile-dock-button { font-size: calc(12.5px * var(--ui-scale)); line-height: 1.25; }
+  html.android-reader:root body.has-doc .dock #play { font-size: calc(16px * var(--ui-scale)); }
+  html.android-reader:root body.has-doc .dock .quick-voice select { min-height: 38px; padding-block: 4px; font-size: calc(14px * var(--ui-scale)); border-radius: 12px; }
 }

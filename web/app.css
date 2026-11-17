@@ -1157,10 +1157,221 @@ html:root[data-corners="sharp"] :is(.text, #textView, .note, .sheet, .toast, .vo
 /* the Settings tabs wrap onto a second row on narrow screens, so all of them are in sight */
 .settabs { flex-wrap: wrap; overflow: visible; }
 .settabs button { min-height: 38px; padding: 5px 12px; font-size: 14.5px; }
-/* the quote in the water always stays inside the water: the picture has 14px of sky at each side, so the text starts after it, and its size follows the picture's width (all phone sizes, tablets, the Mac) */
-.jump-art { container-type: inline-size; }
-html:root #welcome .jump-art .water-quote,
-html:root .jump-art .water-quote { left: 13px; right: 13px; font-size: clamp(6px, 4.9cqw, 22px); line-height: 1.7; white-space: nowrap; }
-html:root .jump-art { padding-left: 8px; padding-right: 8px; }
-/* very short phones: a little larger picture, so the quote in the water is readable */
-@media (max-width: 600px) and (max-height: 700px) { html:root #welcome .jump-art { width: min(100%, 168px); } }
+
+/* PDF outline/bookmarks */
+.outline-list { list-style: none; margin: 0; padding: 0; }
+.outline-list li { margin: 0 0 4px; }
+.outline-list button { width: 100%; padding: 10px 12px; text-align: start; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); cursor: pointer; }
+.outline-list button:hover { background: color-mix(in srgb, var(--lapis) 12%, transparent); border-color: var(--lapis); }
+#bookmarkList .hint { color: var(--muted); font-size: 13px; padding: 10px 0; }
+
+/* the PDF zoom menu: a small floating row above the player, not loose text at the foot of the page */
+#zoomMenu { position: fixed; z-index: 20; inset-inline: 0; margin-inline: auto; width: max-content; max-width: calc(100% - 24px); bottom: calc(var(--dock-height, 120px) + 24px); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; padding: 8px; list-style: none; background: var(--surface); border: 2px solid var(--line); border-radius: 16px; box-shadow: var(--elev); }
+#zoomMenu[hidden] { display: none; }
+#zoomMenu button { min-height: 48px; }
+
+/* first and last page: smaller than the arrows, so the page row still fits a phone */
+.pager { flex-wrap: wrap; justify-content: center; }
+.pager button.edge { min-width: 44px; padding-inline: 6px; }
+
+/* thin line icons, as on iOS: no tile, no gloss, just the drawing in the text colour (the coloured ones keep their colour) */
+html:root[data-icons="line"] svg.ui-icon { background: none !important; box-shadow: none; padding: 2px; border-radius: 0; color: var(--lapis); stroke-width: 1.8; }
+html:root[data-icons="line"] #settingsBtn svg.ui-icon, html:root[data-icons="line"] .more-tools > summary svg.ui-icon { color: var(--ink); }
+html:root[data-icons="line"] .primary svg.ui-icon { color: var(--lapis-ink, #fff); }
+html:root[data-icons="line"] svg.ui-icon.ic-green { color: #34C759; }
+html:root[data-icons="line"] svg.ui-icon.ic-orange { color: #FF9F0A; }
+html:root[data-icons="line"] svg.ui-icon.ic-red { color: #FF453A; }
+html:root[data-icons="line"] svg.ui-icon.ic-purple { color: #AF52DE; }
+html:root[data-icons="line"] svg.ui-icon.ic-teal { color: #1FB5C4; }
+
+/* the settings gear: drawn as the grey tile with the toothed gear (its own tile, in every icon style) */
+#settingsBtn svg.ui-icon.settings-app-icon, .more-tools > summary svg.ui-icon.settings-app-icon, svg.ui-icon.settings-app-icon { background: none !important; box-shadow: none !important; padding: 0 !important; border-radius: 0; color: inherit; width: 34px; height: 34px; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .25)); }
+
+/* iPhone-style icons: a coloured rounded tile with a white drawing, a soft gradient, no gloss and no heavy shadow */
+html:root[data-icons="ios"] svg.ui-icon:not(.settings-app-icon) {
+  padding: 5px; border-radius: 24%; color: #FFFFFF; stroke-width: 2; box-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+  background: linear-gradient(180deg, #4DA3FF 0%, #0A7AFF 100%);
+}
+html:root[data-icons="ios"] .primary svg.ui-icon:not(.settings-app-icon) { background: #FFFFFF; color: #0A7AFF; box-shadow: none; }
+html:root[data-icons="ios"] svg.ui-icon.ic-green:not(.settings-app-icon) { background: linear-gradient(180deg, #5BE17B 0%, #30C759 100%); }
+html:root[data-icons="ios"] svg.ui-icon.ic-orange:not(.settings-app-icon) { background: linear-gradient(180deg, #FFB340 0%, #FF9500 100%); }
+html:root[data-icons="ios"] svg.ui-icon.ic-red:not(.settings-app-icon) { background: linear-gradient(180deg, #FF6A5F 0%, #FF3B30 100%); }
+html:root[data-icons="ios"] svg.ui-icon.ic-purple:not(.settings-app-icon) { background: linear-gradient(180deg, #C77DF0 0%, #AF52DE 100%); }
+html:root[data-icons="ios"] svg.ui-icon.ic-teal:not(.settings-app-icon) { background: linear-gradient(180deg, #5AD7E0 0%, #1FB5C4 100%); }
+
+/* the little black fish swims: the tail and fins move, the body rocks gently, the bubbles rise (not at all when «reduce motion» is on) */
+.fish-tail, .fish-pec, .fish-dorsal, .fish-pelvic, .fish-all { transform-box: fill-box; }
+.fish-tail { transform-origin: 0% 50%; }
+.fish-pec { transform-origin: 50% 0%; }
+.fish-dorsal { transform-origin: 50% 100%; }
+.fish-pelvic { transform-origin: 50% 0%; }
+.fish-all { transform-origin: 50% 50%; }
+@keyframes fish-wag { from { transform: rotate(-10deg); } to { transform: rotate(10deg); } }
+@keyframes fish-flutter { from { transform: rotate(-12deg); } to { transform: rotate(9deg); } }
+@keyframes fish-sway { 0%, 100% { transform: translateY(-1.5px) rotate(-1.2deg); } 50% { transform: translateY(1.5px) rotate(1.2deg); } }
+@keyframes fish-rise { 0% { transform: translateY(0); opacity: 0; } 20% { opacity: .9; } 100% { transform: translateY(-16px); opacity: 0; } }
+.fish-bubble { transform-box: fill-box; }
+@media (prefers-reduced-motion: no-preference) {
+  .fish-tail { animation: fish-wag .8s ease-in-out infinite alternate; }
+  .fish-pec { animation: fish-flutter 1.3s ease-in-out infinite alternate; }
+  .fish-pelvic { animation: fish-flutter 1.6s ease-in-out infinite alternate-reverse; }
+  .fish-dorsal { animation: fish-flutter 2.2s ease-in-out infinite alternate; transform: none; }
+  .fish-all { animation: fish-sway 3.2s ease-in-out infinite; }
+  .fish-bubble { animation: fish-rise 3.4s ease-in infinite; }
+  .fish-bubble.b2 { animation-delay: .9s; } .fish-bubble.b3 { animation-delay: 1.7s; } .fish-bubble.b4 { animation-delay: 2.4s; }
+}
+
+/* the words in the water scale with the picture itself (one size for any screen), so they always sit inside the water */
+html:root .jump-art, html:root #welcome .jump-art { container-type: inline-size; }
+html:root .jump-art .water-quote, html:root #welcome .jump-art .water-quote {
+  font-size: clamp(6.5px, 4.3cqw, 22px); line-height: 1.7; left: 6cqw; right: 6cqw; bottom: 4.5cqw; padding: 0;
+}
+
+/* the water runs edge to edge: it touches the card's left and right sides (no sand showing beside it) */
+html:root .jump-art, html:root #welcome .jump-art { padding-inline: 0; }
+html:root .jump-art .jump-fish { width: 100%; }
+
+/* the start page fills the screen: no empty strip under the card, the content spread evenly inside it */
+@media (max-width: 680px) {
+  html:root.android-reader body:not(.has-doc) #mainContent { display: flex; flex-direction: column; }
+  html:root.android-reader body:not(.has-doc) #welcome { flex: 1 1 auto; min-height: calc(100dvh - 150px); display: flex; flex-direction: column; justify-content: space-evenly; margin-bottom: 0; }
+}
+
+/* the sun drifts slowly to the right across the sky (and back to the left, unseen, as it fades), its rays turning gently */
+.jump-deco .sun-rays { transform-box: view-box; transform-origin: 196px 34px; }
+@keyframes sun-drift {
+  0% { transform: translate(-168px, 10px); opacity: 0; }
+  8% { opacity: 1; }
+  50% { transform: translate(-76px, -5px); }
+  92% { opacity: 1; }
+  100% { transform: translate(18px, 10px); opacity: 0; }
+}
+@keyframes sun-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: no-preference) {
+  .jump-deco .sun { animation: sun-drift 80s linear infinite; }
+  .jump-deco .sun-rays { animation: sun-spin 50s linear infinite; }
+}
+/* the start card reaches almost to the bottom of the screen */
+@media (max-width: 680px) {
+  html:root.android-reader body:not(.has-doc) #welcome { min-height: calc(100dvh - 92px); }
+}
+
+/* the words are hidden at first; a touch on the fish lets them rise up out of the water (and a second touch sinks them again) */
+html:root .jump-art .water-quote { opacity: 0; transform: translateY(12cqw); transition: opacity .9s ease, transform 1.1s cubic-bezier(.2, .8, .2, 1); }
+html:root .jump-art.show-quote .water-quote { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { html:root .jump-art .water-quote { transition: none; transform: none; } }
+
+/* every icon the same size, and every icon-only button a comfortable touch target (48 px) */
+html:root { --ic: 30px; }
+html:root svg.ui-icon, html:root #settingsBtn svg.ui-icon.settings-app-icon, html:root .more-tools > summary svg.ui-icon,
+html:root .more-menu button > svg.ui-icon, html:root .book-tools .tools button > svg.ui-icon, html:root .top-save svg.ui-icon,
+html:root .primary svg.ui-icon, html:root svg.ui-icon.settings-app-icon { width: var(--ic); height: var(--ic); flex: none; }
+html:root .more-tools > summary, html:root .top-save, html:root .bar button:has(> svg.ui-icon:only-child) { min-width: 48px; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; }
+html:root .more-menu button:has(> svg.ui-icon) { min-height: 52px; gap: 12px; }
+
+/* the two icon buttons of the top bar (settings and save): the same size and the same shape in every look */
+html:root .bar .top > .more-tools > summary, html:root .bar .top > .top-save { width: 52px; height: 52px; min-width: 52px; min-height: 52px; padding: 0; border-radius: 14px; box-sizing: border-box; }
+/* very narrow screens (under 300 px): the open button gives up some width so nothing overlaps the logo */
+@media (max-width: 300px) {
+  html:root #openFileBtn { min-width: 0; padding-inline: 10px; gap: 6px; font-size: 15px; }
+  html:root .bar .top > .more-tools > summary, html:root .bar .top > .top-save { width: 44px; height: 44px; min-width: 44px; min-height: 44px; }
+  html:root .brand { min-width: 0; flex: 0 1 auto; }
+  html:root .brand-mark { width: 40px; height: 40px; flex: none; }
+  html:root .bar .top { gap: 6px; }
+}
+html:root .bar .top > .more-tools > summary, html:root .bar .top > .top-save { background: var(--glass-btn, var(--tone, transparent)); border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; }
+
+/* the logo and the settings icon are the same size */
+html:root { --ic: 34px; }
+html:root .brand-mark, html:root .brand-icon { width: var(--ic); height: var(--ic); }
+@media (max-width: 600px) { .drop-hint { display: none; } }
+
+/* old paper, like the pages of an old book: warm cream, darker worn edges, faint fibres and a few age spots (light looks only; drawn with gradients, no picture) */
+html:root[data-theme="light"] body, html:root[data-theme="modern"] body, html:root[data-theme="depth"] body {
+  background-color: #EFE1BF;
+  background-image:
+    radial-gradient(ellipse at 50% 38%, rgba(255, 251, 238, .6) 0%, rgba(255, 251, 238, 0) 62%),
+    radial-gradient(ellipse at 0% 0%, rgba(150, 100, 40, .30) 0%, transparent 46%),
+    radial-gradient(ellipse at 100% 0%, rgba(150, 100, 40, .22) 0%, transparent 42%),
+    radial-gradient(ellipse at 0% 100%, rgba(135, 90, 35, .32) 0%, transparent 48%),
+    radial-gradient(ellipse at 100% 100%, rgba(135, 90, 35, .28) 0%, transparent 44%),
+    radial-gradient(circle at 18% 28%, rgba(160, 110, 50, .12) 0 7%, transparent 8%),
+    radial-gradient(circle at 82% 62%, rgba(160, 110, 50, .10) 0 9%, transparent 10%),
+    radial-gradient(circle at 40% 86%, rgba(160, 110, 50, .09) 0 6%, transparent 7%),
+    repeating-linear-gradient(0deg, rgba(110, 75, 35, .035) 0 1px, transparent 1px 3px);
+  background-attachment: fixed;
+}
+@media (prefers-color-scheme: light) {
+  html:root[data-theme="auto"] body {
+    background-color: #EFE1BF;
+    background-image:
+      radial-gradient(ellipse at 50% 38%, rgba(255, 251, 238, .6) 0%, rgba(255, 251, 238, 0) 62%),
+      radial-gradient(ellipse at 0% 0%, rgba(150, 100, 40, .30) 0%, transparent 46%),
+      radial-gradient(ellipse at 100% 0%, rgba(150, 100, 40, .22) 0%, transparent 42%),
+      radial-gradient(ellipse at 0% 100%, rgba(135, 90, 35, .32) 0%, transparent 48%),
+      radial-gradient(ellipse at 100% 100%, rgba(135, 90, 35, .28) 0%, transparent 44%),
+      radial-gradient(circle at 18% 28%, rgba(160, 110, 50, .12) 0 7%, transparent 8%),
+      radial-gradient(circle at 82% 62%, rgba(160, 110, 50, .10) 0 9%, transparent 10%),
+      radial-gradient(circle at 40% 86%, rgba(160, 110, 50, .09) 0 6%, transparent 7%),
+      repeating-linear-gradient(0deg, rgba(110, 75, 35, .035) 0 1px, transparent 1px 3px);
+    background-attachment: fixed;
+  }
+}
+html:root[data-theme="light"] .bar, html:root[data-theme="modern"] .bar, html:root[data-theme="depth"] .bar { background: rgba(248, 239, 216, .94); }
+html:root[data-theme="light"] .welcome, html:root[data-theme="modern"] .welcome, html:root[data-theme="depth"] .welcome { background: rgba(253, 247, 232, .9); }
+
+/* the settings groups in one line (they scroll sideways if the screen is very narrow), all the same height */
+html:root .settabs { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 5px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+html:root .settabs button { flex: 0 0 auto; min-height: 40px; height: 40px; padding: 0 11px; font-size: 13.5px; scroll-snap-align: start; display: inline-flex; align-items: center; justify-content: center; }
+/* the logo has some space around its drawing: a little larger, so it looks as big as the settings icon */
+html:root .brand-mark, html:root .brand-icon { width: calc(var(--ic) * 1.2); height: calc(var(--ic) * 1.2); }
+
+/* settings: the option rows (icon style, corners) are one tidy line of equal buttons, the colours one line of round dots */
+.hlpick.segmented, .hlpick.swatches { flex-wrap: nowrap; }
+.hlpick.segmented { gap: 6px; }
+.hlpick.segmented label { position: relative; flex: 1 1 0; min-width: 0; justify-content: center; min-height: 44px; padding: 0 4px; border: 1px solid var(--line); border-radius: 12px; font-size: 13.5px; font-weight: 700; background: var(--surface); text-align: center; }
+.hlpick.segmented input, .hlpick.swatches input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.hlpick.segmented label:has(input:checked) { background: var(--lapis); color: var(--lapis-ink, #fff); border-color: var(--lapis); }
+.hlpick.segmented label:has(input:focus-visible), .hlpick.swatches label:has(input:focus-visible) .sw { outline: 3px solid var(--lapis); outline-offset: 2px; }
+.hlpick.swatches { justify-content: space-between; gap: 6px; }
+.hlpick.swatches label { position: relative; flex: 0 0 auto; }
+.hlpick.swatches .sw { display: block; width: 40px; height: 40px; padding: 0; border-radius: 50%; font-size: 0; box-shadow: 0 0 0 1px var(--line); }
+.hlpick.swatches label:has(input:checked) .sw { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--lapis); }
+/* the background looks: a tidy grid of two columns, each option the same size */
+.hlpick.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.hlpick.grid2 label { position: relative; min-height: 44px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 12px; font-size: 13.5px; font-weight: 700; background: var(--surface); justify-content: center; text-align: center; }
+.hlpick.grid2 input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.hlpick.grid2 label:has(input:checked) { background: var(--lapis); color: var(--lapis-ink, #fff); border-color: var(--lapis); }
+.hlpick.grid2 label:has(input:focus-visible) { outline: 3px solid var(--lapis); outline-offset: 2px; }
+
+/* the menu: every icon at the start of its row, in one straight column; the label after it; the search box as wide as the buttons */
+html:root .more-menu button, html:root .more-menu summary { justify-content: flex-start; text-align: start; }
+html:root .more-menu button:has(> svg.ui-icon) { padding-inline: 12px; }
+html:root .more-menu button > svg.ui-icon, html:root .more-menu button > .ui-icon { margin-inline: 0; }
+html:root .more-menu .search, html:root .more-menu .search input { width: 100%; max-width: none; margin: 0; box-sizing: border-box; }
+/* (a fixed icon column, whatever the look: the icon always in the first column, the label in the second, both from the start edge) */
+html:root .more-menu button:has(> svg.ui-icon) { display: grid !important; grid-template-columns: var(--ic) 1fr; align-items: center; justify-items: start; column-gap: 12px; text-align: start; }
+html:root .more-menu button:has(> svg.ui-icon) > svg.ui-icon { grid-column: 1; justify-self: start; }
+
+/* «شما تنها نیستید.»: smaller, quieter, on its own line under the question */
+.welcome-badge .welcome-sub { display: block; font-size: .56em; font-weight: 500; color: var(--muted); margin-top: 6px; line-height: 1.6; }
+
+/* the save button belongs to an open document: not on the start page (a rule above had made it show there) */
+html:root body:not(.has-doc) .bar .top > .top-save { display: none !important; }
+/* the start page's top bar: the logo at one end, the settings at the other, the open button filling the space between: balanced, not scattered */
+@media (max-width: 680px) {
+  html:root body:not(.has-doc) .bar .top { display: flex; align-items: center; gap: 10px; }
+  html:root body:not(.has-doc) .bar .top .brand { flex: 0 0 auto; }
+  html:root body:not(.has-doc) .bar .top #openFileBtn { flex: 1 1 auto; min-width: 0; justify-content: center; }
+  html:root body:not(.has-doc) .bar .top > .more-tools { flex: 0 0 auto; }
+}
+/* tablets and computers: the name at one end, the open button a normal size beside it (never stretched across the bar) */
+@media (min-width: 681px) {
+  html:root body:not(.has-doc) .bar .top #openFileBtn { flex: 0 0 auto; width: auto; }
+  html:root body:not(.has-doc) .bar .top .brand { flex: 1 1 auto; }
+}
+/* a phone held sideways (short screen): the picture is smaller, so the start card is not all picture */
+@media (max-height: 520px) {
+  html:root .jump-art, html:root #welcome .jump-art { width: min(100%, 190px); margin-top: 0; }
+  html:root #welcome { padding-block: 14px; gap: 8px; }
+}

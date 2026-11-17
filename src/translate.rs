@@ -50,6 +50,8 @@ pub fn ready() -> bool {
     translator_ready()
 }
 
+const DATE_MONTH: &str = "(?i)^[\"“‘«„(\\[]?(?:januar|februar|märz|maerz|april|mai|juni|juli|august|september|oktober|november|dezember|januari|februari|maart|mei|augustus|december|janvier|février|fevrier|mars|avril|juin|juillet|août|aout|septembre|octobre|novembre|décembre|decembre|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\\b";
+
 pub fn split_source_sentences(text: &str) -> Vec<String> {
     let parts: Vec<String> = split(r#"(?<=[.!?])\s+(?=["“‘«„(\[]?[\p{L}0-9])"#, text)
         .iter()
@@ -57,7 +59,8 @@ pub fn split_source_sentences(text: &str) -> Vec<String> {
         .collect();
     let mut out: Vec<String> = Vec::new();
     for p in parts {
-        if out.last().map_or(false, |l| search(ABBREV, l) || search(r"(?:(?:^|\s)[A-Z]|\.[A-Z][a-z]?)\.$", l)) {
+        if out.last().map_or(false, |l| search(ABBREV, l) || search(r"(?:(?:^|\s)[A-Z]|\.[A-Z][a-z]?)\.$", l)
+            || (search(r"(?:^|\s)\d{1,2}\.$", l) && search(DATE_MONTH, &p))) {
             let l = out.last_mut().unwrap();
             l.push(' ');
             l.push_str(&p);
@@ -269,6 +272,8 @@ pub fn written_forms(s: &str) -> String {
     sub(r"(?<![\x{0600}-\x{06FF}\x{200c}])اون(?![\x{0600}-\x{06FF}\x{200c}])", "آن", &t)
 }
 
+const HE_VERBS: &str = "گفت|پرسید|جواب داد|پاسخ داد|خندید|رفت|آمد|دید|نگاه کرد|خواست|نوشت|فکر کرد|می‌دانست|نمی‌دانست|می‌گفت|می‌گوید|ایستاد|نشست|برگشت|کجا|کی|چرا|چگونه|چطور|بود|شد|کرد|داشت";
+
 fn tidy_farsi(src: &str, s: &str) -> String {
     let once = collapse_echo(src, s);
     let s = once.as_str();
@@ -295,6 +300,10 @@ fn tidy_farsi(src: &str, s: &str) -> String {
         if search(en, src) {
             s = sub(a, b, &s);
         }
+    }
+    if search(r"(?i)\b(?:he|she|him|her|er|sie|ihn|ihr|hij|zij|hem|haar|il|elle|lui)\b", src)
+        && !search(r"(?i)\b(?:it|its|es|het|ce|cela|ça)\b", src) {
+        s = sub(&format!("(?<![\\x{{0600}}-\\x{{06FF}}\\x{{200c}}])آن(?= (?:{HE_VERBS})(?![\\x{{0600}}-\\x{{06FF}}\\x{{200c}}]))"), "او", &s);
     }
     let s = strip(&roman_in_text(&s)).to_string();
     let s = sub_fn(r"(?<![A-Za-z0-9.])[0-9]+(?:[.][0-9]+)*(?![A-Za-z0-9])", &s, |c| {

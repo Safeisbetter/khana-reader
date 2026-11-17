@@ -10,15 +10,22 @@ const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, { ...opts, headers: { "X-Khana-Token": TOKEN, ...(opts.headers || {}) } });
-  if (!res.ok) {
-    // (the app is locked: the lock screen comes up, web/lock.js)
-    if (res.status === 423 && window.khanaLockHit) window.khanaLockHit();
-    let msg = "خطا";
-    try { msg = (await res.json()).error || msg; } catch (e) {}
-    throw new Error(msg);
+  try {
+    const res = await fetch(path, { ...opts, headers: { "X-Khana-Token": TOKEN, ...(opts.headers || {}) } });
+    if (!res.ok) {
+      // (the app is locked: the lock screen comes up, web/lock.js)
+      if (res.status === 423 && window.khanaLockHit) window.khanaLockHit();
+      let msg = "خطا";
+      try { msg = (await res.json()).error || msg; } catch (e) {}
+      throw new Error(msg);
+    }
+    return res;
+  } catch (err) {
+    if (err instanceof TypeError) {
+      throw new Error("خطا در اتصال. لطفاً اتصال اینترنتی را بررسی کنید.");
+    }
+    throw err;
   }
-  return res;
 }
 const jget = async p => (await api(p)).json();
 const jpost = async (p, body) => (await api(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
@@ -61,12 +68,13 @@ function applySettings() {
   const chosenTheme = s.theme === undefined ? "modern" : s.theme;
   document.documentElement.dataset.theme = THEMES.includes(chosenTheme) ? chosenTheme : "auto";
   document.querySelectorAll("input[name=comma]").forEach(r => r.checked = r.value === (s.commaPause || "short"));
+  document.querySelectorAll("input[name=sentence]").forEach(r => r.checked = r.value === (s.sentencePause || "normal"));
   document.querySelectorAll("input[name=theme]").forEach(r => r.checked = r.value === (THEMES.includes(chosenTheme) ? chosenTheme : "auto"));
   const ACCENTS = ["blue", "green", "orange", "pink", "purple", "teal", "red"];
   const accent = ACCENTS.includes(s.accent) ? s.accent : "blue";
   document.documentElement.dataset.accent = accent;
   document.querySelectorAll("input[name=accent]").forEach(r => r.checked = r.value === accent);
-  const iconStyle = s.iconStyle === "flat" ? "flat" : "glossy";
+  const iconStyle = ["flat", "line", "ios", "glossy"].includes(s.iconStyle) ? s.iconStyle : (document.documentElement.classList.contains("android-reader") ? "ios" : "glossy"); // (the phone's own look: iPhone-style tiles)
   document.documentElement.dataset.icons = iconStyle;
   document.querySelectorAll("input[name=iconStyle]").forEach(r => r.checked = r.value === iconStyle);
   const corners = ["soft", "sharp"].includes(s.corners) ? s.corners : "round";
@@ -107,14 +115,35 @@ function setSetting(k, v, reloadText) {
 }
 // speech is prepared well ahead, so a new voice or speed restarts reading at the sentence being heard
 let restartT;
+let restartGen = 0; // (a newer change cancels an older one still waiting for its sentences)
 function restartReading() {
   clearTimeout(restartT);
+  const gen = ++restartGen;
   if (!reader.active) return;
-  restartT = setTimeout(() => {
+  restartT = setTimeout(async () => {
     if (!reader.active) return;
     const now = actx ? actx.currentTime : 0;
     const piece = reader.playing.find(u => now < u.t1) || reader.playing[reader.playing.length - 1];
     const wasPaused = reader.paused;
+    // A new voice (or speed, or pause): the sentence being said is finished first, while the next two are already made in the
+    // new way; then the reading goes on with them at once. (Before: the sound was cut and the first new sentence made from
+    // nothing, a silence of several seconds. If the sentences are not ready in time, it goes on as before.)
+    if (piece && !wasPaused && actx && piece.p >= 0 && piece.page === S.page && piece.t1 > now) {
+      const k = reader.queue.indexOf(piece), next = k >= 0 ? reader.queue[k + 1] : undefined;
+      if (next && next.p >= 0 && next.page === S.page) {
+        const run = reader.run;
+        try {
+          const warm = piecesFor(S.page, S.paras, next.p, next.start).slice(0, 2).map(q => speechBuffer(q.text, run).catch(() => {}));
+          await Promise.race([Promise.all(warm), sleep(Math.max(0, (piece.t1 - now) * 1000))]);
+          if (!reader.active || reader.run !== run || reader.paused || gen !== restartGen) return;
+          const wait = piece.t1 - actx.currentTime;
+          if (wait > 0.05) await sleep(wait * 1000);
+          if (!reader.active || reader.run !== run || reader.paused || gen !== restartGen) return;
+          readFrom(next.p, next.start);
+          return;
+        } catch (e) { if (!reader.active || reader.run !== run || gen !== restartGen) return; }
+      }
+    }
     if (piece && piece.page !== S.page) showPage(piece.page, reader.pageParas[piece.page], !reader.partial[piece.page]);
     if (piece && piece.p >= 0) readFrom(piece.p, piece.start); else readFrom(0);
     if (wasPaused) { actx.suspend(); reader.paused = true; setPlayButton(); }
@@ -170,6 +199,7 @@ $("autoPlay").onchange = e => setSetting("autoPlay", e.target.checked);
 document.querySelectorAll("input[name=hl]").forEach(r => r.onchange = () => setSetting("highlight", r.value));
 document.querySelectorAll("input[name=fc]").forEach(r => r.onchange = () => setSetting("frameColor", r.value));
 document.querySelectorAll("input[name=comma]").forEach(r => r.onchange = () => { setSetting("commaPause", r.value); ttsCache.clear(); restartReading(); });
+document.querySelectorAll("input[name=sentence]").forEach(r => r.onchange = () => { setSetting("sentencePause", r.value); restartReading(); });
 document.querySelectorAll("input[name=theme]").forEach(r => r.onchange = () => setSetting("theme", r.value));
 document.querySelectorAll("input[name=font]").forEach(r => r.onchange = () => setSetting("font", r.value));
 document.querySelectorAll("input[name=accent]").forEach(r => r.onchange = () => setSetting("accent", r.value));
@@ -775,6 +805,7 @@ async function pdfCall(msg, transfer) {
 }
 async function openWithPdfjs(file) {
   if (file.size > 300 * 1024 * 1024) throw new Error("فایل خیلی بزرگ است (بیشتر از ۳۰۰ مگابایت).");
+  if (window.resetPdfZoom) window.resetPdfZoom(); // Reset zoom when opening new PDF
   const buf = await file.arrayBuffer();
   let pages;
   try {
@@ -790,8 +821,43 @@ async function openWithPdfjs(file) {
     out.push({ w: t.w, h: t.h, images: !!t.images, items: t.items });
   }
   const res = await api("/api/open_layout?name=" + encodeURIComponent(file.name), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pages: out }) });
+  loadPdfBookmarks();
   return res.json();
 }
+// Load and display PDF bookmarks
+async function loadPdfBookmarks() {
+  if (!$("bookmarkBtn")) return;
+  try {
+    const { bookmarks } = await pdfCall({ op: "outline" });
+    const list = $("bookmarkList");
+    list.innerHTML = "";
+    if (!bookmarks || bookmarks.length === 0) {
+      list.innerHTML = "<p class='hint'>این فایل نشانه‌ای ندارد.</p>";
+      return;
+    }
+    const ul = document.createElement("ul");
+    ul.className = "outline-list";
+    for (const bm of bookmarks) {
+      const li = document.createElement("li");
+      li.style.marginRight = (bm.level || 0) * 20 + "px";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = bm.title + " (صفحه‌ی " + fa(bm.page) + ")";
+      btn.onclick = () => { showPage(bm.page, S.doc.paras[bm.page], true); closePanel("bookmarkPanel"); };
+      li.appendChild(btn);
+      ul.appendChild(li);
+    }
+    list.appendChild(ul);
+  } catch (e) {
+    const list = $("bookmarkList");
+    list.innerHTML = "<p class='hint'>خطا در خواندن نشانه‌ها: " + esc(String(e).slice(0, 100)) + "</p>";
+  }
+}
+$("bookmarkBtn").onclick = async () => {
+  if (!S.doc) return;
+  openPanel("bookmarkPanel");
+  await loadPdfBookmarks();
+};
 // a scanned page, drawn grey at 250 dpi by pdf.js, for the app's text recognition
 const picturesGiven = new Map();
 function givePicture(n, docId = S.doc && S.doc.id) {
@@ -1043,6 +1109,7 @@ function syncChrome() {
   $("pageInput").setAttribute("aria-label", "شماره‌ی صفحه؛ از ۱ تا " + fa(S.doc.pages));
   showBookTime();
   $("prev").disabled = S.page <= 1; $("next").disabled = S.page >= S.doc.pages;
+  $("first").disabled = S.page <= 1; $("last").disabled = S.page >= S.doc.pages;
   $("viewPage").disabled = !S.doc.hasImages;
   $("trBtn").hidden = !S.doc.canTranslate;
   $("sourceBtn").hidden = !S.doc.canTranslate;
@@ -1056,7 +1123,11 @@ function syncChrome() {
   $("textView").hidden = S.view !== "text";
   $("pageView").hidden = S.view !== "page";
   $("readingTip").hidden = !S.doc.hasText || S.view !== "text";
+  $("bookmarkBtn").hidden = S.view !== "page" || !S.doc.hasImages;
+  $("zoomBtn").hidden = S.view !== "page" || !S.doc.hasImages;
 }
+$("first").onclick = () => { if (S.doc && S.page > 1) { loadPage(1); scrollTo(0, 0); } };
+$("last").onclick = () => { if (S.doc && S.page < S.doc.pages) { loadPage(S.doc.pages); scrollTo(0, 0); } };
 $("prev").onclick = () => { loadPage(S.page - 1); scrollTo(0, 0); };
 $("next").onclick = () => { loadPage(S.page + 1); scrollTo(0, 0); };
 // (the number is checked on Enter, on leaving the box, and on change: the digits are rewritten as Farsi while typing, and then the browser sends no "change" by itself)
@@ -1219,7 +1290,7 @@ function piecesFor(page, paras, fromPara, fromOff = 0) {
           const before = out.length ? out[out.length - 1].text : "";
           const asked = /[؟?!][»”"'’)\]]*$/.test(before);
           const pause = title ? 1.1 : afterTitle ? 0.8 : first ? 0.9 : k > 0 ? 0.2 : asked ? 0.6 : 0.45;
-          out.push({ page, p: i, start: at, end: at + part.length, text: part.trim(), pause });
+          out.push({ page, p: i, start: at, end: at + part.length, text: part.trim(), pause: pause * (({ short: 0.45, long: 1.4 })[S.settings.sentencePause] || 1) });
           afterTitle = title;
         }
         first = false; off = at + part.length;
@@ -1845,7 +1916,7 @@ $("m4aLabel").hidden = /Android|iPhone|iPad/i.test(navigator.userAgent);   // (t
 if (/Windows/i.test(navigator.userAgent)) {
   $("m4aLabel").hidden = true; $("mp3Label").hidden = true;
   document.querySelector("input[name=afmt][value=wav]").checked = true;
-  $("mp3Btn").textContent = "ذخیره‌ی صدا";
+  { const n = [...$("mp3Btn").childNodes].reverse().find(x => x.nodeType === 3); if (n) n.textContent = "ذخیره‌ی صدا"; } // (only the words: the icon stays)
 }
 async function openTyped() {
   const t = $("typeText").value.trim();
@@ -1982,7 +2053,12 @@ async function listenOnce(maxMs, mode, endQuiet = 1.2) {
   for (const c of chunks) { all.set(c, at); at += c.length; }
   if (!heard) return { text: "", cmd: null, yes: false, go: null, silent: true };
   // a quiet voice is made louder (the loudest part to about 70% of the range, at most 30 times)
-  let peak = 0; for (let i = 0; i < all.length; i++) { const v = Math.abs(all[i]); if (v > peak) peak = v; }
+  // (the loudness is taken from the 99.5th percentile, not the single loudest sample: one click or bump must not turn the voice down)
+  let peak = 0;
+  { const bins = new Uint32Array(1001);
+    for (let i = 0; i < all.length; i++) bins[Math.floor(Math.min(1, Math.abs(all[i])) * 1000)]++;
+    let acc = 0; const want = all.length * 0.995;
+    for (let b = 0; b <= 1000; b++) { acc += bins[b]; if (acc >= want) { peak = (b + 1) / 1000; break; } } }
   const gain = peak > 0.001 ? Math.min(30, 0.7 / peak) : 1;
   // 16 kHz, 16-bit: each output sample is the mean of the input samples it covers
   const ratio = rate / 16000, out = new Int16Array(Math.floor(all.length / ratio));
@@ -2014,10 +2090,18 @@ async function voiceEdit() {
   stopReading();
   const ask = async (say, show, mode, ms, endQuiet) => { vstatus(show); if (say) await speakWait(say); vstatus("گوش می‌دهم…\n" + show); return await listenOnce(ms, mode, endQuiet); };
   const stop = async m => { vstatus(m); await speakWait(m); };
+  // (a yes or no: if it was neither heard as a «no» nor as a «yes» — noise, a word run together — it is asked once more)
+  const askYes = async (say, show, ms) => {
+    let r = await ask(say, show, "yes", ms);
+    if (!r.yes && !/(?:^|\s)(?:نه|خیر|نادرست|لغو|غلط)(?:\s|$)/.test(r.text || "")) r = await ask("متوجه نشدم. بله یا خیر؟", show, "yes", ms);
+    return r;
+  };
   const theWord = async () => curWord || clean((await ask("کدام کلمه؟", "کدام کلمه؟ آن را بگویید", "book", 9000)).text);
   try {
     vstatus("در حال آماده شدن…");
-    const r1 = await ask("بفرمایید.", "بگویید، مثلاً: «تلفظ این کلمه را درست کن» · «کسره‌ی اضافه» · «این بند را عوض کن» · «این کلمه را جدا کن» · «این کلمه را عوض کن» · «این بند را حذف کن»", "cmd", 10000);
+    let r1 = await ask("بفرمایید.", "بگویید، مثلاً: «تلفظ این کلمه را درست کن» · «کسره‌ی اضافه» · «این بند را عوض کن» · «این کلمه را جدا کن» · «این کلمه را عوض کن» · «این بند را حذف کن»", "cmd", 10000);
+    // (not understood, or nothing heard — a noisy room, a word run together: once more, before giving up)
+    if (!r1.cmd) r1 = await ask("متوجه نشدم. دوباره بگویید.", "دوباره بگویید، مثلاً: «تلفظ این کلمه» · «کسره‌ی اضافه» · «این بند را عوض کن»", "cmd", 10000);
     const kind = r1.cmd;
     if (!kind) { await stop("متوجه نشدم."); return; }
     let q, apply;
@@ -2030,7 +2114,7 @@ async function voiceEdit() {
       if (!newText) { await stop("متنی نشنیدم."); return; }
       vstatus("شنیدم:\n«" + newText + "»");
       await speakWait(newText);
-      const r6 = await ask("این متن جای بند فعلی بیاید؟ بگویید بله یا خیر.", "شنیدم:\n«" + newText + "»\nجای این بند بیاید؟ بله یا خیر", "yes", 7000);
+      const r6 = await askYes("این متن جای بند فعلی بیاید؟ بگویید بله یا خیر.", "شنیدم:\n«" + newText + "»\nجای این بند بیاید؟ بله یا خیر", 7000);
       if (r6.yes && await sendEdit({ kind: "paragraph", shown, text: newText })) {
         buzz(80); await stop("انجام شد.");
         if (cur && cur.page === S.page && S.paras.length) { ensureAudio(); readFrom(Math.min(cur.p, S.paras.length - 1)); }
@@ -2047,7 +2131,7 @@ async function voiceEdit() {
       if (!w) { await stop("کلمه را نشنیدم."); return; }
       if (kind === "ezafe") {
         const q2 = `«${w}» با کسره‌ی اضافه خوانده شود؟ بله یا خیر؟`;
-        const r4 = await ask(q2, q2, "yes", 7000);
+        const r4 = await askYes(q2, q2, 7000);
         if (r4.yes && await addEzafe(w)) { buzz(80); vstatus("انجام شد."); await speakWait(w + "\u0650 من"); await stop("ذخیره شد."); } else { await stop("انجام نشد."); }
         return;
       }
@@ -2058,7 +2142,7 @@ async function voiceEdit() {
         await saveLexicon({ ...before, [w]: p });
         vstatus(`«${w}» ← «${p}»`);
         await speakWait(w);
-        const r3 = await ask("درست شد؟", "درست شد؟ بله یا خیر", "yes", 7000);
+        const r3 = await askYes("درست شد؟", "درست شد؟ بله یا خیر", 7000);
         if (r3.yes) { buzz(80); await stop("ذخیره شد."); } else { await saveLexicon(before); await stop("برگردانده شد."); }
         return;
       }
@@ -2076,7 +2160,7 @@ async function voiceEdit() {
       }
       apply = () => sendEdit({ kind: "word", from: w, to });
     }
-    const r2 = await ask(q + " بله یا خیر؟", q, "yes", 7000);
+    const r2 = await askYes(q + " بله یا خیر؟", q, 7000);
     if (r2.yes && await apply()) {
       buzz(80);
       await stop(typeof lastFound === "number" && (kind === "replace" || kind === "delete" || kind === "split") ? (lastFound ? `انجام شد. در ${lastFound} جای کتاب عوض شد.` : "انجام شد، اما این کلمه جای دیگری در کتاب پیدا نشد.") : "انجام شد.");
@@ -2184,6 +2268,72 @@ if (typeof ResizeObserver !== "undefined") {
   if (window.visualViewport) { visualViewport.addEventListener('resize', fit); visualViewport.addEventListener('scroll', fit); }
   document.addEventListener('focusin', fit); document.addEventListener('focusout', fit);
   fit();
+})();
+
+// Swipe gestures for page navigation: left swipe = next page, right swipe = previous page
+(function () {
+  let touchStartX = 0, touchStartY = 0;
+  document.addEventListener("touchstart", e => {
+    if (e.touches.length !== 1 || !S.doc || document.documentElement.classList.contains("android-reader")) return; // (Android has its own swipe: android.js)
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  document.addEventListener("touchend", e => {
+    if (!S.doc || !touchStartX || document.documentElement.classList.contains("android-reader")) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const dx = touchEndX - touchStartX, dy = touchEndY - touchStartY;
+    if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return; // need significant horizontal swipe
+    if (dx > 0 && S.page > 1) $("prev").click(); // right swipe = previous page
+    else if (dx < 0 && S.page < S.doc.pages) $("next").click(); // left swipe = next page
+  }, { passive: true });
+})();
+
+// Zoom and rotation controls for PDF viewing
+(function () {
+  let pdfZoom = 1, rot = 0;
+  const updateZoom = z => { if (z !== undefined) pdfZoom = z; applyView(); };
+  // (a turned picture keeps its old box in the page: the margins make room for the turned one, and it is shrunk to fit the width)
+  const applyView = () => {
+    const img = $("pageImg");
+    img.style.transform = ""; img.style.marginBlock = "";
+    if (pdfZoom === 1 && rot === 0) return;
+    const w = img.offsetWidth, h = img.offsetHeight, odd = rot % 180 !== 0;
+    const fit = odd && h ? Math.min(1, ($("pageView").clientWidth || w) / h) : 1;
+    if (odd) img.style.marginBlock = ((w * fit - h) / 2) + "px";
+    img.style.transform = `rotate(${rot}deg) scale(${pdfZoom * fit})`;
+    img.style.transformOrigin = odd ? "center center" : "top center";
+  };
+  const turn = d => { rot = (rot + d + 360) % 360; applyView(); $("zoomMenu").hidden = true; };
+  $("pageImg").addEventListener("load", applyView);
+  window.resetPdfZoom = () => { rot = 0; updateZoom(1); }; // Reset zoom when opening new document
+  $("zoomBtn").onclick = e => { const menu = $("zoomMenu"); menu.hidden = !menu.hidden; };
+  $("zoomOut").onclick = () => { updateZoom(Math.max(0.5, pdfZoom - 0.1)); $("zoomMenu").hidden = true; };
+  $("zoomReset").onclick = () => { updateZoom(1); $("zoomMenu").hidden = true; };
+  $("rotLeft").onclick = () => turn(-90);
+  $("rotRight").onclick = () => turn(90);
+  $("zoomIn").onclick = () => { updateZoom(Math.min(3, pdfZoom + 0.1)); $("zoomMenu").hidden = true; };
+  // Keyboard shortcuts for zoom: + and - keys
+  document.addEventListener("keydown", e => {
+    if (!S.doc || S.view !== "page") return;
+    if ((e.key === "+" || e.key === "=") && !e.ctrlKey && !e.metaKey) { e.preventDefault(); updateZoom(Math.min(3, pdfZoom + 0.1)); }
+    else if (e.key === "-" && !e.ctrlKey && !e.metaKey) { e.preventDefault(); updateZoom(Math.max(0.5, pdfZoom - 0.1)); }
+  });
+  // Pinch-to-zoom for touch devices
+  let lastDistance = 0;
+  document.addEventListener("touchmove", e => {
+    if (!S.doc || S.view !== "page" || e.touches.length !== 2) { lastDistance = 0; return; }
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const distance = Math.hypot(dx, dy);
+    if (lastDistance > 0) {
+      const scale = distance / lastDistance;
+      if (scale > 1.02) updateZoom(Math.min(3, pdfZoom * 1.05));
+      else if (scale < 0.98) updateZoom(Math.max(0.5, pdfZoom / 1.05));
+    }
+    lastDistance = distance;
+  }, { passive: true });
+  $("zoomBtn").hidden = true;
 })();
 
 // a question with two Persian buttons, drawn on the page (the phone's own confirm box is in English): resolves true for «تأیید»

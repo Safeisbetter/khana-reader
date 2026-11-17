@@ -3,13 +3,13 @@
      cannot open any network connection, to the internet or to this phone: no local server, the
      WebView's requests are answered inside the app), no storage permission (files are opened and
      saved with the system's own screens), no backups. The microphone only for recording «صدای من»
-     (asked when first used; WebView also needs MODIFY_AUDIO_SETTINGS for it; the public download, built with
-     KHANA_PUBLIC=1, leaves both out); the wake lock and the foreground service only to keep a long MP3/PDF job running. -->
+     (asked when first used; WebView also needs MODIFY_AUDIO_SETTINGS for it; a light build made with
+     KHANA_NO_MIC=1 leaves both out); the wake lock and the foreground service only to keep a long MP3/PDF job running. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.khana.reader"
     android:targetSandboxVersion="2"
-    android:versionCode="10"
-    android:versionName="1.24">
+    android:versionCode="12"
+    android:versionName="1.27">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="37" />
 

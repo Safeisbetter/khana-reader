@@ -114,6 +114,32 @@ async function gray(n, dpi) {
   return { w, h, px };
 }
 
+// PDF outline/bookmarks for navigation
+async function outline() {
+  if (!doc) throw new Error("no document");
+  try {
+    const dest = await doc.getOutline();
+    if (!dest) return { bookmarks: [] };
+    const bookmarks = [];
+    const flattenOutline = (items, level = 0) => {
+      for (const item of items) {
+        const pageRef = item.dest && typeof item.dest === 'string' ? item.dest : null;
+        const page = pageRef ? (doc.getPageIndex(pageRef).then(p => p + 1) || 1) : 1;
+        bookmarks.push({
+          title: item.title || "Untitled",
+          page: page,
+          level: level
+        });
+        if (item.items && item.items.length > 0) flattenOutline(item.items, level + 1);
+      }
+    };
+    if (Array.isArray(dest)) flattenOutline(dest);
+    return { bookmarks };
+  } catch (err) {
+    return { bookmarks: [], error: String(err) };
+  }
+}
+
 // Where pdf.js lives: in a sandboxed frame of the reader page (messages to and from the page), or, on the Mac, in a web view
 // of its own (BRIDGE: it asks the app for its next job and posts its answers to the app; it never meets the reader page).
 const BRIDGE = parent === window;
@@ -141,6 +167,7 @@ async function handle(m) {
     else if (m.op === "text") reply(await text(m.n));
     else if (m.op === "render") reply(await render(m.n, m.width));
     else if (m.op === "gray") { const g = await gray(m.n, m.dpi); reply(g, [g.px.buffer]); }
+    else if (m.op === "outline") reply(await outline());
     else throw new Error("unknown request");
   } catch (err) {
     send({ id: m.id, ok: false, error: String((err && err.message) || err) });
