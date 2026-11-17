@@ -1157,3 +1157,10 @@ html:root[data-corners="sharp"] :is(.text, #textView, .note, .sheet, .toast, .vo
 /* the Settings tabs wrap onto a second row on narrow screens, so all of them are in sight */
 .settabs { flex-wrap: wrap; overflow: visible; }
 .settabs button { min-height: 38px; padding: 5px 12px; font-size: 14.5px; }
+/* the quote in the water always stays inside the water: the picture has 14px of sky at each side, so the text starts after it, and its size follows the picture's width (all phone sizes, tablets, the Mac) */
+.jump-art { container-type: inline-size; }
+html:root #welcome .jump-art .water-quote,
+html:root .jump-art .water-quote { left: 13px; right: 13px; font-size: clamp(6px, 4.9cqw, 22px); line-height: 1.7; white-space: nowrap; }
+html:root .jump-art { padding-left: 8px; padding-right: 8px; }
+/* very short phones: a little larger picture, so the quote in the water is readable */
+@media (max-width: 600px) and (max-height: 700px) { html:root #welcome .jump-art { width: min(100%, 168px); } }
