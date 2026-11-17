@@ -27,7 +27,7 @@ permissions:
 env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: "v1.24"
+  MODELS_RELEASE: v1.27
 
 jobs:
   build:
