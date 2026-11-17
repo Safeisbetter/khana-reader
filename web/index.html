@@ -48,6 +48,7 @@
         <button id="mp3Btn" type="button">ذخیره‌ی صدا</button>
         <button id="pdfBtn" type="button" hidden title="ترجمه‌ی فارسی سند را به صورت PDF ذخیره می‌کند (⇧⌘S)">ذخیره‌ی PDF</button>
         <button id="bookmarkBtn" type="button" hidden title="نشانه‌های فایل PDF" aria-haspopup="dialog" aria-controls="bookmarkPanel">نشانه‌ها</button>
+        <button id="zoomBtn" type="button" hidden title="بزرگ‌نمایی PDF" aria-haspopup="menu" aria-controls="zoomMenu">بزرگ‌نمایی</button>
       </div>
     </div>
     </details>
@@ -176,6 +177,12 @@
     <div id="bookmarkList" class="bookmark-list" aria-busy="false"></div>
   </div>
 </div>
+
+<menu id="zoomMenu" hidden role="menu" aria-label="بزرگ‌نمایی PDF">
+  <menuitem id="zoomOut" type="command">کاهش 🔍−</menuitem>
+  <menuitem id="zoomReset" type="command">تناسب صفحه</menuitem>
+  <menuitem id="zoomIn" type="command">افزایش 🔍+</menuitem>
+</menu>
 
 <!-- A short, local guide, available without leaving the document. -->
 <div class="panel" id="visionPanel" hidden>

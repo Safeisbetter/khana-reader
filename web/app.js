@@ -10,15 +10,22 @@ const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, { ...opts, headers: { "X-Khana-Token": TOKEN, ...(opts.headers || {}) } });
-  if (!res.ok) {
-    // (the app is locked: the lock screen comes up, web/lock.js)
-    if (res.status === 423 && window.khanaLockHit) window.khanaLockHit();
-    let msg = "خطا";
-    try { msg = (await res.json()).error || msg; } catch (e) {}
-    throw new Error(msg);
+  try {
+    const res = await fetch(path, { ...opts, headers: { "X-Khana-Token": TOKEN, ...(opts.headers || {}) } });
+    if (!res.ok) {
+      // (the app is locked: the lock screen comes up, web/lock.js)
+      if (res.status === 423 && window.khanaLockHit) window.khanaLockHit();
+      let msg = "خطا";
+      try { msg = (await res.json()).error || msg; } catch (e) {}
+      throw new Error(msg);
+    }
+    return res;
+  } catch (err) {
+    if (err instanceof TypeError) {
+      throw new Error("خطا در اتصال. لطفاً اتصال اینترنتی را بررسی کنید.");
+    }
+    throw err;
   }
-  return res;
 }
 const jget = async p => (await api(p)).json();
 const jpost = async (p, body) => (await api(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
@@ -775,6 +782,7 @@ async function pdfCall(msg, transfer) {
 }
 async function openWithPdfjs(file) {
   if (file.size > 300 * 1024 * 1024) throw new Error("فایل خیلی بزرگ است (بیشتر از ۳۰۰ مگابایت).");
+  if (window.resetPdfZoom) window.resetPdfZoom(); // Reset zoom when opening new PDF
   const buf = await file.arrayBuffer();
   let pages;
   try {
@@ -1091,6 +1099,8 @@ function syncChrome() {
   $("textView").hidden = S.view !== "text";
   $("pageView").hidden = S.view !== "page";
   $("readingTip").hidden = !S.doc.hasText || S.view !== "text";
+  $("bookmarkBtn").hidden = S.view !== "page" || !S.doc.hasImages;
+  $("zoomBtn").hidden = S.view !== "page" || !S.doc.hasImages;
 }
 $("prev").onclick = () => { loadPage(S.page - 1); scrollTo(0, 0); };
 $("next").onclick = () => { loadPage(S.page + 1); scrollTo(0, 0); };
@@ -2219,6 +2229,61 @@ if (typeof ResizeObserver !== "undefined") {
   if (window.visualViewport) { visualViewport.addEventListener('resize', fit); visualViewport.addEventListener('scroll', fit); }
   document.addEventListener('focusin', fit); document.addEventListener('focusout', fit);
   fit();
+})();
+
+// Swipe gestures for page navigation: left swipe = next page, right swipe = previous page
+(function () {
+  let touchStartX = 0, touchStartY = 0;
+  document.addEventListener("touchstart", e => {
+    if (e.touches.length !== 1 || !S.doc) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  document.addEventListener("touchend", e => {
+    if (!S.doc || !touchStartX) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const dx = touchEndX - touchStartX, dy = touchEndY - touchStartY;
+    if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return; // need significant horizontal swipe
+    if (dx > 0 && S.page > 1) $("prev").click(); // right swipe = previous page
+    else if (dx < 0 && S.page < S.doc.pages) $("next").click(); // left swipe = next page
+  }, { passive: true });
+})();
+
+// Zoom controls for PDF viewing
+(function () {
+  let pdfZoom = 1;
+  const updateZoom = z => {
+    pdfZoom = z;
+    $("pageImg").style.transform = z === 1 ? "" : `scale(${z})`;
+    $("pageImg").style.transformOrigin = "top center";
+  };
+  window.resetPdfZoom = () => { updateZoom(1); }; // Reset zoom when opening new document
+  $("zoomBtn").onclick = e => { const menu = $("zoomMenu"); menu.hidden = !menu.hidden; };
+  $("zoomOut").onclick = () => { updateZoom(Math.max(0.5, pdfZoom - 0.1)); $("zoomMenu").hidden = true; };
+  $("zoomReset").onclick = () => { updateZoom(1); $("zoomMenu").hidden = true; };
+  $("zoomIn").onclick = () => { updateZoom(Math.min(3, pdfZoom + 0.1)); $("zoomMenu").hidden = true; };
+  // Keyboard shortcuts for zoom: + and - keys
+  document.addEventListener("keydown", e => {
+    if (!S.doc || S.view !== "page") return;
+    if ((e.key === "+" || e.key === "=") && !e.ctrlKey && !e.metaKey) { e.preventDefault(); updateZoom(Math.min(3, pdfZoom + 0.1)); }
+    else if (e.key === "-" && !e.ctrlKey && !e.metaKey) { e.preventDefault(); updateZoom(Math.max(0.5, pdfZoom - 0.1)); }
+  });
+  // Pinch-to-zoom for touch devices
+  let lastDistance = 0;
+  document.addEventListener("touchmove", e => {
+    if (!S.doc || S.view !== "page" || e.touches.length !== 2) { lastDistance = 0; return; }
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const distance = Math.hypot(dx, dy);
+    if (lastDistance > 0) {
+      const scale = distance / lastDistance;
+      if (scale > 1.02) updateZoom(Math.min(3, pdfZoom * 1.05));
+      else if (scale < 0.98) updateZoom(Math.max(0.5, pdfZoom / 1.05));
+    }
+    lastDistance = distance;
+  }, { passive: true });
+  $("zoomBtn").hidden = true;
 })();
 
 // a question with two Persian buttons, drawn on the page (the phone's own confirm box is in English): resolves true for «تأیید»
