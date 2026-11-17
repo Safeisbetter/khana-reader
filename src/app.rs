@@ -27,8 +27,8 @@ pub const VOICES: &[VoiceInfo] = &[
     VoiceInfo { id: "khabari", wav: "male_news.wav", name: "مدل صدا ۱", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
     VoiceInfo { id: "seda2", wav: "donated_andrea.wav", name: "مدل صدا ۲", gender: "زن", group: "natural", extra: false, tempo: 1.1 },
     VoiceInfo { id: "seda3", wav: "donated_aryobe.wav", name: "مدل صدا ۳", gender: "مرد", group: "natural", extra: false, tempo: 1.1 },
-    VoiceInfo { id: "seda4", wav: "donated_imran.wav", name: "مدل صدا ۴", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
-    VoiceInfo { id: "seda5", wav: "donated_taiyo.wav", name: "مدل صدا ۵", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
+    VoiceInfo { id: "seda4", wav: "donated_imran.wav", name: "مدل صدا ۴", gender: "مرد", group: "natural", extra: false, tempo: 1.12 },
+    VoiceInfo { id: "seda5", wav: "donated_taiyo.wav", name: "مدل صدا ۵", gender: "مرد", group: "natural", extra: false, tempo: 1.25 },
     VoiceInfo { id: "seda6", wav: "donated_roscoe.wav", name: "مدل صدا ۶", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
 ];
 
@@ -93,7 +93,7 @@ fn all_voices() -> Vec<(String, String, String, String)> {
 fn default_settings() -> Map<String, Value> {
     let first = voices().first().map(|v| v.id).unwrap_or("");
     let v = json!({"voice": first, "speed": 1.0, "fontSize": 21, "lineHeight": 2.2, "reversed": false, "persianYeh": true, "autoNext": true,
-                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "normal", "cursor": "large"});
+                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "font": "vazir", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "normal", "cursor": "large", "accent": "blue", "iconStyle": "glossy", "corners": "round", "startSound": true});
     v.as_object().unwrap().clone()
 }
 
@@ -189,7 +189,7 @@ impl Speech {
         let settings = load_settings();
         eng.g2p.set_lexicon(&lexicon_pairs(&settings));
         eng.natural.store(settings.get("naturalTone").and_then(|v| v.as_bool()).unwrap_or(true), Ordering::Relaxed);
-        tts::set_comma_pause(settings.get("commaPause").and_then(|v| v.as_str()).unwrap_or("normal"));
+        tts::set_comma_pause(settings.get("commaPause").and_then(|v| v.as_str()).unwrap_or("short"));
         let recent = self.last_play.lock().unwrap().map_or(false, |t| t.elapsed() < Duration::from_secs(30));
         let workers = if recent { 3 } else { 5 };
         let workers = std::env::var("KHANA_WORKERS").ok().and_then(|v| v.parse::<usize>().ok()).filter(|n| (1..=8).contains(n)).unwrap_or(workers);
@@ -403,6 +403,7 @@ struct Mp3Req {
     opts: Opts,
     format: String,
     fast: bool,
+    end_word: bool,
 }
 
 static JOB_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -493,7 +494,7 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
         'pages: for n in r.first..=r.last {
             if cancel() { interrupted = true; break; }
             let mut paras: Vec<String> = r.doc.page_text(n, r.opts).into_iter().filter(|p| p != crate::doc::PICTURE_PAGE).collect();
-            if n == r.doc.n_pages && !paras.is_empty() && !r.doc.is_typed.load(Ordering::Relaxed) { paras.push(END_WORD.into()); }
+            if r.end_word && n == r.last && !paras.is_empty() { paras.push(END_WORD.into()); }
             let groups = export_groups(&paras);
             let group_count = groups.len().max(1);
             for (index, text) in groups.into_iter().enumerate() {
@@ -1106,7 +1107,7 @@ impl App {
                 let d = self.doc(q)?;
                 let n: usize = q.get("n").and_then(|x| x.parse().ok()).unwrap_or(1);
                 if n < 1 || n > d.n_pages {
-                    return Err(bad("شماره صفحه درست نیست."));
+                    return Err(bad("شماره\u{200c}ی صفحه درست نیست."));
                 }
                 if d.needs_picture(n) {
                     return Ok(reply_json(&json!({"n": n, "needsPicture": true})));
@@ -1124,7 +1125,7 @@ impl App {
                 let get = |k: &str| req.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let n = req.get("n").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
                 if n < 1 || n > d.n_pages {
-                    return Err(bad("شماره صفحه درست نیست."));
+                    return Err(bad("شماره\u{200c}ی صفحه درست نیست."));
                 }
                 if get("text").chars().count() > crate::edits::MAX_PARAGRAPH_CHARS || get("shown").chars().count() > crate::edits::MAX_PARAGRAPH_CHARS {
                     return Err(bad("متن خیلی بزرگ است."));
@@ -1338,7 +1339,7 @@ impl App {
                 let first = (num("first", 1.0) as i64).max(1) as usize;
                 let last = (num("last", d.n_pages as f64) as i64).min(d.n_pages as i64).max(0) as usize;
                 if first > last {
-                    return Err(bad("بازه صفحه\u{200c}ها درست نیست."));
+                    return Err(bad("بازه\u{200c}ی صفحه\u{200c}ها درست نیست."));
                 }
                 let flag = |k: &str| req.get(k).and_then(|v| v.as_bool()).unwrap_or_else(|| s.get(k).and_then(|v| v.as_bool()).unwrap_or(false));
                 let voice = req.get("voice").and_then(|v| v.as_str()).filter(|v| !v.is_empty()).map(|v| v.to_string())
@@ -1352,7 +1353,8 @@ impl App {
                 let job = self.add_job(Job::new(format!("{stem} - p{rng}.{format}")));
                 let info = job.info();
                 let fast = req.get("fast").and_then(|v| v.as_bool()).unwrap_or(false);
-                let r = Mp3Req { doc: d, first, last, voice, speed, bitrate, opts, format, fast };
+                let end_word = req.get("endWord").and_then(|v| v.as_bool()).unwrap_or(last == d.n_pages && !d.is_typed.load(Ordering::Relaxed));
+                let r = Mp3Req { doc: d, first, last, voice, speed, bitrate, opts, format, fast, end_word };
                 std::thread::spawn(move || run_job(job, r));
                 Ok(reply_json(&info))
             }
@@ -1369,7 +1371,7 @@ impl App {
                 let num = |k: &str, dflt: usize| req.get(k).and_then(|v| v.as_f64()).map(|x| x.max(0.0) as usize).unwrap_or(dflt);
                 let (first, last) = (num("first", 1).max(1), num("last", d.n_pages).min(d.n_pages));
                 if first > last {
-                    return Err(bad("بازه صفحه\u{200c}ها درست نیست."));
+                    return Err(bad("بازه\u{200c}ی صفحه\u{200c}ها درست نیست."));
                 }
                 let stem = output_stem(std::path::Path::new(&d.name));
                 let rng = if first == 1 && last == d.n_pages { String::new() } else if first == last { format!(" - p{first}") } else { format!(" - p{first}-{last}") };

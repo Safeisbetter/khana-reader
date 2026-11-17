@@ -75,7 +75,7 @@
   if (st) {
     const tip = document.createElement("p");
     tip.className = "hint";
-    tip.textContent = "ساختن فایل با صفحهٔ خاموش هم ادامه دارد. اگر سرعت مهم‌تر است، برنامه را روی صفحه نگه دارید؛ در پس‌زمینه ممکن است کندتر شود.";
+    tip.textContent = "ساختن فایل با صفحه‌ی خاموش هم ادامه دارد. اگر سرعت مهم‌تر است، برنامه را روی صفحه نگه دارید؛ در پس‌زمینه ممکن است کندتر شود.";
     st.appendChild(tip);
   }
   // «کپی متن صفحه»: through the shell (Server.copySensitive), which marks the text as sensitive and takes it off the clipboard
@@ -219,7 +219,7 @@ if (window.KHANA_NO_MIC) {
         for (let n = first; n <= last; n++) {
           if (reader.run !== run || !S.doc || S.doc.id !== doc.id) return;
           if (lengths.letters[n - 1] < 0) {
-            $('readingState').textContent = `آماده کردن صفحهٔ اسکن‌شده… ${fa(n)} از ${fa(last)}`;
+            $('readingState').textContent = `آماده کردن صفحه‌ی اسکن‌شده… ${fa(n)} از ${fa(last)}`;
             await pageReq(`/api/page?doc=${doc.id}&n=${n}&tr=false`, n, doc.id);
           }
         }
@@ -278,7 +278,7 @@ function bookSwipeDelta(dx, dy, elapsed, width, rtl) {
 (function () {
   const page = $('quickPage'), speed = $('quickSpeed'), content = $('mainContent');
   page.hidden = speed.hidden = false;
-  $('paragraphHelp').textContent += ' برای صفحهٔ بعد به راست و برای صفحهٔ قبل به چپ بکشید.';
+  $('paragraphHelp').textContent += ' برای صفحه‌ی بعد به راست و برای صفحه‌ی قبل به چپ بکشید.';
   function close() {
     document.body.classList.remove('quick-page-open', 'quick-speed-open');
     page.setAttribute('aria-expanded', 'false'); speed.setAttribute('aria-expanded', 'false');
