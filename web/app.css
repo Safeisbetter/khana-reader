@@ -1,0 +1,1166 @@
+/* Layout: sticky toolbar, one reading column; settings + MP3 as side dialogs. All assets are local. */
+@font-face { font-family: "Vazirmatn"; src: url("/Vazirmatn.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+:root {
+  --paper: #F3F5F8; --surface: #FFFFFF; --ink: #1A2130; --muted: #5E6879; --line: #DCE1E8;
+  --lapis: #1F4FA0; --lapis-ink: #FFFFFF; --turq: #0E7F7B; --mark: #FFE08A; --mark-ink: #1A2130;
+  --reading: #E3ECFB; --danger: #B3261E; --shade: rgba(16, 24, 40, .35);
+  --font: "Vazirmatn", "Geeza Pro", Tahoma, system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #10141B; --surface: #181E28; --ink: #E7EBF2; --muted: #97A1B2; --line: #2A3342;
+    --lapis: #7FA6EE; --lapis-ink: #0D1626; --turq: #4CC2BC; --mark: #7A6418; --mark-ink: #FFF6D8;
+    --reading: #1F2C44; --danger: #F2827A; --shade: rgba(0, 0, 0, .55); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #10141B; --surface: #181E28; --ink: #E7EBF2; --muted: #97A1B2; --line: #2A3342;
+  --lapis: #7FA6EE; --lapis-ink: #0D1626; --turq: #4CC2BC; --mark: #7A6418; --mark-ink: #FFF6D8;
+  --reading: #1F2C44; --danger: #F2827A; --shade: rgba(0, 0, 0, .55); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.6; }
+[hidden] { display: none !important; }
+
+.bar { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); padding: 10px 16px; }
+.bar-inner { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-inline-end: auto; min-width: 0; }
+/* (the app's name in its own typeface, Vazirmatn, which the app carries: the same on every device, not the system's fallback) */
+.logo { font-family: "Vazirmatn", var(--ui-font); font-weight: 800; font-size: 26px; line-height: 1; color: var(--lapis); letter-spacing: -.01em; }
+.file { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45vw; }
+.offline { font-size: 11px; padding: 1px 9px; border-radius: 99px; background: color-mix(in srgb, var(--turq) 14%, transparent); color: var(--turq); white-space: nowrap; }
+
+button, .btn {
+  font: inherit; font-size: 14px; color: var(--ink); background: transparent; border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+button:hover:not(:disabled), .btn:hover { border-color: var(--lapis); }
+button:disabled { opacity: .45; cursor: default; }
+:focus-visible { outline: 2px solid var(--lapis); outline-offset: 2px; }
+.primary { background: var(--lapis); color: var(--lapis-ink); border-color: var(--lapis); font-weight: 600; }
+.on { background: var(--reading); border-color: var(--lapis); color: var(--lapis); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; }
+.seg button + button { border-inline-start: 1px solid var(--line); }
+.pager { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+input[type=number], input[type=search], select {
+  font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink);
+}
+.pager input { width: 4.2em; text-align: center; }
+.search { flex: 1 1 220px; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.search input { flex: 1; min-width: 0; }
+.count { font-size: 12px; color: var(--muted); min-width: 4.5em; }
+.spacer { flex: 1; }
+.speedctl { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.speedctl button { border: 0; border-radius: 0; padding: 6px 10px; font-variant-numeric: tabular-nums; }
+.speedctl button + button { border-inline-start: 1px solid var(--line); }
+#speedChip { min-width: 4.6em; justify-content: center; font-size: 20px; font-weight: 700; }
+#speedChip.changed { color: var(--lapis); font-weight: 700; }
+.presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.presets button { padding: 3px 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
+kbd { font: inherit; font-size: 12px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 6px; direction: ltr; display: inline-block; }
+
+main { padding: 20px 16px 64px; }
+.sheet { max-width: 780px; margin: 0 auto; }
+.note { border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; color: var(--muted); font-size: 13px; }
+.note.warn { border-color: var(--danger); color: var(--danger); }
+.text {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: clamp(18px, 5vw, 46px);
+  font-size: var(--fs, 21px); line-height: 2.05; text-align: start; text-wrap: pretty; overflow-wrap: anywhere;
+}
+.text p { margin: 0 0 .5em; padding: .05em .35em; border-radius: 6px; unicode-bidi: plaintext; cursor: pointer; transition: background .2s; }
+.text p:hover { background: color-mix(in srgb, var(--reading) 55%, transparent); }
+.text p.reading { background: transparent; }
+/* reading highlight, made for low vision: the sentence gets a calm tint, the word a strong,
+   high-contrast block with a thick outline. The colour pair is chosen in Settings. */
+:root { --hl-bg: #FFE600; --hl-ink: #000000; --hl-ring: #000000; --sent-bg: rgba(255, 230, 0, .22); }
+:root[data-hl="green"] { --hl-bg: #00E676; --hl-ink: #000000; --hl-ring: #000000; --sent-bg: rgba(0, 230, 118, .2); }
+:root[data-hl="cyan"] { --hl-bg: #00E5FF; --hl-ink: #000000; --hl-ring: #000000; --sent-bg: rgba(0, 229, 255, .2); }
+:root[data-hl="black"] { --hl-bg: #000000; --hl-ink: #FFE600; --hl-ring: #FFE600; --sent-bg: rgba(128, 128, 128, .22); }
+:root[data-hl="white"] { --hl-bg: #FFFFFF; --hl-ink: #000000; --hl-ring: #000000; --sent-bg: rgba(128, 128, 128, .22); }
+:root[data-hl="frame"] { --hl-bg: transparent; --hl-ink: var(--ink); --hl-ring: var(--ink); --sent-bg: rgba(128, 128, 128, .18); }
+.text .w { border-radius: 4px; transition: background .08s, color .08s; }
+/* a click reads from that sentence: the paragraph shows it can be clicked */
+.text p[data-i] { cursor: pointer; border-radius: 6px; transition: background .12s; }
+.text p[data-i]:hover { background: color-mix(in srgb, var(--sent-bg) 45%, transparent); }
+.text .w.sent { background: var(--sent-bg); }
+.text .w.now {
+  background: var(--hl-bg); color: var(--hl-ink); font-weight: 700;
+  box-shadow: 0 0 0 3px var(--hl-ring); position: relative; z-index: 1;
+}
+.text .w.now mark { background: transparent; color: inherit; }
+/* «a frame»: the text keeps its own colours and a thick line is drawn just inside the edge of the word being read, so it
+   never covers the next word */
+:root[data-hl="frame"] .text .w.now { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--frame-c, var(--ink)) 65%, transparent); border-radius: 7px; padding: 3px 6px; margin: -3px -6px; }
+:root[data-fc="red"] { --frame-c: #E5231B; } :root[data-fc="blue"] { --frame-c: #2F6BFF; } :root[data-fc="green"] { --frame-c: #00A650; }
+:root[data-fc="orange"] { --frame-c: #FF8A00; } :root[data-fc="yellow"] { --frame-c: #FFD600; }
+.hlpick { display: flex; flex-wrap: wrap; gap: 8px; }
+.hlpick label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; }
+.hlpick .sw { display: inline-block; padding: 1px 10px; border-radius: 5px; font-weight: 700; box-shadow: 0 0 0 2px currentColor; }
+.hlpick input { accent-color: var(--lapis); }
+@media (prefers-reduced-motion: reduce) { .text .w { transition: none; } }
+.text mark { background: var(--mark); color: var(--mark-ink); border-radius: 3px; }
+.text mark.cur { outline: 2px solid var(--turq); }
+.empty { color: var(--muted); text-align: center; padding: 30px 0; cursor: default; }
+.pageimg { display: block; max-width: 100%; margin: 0 auto; background: #fff; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 6px 24px rgba(0,0,0,.1); }
+
+.welcome { background: var(--surface); border: 2px dashed var(--line); border-radius: 16px; padding: 40px 24px; text-align: center; display: grid; gap: 14px; justify-items: center; }
+.welcome h1 { margin: 0; font-size: 28px; color: var(--lapis); }
+.welcome p { margin: 0; color: var(--muted); max-width: 46ch; }
+.formats { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.formats span { font-size: 12px; border: 1px solid var(--line); border-radius: 99px; padding: 1px 10px; color: var(--muted); direction: ltr; }
+
+.drop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: color-mix(in srgb, var(--paper) 88%, transparent); border: 3px dashed var(--lapis); font-size: 32px; font-weight: 800; color: var(--lapis); }
+.toast { position: fixed; z-index: 40; inset-inline: 0; bottom: 20px; margin: 0 auto; width: max-content; max-width: calc(100% - 32px); background: var(--ink); color: var(--paper); padding: 8px 16px; border-radius: 99px; font-size: 14px; }
+
+/* Side panels */
+.panel { position: fixed; inset: 0; z-index: 20; display: flex; justify-content: flex-start; background: var(--shade); }
+.panel-body { width: min(400px, 100%); height: 100%; overflow-y: auto; background: var(--surface); border-inline-end: 1px solid var(--line); padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+/* (the parts of a window keep their size and the window scrolls: on a small screen they were squeezed over each other) */
+.panel-body > * { flex-shrink: 0; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; }
+.panel-head h2 { margin: 0; font-size: 20px; }
+.field { display: grid; gap: 6px; }
+.field > label, .field > .lbl { font-weight: 600; font-size: 14px; }
+.hint { font-size: 12px; color: var(--muted); }
+.inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.inline select { flex: 1; min-width: 0; }
+input[type=range] { width: 100%; accent-color: var(--lapis); }
+.scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; cursor: pointer; }
+.check input { margin-top: 5px; accent-color: var(--lapis); }
+.radio { display: grid; gap: 6px; }
+.radio label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.radio input { accent-color: var(--lapis); }
+.progress { height: 8px; border-radius: 99px; background: var(--paper); border: 1px solid var(--line); overflow: hidden; }
+.progress div { height: 100%; width: 0; background: var(--lapis); transition: width .3s; }
+input[type=text] { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); }
+.lexlist { display: grid; gap: 4px; }
+.lexrow { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 15px; }
+.lexrow .w { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.lexrow button { padding: 2px 8px; font-size: 12px; }
+.fixbtn { position: fixed; z-index: 15; inset-inline: 0; bottom: 20px; margin: 0 auto; width: max-content; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
+.myvoice { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; }
+.myvoice .say { font-size: 16px; line-height: 1.9; background: var(--paper); border-radius: 8px; padding: 8px 10px; }
+.rec { color: var(--danger); font-variant-numeric: tabular-nums; }
+.privacy { font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+
+@media (max-width: 560px) { .file { max-width: 40vw; } .hide-sm { display: none; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+/* (were inline styles: the page's policy now forbids them) */
+.sw-yellow { background: #FFE600; color: #000; }
+.sw-green { background: #00E676; color: #000; }
+.sw-cyan { background: #00E5FF; color: #000; }
+.sw-black { background: #000; color: #FFE600; }
+.sw-white { background: #fff; color: #000; }
+.sw-fc-text { color: var(--ink); box-shadow: 0 0 0 3px var(--ink); } .sw-fc-red { color: #E5231B; box-shadow: 0 0 0 3px #E5231B; }
+.sw-fc-blue { color: #2F6BFF; box-shadow: 0 0 0 3px #2F6BFF; } .sw-fc-green { color: #00A650; box-shadow: 0 0 0 3px #00A650; }
+.sw-fc-orange { color: #FF8A00; box-shadow: 0 0 0 3px #FF8A00; } .sw-fc-yellow { color: #FFD600; box-shadow: 0 0 0 3px #FFD600; background: #000; }
+.sw-frame { background: transparent; color: var(--ink); box-shadow: 0 0 0 3px var(--ink); }
+.grow { flex: 1; min-width: 0; }
+input.num { width: 4.5em; }
+#pageImg.stale { opacity: .3; transition: opacity .15s; }
+
+/* editing the text */
+#editBar { align-items: center; gap: 8px; flex-wrap: wrap; }
+#editBar input { min-width: 150px; flex: 1 1 150px; }
+.editnote { color: var(--muted); font-size: 13px; }
+.text.editing p[data-i] { outline: 1px dashed var(--line); cursor: text; }
+
+#typeText { width: 100%; min-height: 220px; font: inherit; font-size: var(--fs, 21px); line-height: 1.9; padding: 10px; box-sizing: border-box; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; }
+#paraText { width: 100%; min-height: 40vh; max-height: 55vh; font: inherit; font-size: var(--fs, 21px); line-height: 1.9; padding: 10px; box-sizing: border-box; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; }
+#wordPanel input { width: 100%; font-size: 18px; padding: 8px; box-sizing: border-box; }
+/* editing by voice: a large message, readable by a screen reader, over the page */
+.voicebox { position: fixed; inset-inline: 12px; bottom: 16px; z-index: 40; padding: 18px 20px; border-radius: 14px; background: var(--lapis); color: var(--lapis-ink); font-size: 24px; line-height: 1.8; text-align: center; box-shadow: 0 6px 30px rgba(0,0,0,.35); white-space: pre-line; }
+
+/* easier to see and to touch: targets of at least 44 px, no small print, a clear focus ring */
+body { font-size: 16px; }
+button, .btn { min-height: 44px; font-size: 16px; padding: 8px 14px; }
+.presets button { min-height: 44px; font-size: 15px; padding: 6px 12px; }
+.lexrow button { min-height: 44px; font-size: 15px; }
+input[type="text"], input[type="search"], input[type="password"], select { min-height: 44px; font: inherit; font-size: 16px; }
+input[type="checkbox"], input[type="radio"] { width: 24px; height: 24px; flex-shrink: 0; accent-color: var(--lapis); }
+label:has(> input[type="radio"]), label:has(> input[type="checkbox"]), .check { min-height: 44px; align-items: center; }
+.hint, .count, .scale, .file, .editnote, .privacy, .formats span, .offline { font-size: 14px; }
+.note { font-size: 15px; }
+:focus-visible { outline: 3px solid var(--lapis); outline-offset: 3px; }
+button[aria-pressed="true"], .on { text-decoration: underline; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* the tools (buttons, menus, fields, labels, messages) in Arial, with more space between words (extra space between the letters would break the joined Farsi letters), for people who see badly; the book text keeps its own font */
+:root { --ui-font: Arial, "Helvetica Neue", "Geeza Pro", Tahoma, sans-serif; }
+.bar, .panel-body, .welcome, .note, .toast, .voicebox, #editBar, button, input, select, textarea:not(#paraText):not(#typeText), label { font-family: var(--ui-font); word-spacing: .25em; }
+
+/* the mouse pointer (set in Settings) and a clear mark on what it is over */
+html, body { cursor: var(--cur, auto); }
+button, .btn, a, label, select, summary, input[type="radio"], input[type="checkbox"], input[type="range"], .text p[data-i], .hlpick label { cursor: var(--cur-hand, pointer); }
+input[type="text"], input[type="search"], input[type="password"], textarea { cursor: var(--cur, text); }
+button:hover:not(:disabled), .btn:hover, select:hover, input[type="text"]:hover, input[type="search"]:hover, textarea:hover { outline: 3px solid var(--lapis); outline-offset: 2px; background-color: color-mix(in srgb, var(--lapis) 14%, transparent); }
+.panel-body label:hover, .panel-body .check:hover, .panel-body .lexrow:hover { background: color-mix(in srgb, var(--lapis) 18%, transparent); border-radius: 8px; outline: 2px solid var(--lapis); outline-offset: 1px; }
+
+.speedctl { direction: ltr; }
+.pager { direction: ltr; }
+
+/* the window for writing a text grows with the screen: a phone uses all of it, a tablet, a laptop or a big monitor most of it (up to 1200 px) and the
+   writing box grows with its height; nothing sideways scrolls */
+.panel-body { overflow-x: hidden; }
+#typePanel .panel-body { width: min(100%, clamp(400px, 72vw, 1200px)); }
+#typePanel .field { display: flex; flex-direction: column; }
+#typePanel #typeText { min-height: clamp(220px, 46vh, 760px); flex: 1; resize: vertical; }
+#typePanel .inline { flex-wrap: wrap; }
+@media (max-width: 600px) {
+  #typePanel .panel-body { width: 100%; padding: 14px; }
+  #typePanel #typeText { min-height: 38vh; }
+}
+
+/* the handle on the inner edge of the writing window: drag it to make the window wider or narrower */
+.grip { width: 16px; height: 100%; flex: none; cursor: col-resize; touch-action: none; display: flex; align-items: center; justify-content: center; }
+.grip::before { content: ""; width: 6px; height: 64px; border-radius: 3px; background: var(--muted); opacity: .8; }
+.grip:hover::before, .grip:focus-visible::before, .grip.drag::before { background: var(--lapis); opacity: 1; height: 120px; }
+.grip:focus-visible { outline: 3px solid var(--lapis); outline-offset: -3px; }
+@media (max-width: 600px) { .grip { display: none; } }
+#typePanel .panel-body { max-width: calc(100% - 16px); }
+@media (max-width: 600px) { #typePanel .panel-body { max-width: 100%; } }
+
+/* ---- a calmer, more finished look (clear and large as before; the colours and the sizes of touch targets are kept) ---- */
+:root { --radius: 12px; --shadow: 0 1px 2px rgba(16, 24, 40, .08), 0 4px 14px rgba(16, 24, 40, .06); --lapis-deep: color-mix(in srgb, var(--lapis) 82%, #000); }
+body { background: radial-gradient(1200px 500px at 50% -120px, color-mix(in srgb, var(--lapis) 9%, transparent), transparent 70%), var(--paper); }
+.bar { box-shadow: var(--shadow); border-bottom-color: color-mix(in srgb, var(--line) 70%, transparent); }
+.logo { font-size: 30px; letter-spacing: 0; }
+button, .btn { border-radius: var(--radius); border-color: color-mix(in srgb, var(--line) 80%, var(--ink) 8%); background: var(--surface); box-shadow: 0 1px 0 rgba(16, 24, 40, .05); transition: background .12s, border-color .12s, box-shadow .12s; }
+button:active:not(:disabled), .btn:active { transform: translateY(1px); box-shadow: none; }
+.primary { background: linear-gradient(var(--lapis), var(--lapis-deep)); border-color: var(--lapis-deep); box-shadow: 0 2px 6px color-mix(in srgb, var(--lapis) 35%, transparent); }
+.seg, .speedctl { border-radius: var(--radius); background: var(--surface); box-shadow: 0 1px 0 rgba(16, 24, 40, .05); }
+.seg button, .speedctl button { background: transparent; box-shadow: none; }
+.on { background: color-mix(in srgb, var(--lapis) 16%, var(--surface)); }
+.text { border-radius: 16px; box-shadow: var(--shadow); }
+.panel-body { box-shadow: 0 0 40px rgba(0, 0, 0, .25); }
+input[type="text"], input[type="search"], select, textarea { border-radius: var(--radius); }
+
+/* the start page */
+.welcome { border: 2px dashed color-mix(in srgb, var(--lapis) 35%, var(--line)); background: linear-gradient(color-mix(in srgb, var(--lapis) 5%, var(--surface)), var(--surface)); border-radius: 24px; padding: clamp(28px, 6vw, 56px) clamp(18px, 4vw, 40px); gap: 18px; box-shadow: var(--shadow); }
+.welcome .hero { color: var(--lapis); }
+.welcome h1 { font-size: clamp(28px, 5vw, 38px); }
+.welcome p { font-size: 17px; line-height: 1.9; max-width: 52ch; }
+.welcome .actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.welcome .big { min-height: 56px; font-size: 19px; padding: 10px 28px; }
+.formats span { background: var(--surface); border-radius: 99px; padding: 2px 12px; }
+.welcome .note { background: color-mix(in srgb, var(--turq) 9%, transparent); border: 0; border-radius: var(--radius); color: var(--ink); max-width: 56ch; text-align: start; margin: 0; }
+.welcome .hint { max-width: 60ch; line-height: 2; }
+@media (max-width: 600px) { .welcome .actions { width: 100%; flex-direction: column; } .welcome .big { width: 100%; justify-content: center; } }
+
+/* ---- the reading page like a book's page: warm paper, a comfortable line length, wide margins and airy lines ---- */
+:root { --page: #FCF8EE; --page-edge: #E6DDC8; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --page: #1D1E22; --page-edge: #2D2F36; } }
+:root[data-theme="dark"] { --page: #1D1E22; --page-edge: #2D2F36; }
+.sheet { max-width: 980px; }
+.text {
+  background: var(--page); max-width: min(100%, 46em); margin-inline: auto; border: 1px solid var(--page-edge); border-radius: 10px;
+  padding: clamp(26px, 6vw, 72px) clamp(20px, 6vw, 84px); line-height: 2.25; letter-spacing: 0;
+  box-shadow: 0 1px 0 var(--page-edge), 0 2px 0 color-mix(in srgb, var(--page-edge) 60%, transparent), 0 14px 36px rgba(16, 24, 40, .10);
+}
+.text p { margin: 0 0 .9em; padding: .05em .4em; }
+.text p:last-child { margin-bottom: 0; }
+.text p:hover { background: color-mix(in srgb, var(--lapis) 9%, transparent); }
+/* (a page of the book, not a wall: the note above it stays narrow and quiet) */
+#note { max-width: min(100%, 46em); margin-inline: auto; }
+@media (max-width: 600px) { .text { border-radius: 0; margin-inline: -16px; border-inline: 0; padding: 26px 18px; } }
+
+/* ---- two black themes for people who see little: a black page with white writing, or with yellow writing (the strongest contrast) ---- */
+:root[data-theme="black"] {
+  --paper: #000; --surface: #000; --ink: #FFFFFF; --muted: #E0E0E0; --line: #8A8A8A; --lapis: #9CC4FF; --lapis-ink: #000; --turq: #5EEAD4;
+  --mark: #6B5A00; --mark-ink: #FFFFFF; --reading: #12284D; --danger: #FF9E94; --shade: rgba(0, 0, 0, .8); --page: #000; --page-edge: #8A8A8A; color-scheme: dark;
+}
+:root[data-theme="blackyellow"] {
+  --paper: #000; --surface: #000; --ink: #FFE600; --muted: #FFF0A0; --line: #9A8A00; --lapis: #FFE600; --lapis-ink: #000; --turq: #FFE600;
+  --mark: #FFE600; --mark-ink: #000; --reading: #332B00; --danger: #FF9E94; --shade: rgba(0, 0, 0, .8); --page: #000; --page-edge: #9A8A00; color-scheme: dark;
+}
+:root[data-theme="black"] body, :root[data-theme="blackyellow"] body { background: #000; }
+:root[data-theme="black"] .text, :root[data-theme="blackyellow"] .text { box-shadow: none; border-width: 2px; }
+:root[data-theme="black"] .primary, :root[data-theme="blackyellow"] .primary { background: var(--lapis); }
+
+/* for a screen reader only: said, not seen */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+/* the system's «increase contrast»: grey text and faint lines become full strength, in every theme */
+@media (prefers-contrast: more) {
+  :root, :root[data-theme] { --muted: var(--ink); --line: var(--ink); }
+  button, .btn, input, select { border-width: 2px; }
+  :focus-visible { outline-width: 4px; }
+}
+/* the paragraph being typed in, in edit mode: a clear frame */
+.text.editing p[data-i]:focus { outline: 3px solid var(--lapis); outline-offset: 3px; }
+
+/* saving a file: the percent large, with its sign at the number's right («۳۵%»), and when the file will be ready */
+.pctline { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+.pctline .pct { font-size: 34px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--ink); }
+.pctline .pct:empty, .pctline .eta:empty { display: none; }
+.pctline .eta { font-size: 16px; color: var(--ink); }
+#mp3Status .progress { height: 16px; }
+#mp3Status .hint { display: block; margin-top: 8px; font-size: 15px; }
+
+/* the thanks at the foot of the first page, in a hand of its own (a nastaliq or naskh face of the system, where there is one) */
+.thanks { margin-top: 28px; text-align: center; font-family: "Noto Nastaliq Urdu", "DecoType Naskh", "Nadeem", "Noto Naskh Arabic", serif; font-size: 20px; line-height: 2.4; color: var(--muted); }
+
+/* ================================================================================================================
+   The look of 2026: a quiet top bar, the book's tools in three named groups, and a player at the foot of the window
+   (reading, pages, speed) where the hand rests. Quiet buttons without frames, one filled button for the main action,
+   round shapes, cards in the side windows. Nothing here costs time: no blur, no pictures, no animation beyond a fade.
+   Sizes for touch (44 px and more), the large type, the themes and the strong focus ring are kept.
+   ================================================================================================================ */
+:root {
+  --r-s: 10px; --r-m: 14px; --r-l: 22px;
+  --tone: color-mix(in srgb, var(--ink) 6%, var(--surface));
+  --tone-2: color-mix(in srgb, var(--ink) 11%, var(--surface));
+  --elev: 0 1px 2px rgba(16, 24, 40, .06), 0 10px 30px rgba(16, 24, 40, .14);
+}
+body { background: var(--paper); }
+body:not(.has-doc) .needs-doc { display: none; }
+body:not(.view-text) .needs-text { display: none; }
+
+/* the top bar */
+.bar { padding: 10px 16px; box-shadow: none; border-bottom: 1px solid var(--line); }
+.bar-inner { max-width: 1120px; gap: 10px; }
+.logo { font-size: 28px; }
+.file { background: var(--tone); padding: 4px 14px; border-radius: 99px; max-width: min(46vw, 420px); color: var(--ink); }
+.file:empty { display: none; }
+
+/* buttons: quiet by default, one filled */
+button, .btn { border: 1px solid transparent; background: var(--tone); box-shadow: none; border-radius: var(--r-m); font-weight: 500; }
+button:active:not(:disabled), .btn:active { background: var(--tone-2); }
+.primary, button.primary:active:not(:disabled) { background: var(--lapis); border-color: var(--lapis); color: var(--lapis-ink); box-shadow: none; font-weight: 700; }
+.on { background: color-mix(in srgb, var(--lapis) 18%, var(--surface)); color: var(--lapis); border-color: transparent; font-weight: 700; }
+input[type="text"], input[type="search"], input[type="password"], select, textarea { border-radius: var(--r-m); }
+
+/* the book's tools: three groups in one row */
+.tools { gap: 10px; align-items: stretch; }
+.group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.group + .group { padding-inline-start: 10px; border-inline-start: 1px solid var(--line); }
+.search { flex: 1 1 180px; max-width: 380px; }
+.tools { justify-content: space-between; }
+.search input { background: var(--tone); border-color: transparent; border-radius: 99px; padding-inline: 18px; }
+.search input:focus { background: var(--surface); border-color: var(--lapis); }
+.seg { border: 0; background: var(--tone); padding: 3px; gap: 2px; border-radius: var(--r-m); box-shadow: none; }
+.seg button { border-radius: 11px; min-height: 38px; background: transparent; }
+.seg button + button { border-inline-start: 0; }
+.seg button.on { background: var(--surface); box-shadow: 0 1px 3px rgba(16, 24, 40, .18); }
+#editBar { background: color-mix(in srgb, var(--lapis) 8%, var(--surface)); border-radius: var(--r-m); padding: 8px 12px; }
+
+/* the player, at the foot of the window */
+.dock {
+  position: fixed; z-index: 6; inset-inline: 0; bottom: 14px; margin-inline: auto; width: max-content; max-width: calc(100% - 20px);
+  display: flex; align-items: center; justify-content: center; gap: 8px 16px; flex-wrap: wrap; padding: 10px 16px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 30px; box-shadow: var(--elev);
+  font-family: var(--ui-font); word-spacing: .25em;
+}
+.dock .transport { display: flex; align-items: center; gap: 8px; }
+/* (how long the rest of the book takes to listen to: a small line under the controls) */
+.dock .booktime { flex: 1 1 100%; text-align: center; font-size: 13px; color: var(--muted); margin-top: -2px; }
+#play { min-height: 56px; min-width: 156px; justify-content: center; font-size: 19px; border-radius: 99px; }
+#stop { min-height: 56px; min-width: 120px; border-radius: 99px; font-size: 20px; font-weight: 700; }
+.pager button { border-radius: 99px; min-width: 60px; min-height: 56px; justify-content: center; font-size: 28px; font-weight: 700; }
+.pager input { border-radius: 12px; background: var(--tone); border-color: transparent; min-height: 56px; font-size: 22px; font-weight: 700; }
+.speedctl { border: 0; background: var(--tone); border-radius: 99px; padding: 3px; box-shadow: none; }
+.speedctl button { border-radius: 99px; min-width: 56px; min-height: 56px; justify-content: center; background: transparent; font-size: 24px; font-weight: 700; }
+.speedctl button + button { border-inline-start: 0; }
+body.has-doc main { padding-bottom: 130px; }
+body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: 108px; }
+.toast { border-radius: var(--r-m); padding: 10px 18px; box-shadow: var(--elev); }
+
+/* the first page */
+.welcome { border: 0; background: var(--surface); border-radius: 28px; box-shadow: var(--elev); outline: 2px dashed color-mix(in srgb, var(--lapis) 28%, var(--line)); outline-offset: -14px; }
+.formats span { background: var(--tone); border: 0; padding: 3px 14px; }
+
+/* the side windows: a calm ground with each setting on a card of its own, the title always in sight */
+.panel-body { width: min(440px, 100%); background: var(--paper); border-inline-end: 0; border-start-end-radius: 26px; border-end-end-radius: 26px; padding: 0 18px 24px; gap: 14px; }
+.panel-head { position: sticky; top: 0; z-index: 2; background: var(--paper); padding: 16px 2px 10px; }
+.panel-head h2 { font-size: 22px; }
+.panel-body > .field { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 14px 16px; }
+.myvoice { border: 0; background: var(--tone); border-radius: var(--r-m); }
+.lexrow { border-radius: var(--r-m); }
+.progress { border: 0; background: var(--tone-2); }
+
+/* small screens: the top bar goes with the page, the player stays; its main button on a row of its own */
+@media (max-width: 640px) {
+  .bar { position: static; }
+  .group + .group { padding-inline-start: 0; border-inline-start: 0; }
+  .tools { gap: 8px; }
+  .dock { inset-inline: 8px; width: auto; max-width: none; bottom: max(8px, env(safe-area-inset-bottom)); border-radius: 24px; padding: 8px 10px; gap: 8px; }
+  .dock .transport { flex: 1 1 100%; order: -1; }
+  #play { flex: 1; min-width: 0; }
+  /* (pages and speed share the second row) */
+  .dock { gap: 6px 8px; }
+  .pager { gap: 4px; }
+  .pager input { width: 3.3em; }
+  .pager button { min-width: 52px; min-height: 52px; padding-inline: 8px; font-size: 26px; }
+  .speedctl button { min-width: 48px; min-height: 52px; padding: 6px 8px; font-size: 22px; }
+  #speedChip { min-width: 3.7em; font-size: 19px; }
+  body.has-doc main { padding-bottom: 160px; }
+  body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: 150px; }
+  .panel-body { border-radius: 0; }
+}
+
+/* the two black themes and «increase contrast»: frames instead of tones, so every control has a clear edge */
+:root[data-theme="black"] button, :root[data-theme="black"] .btn, :root[data-theme="blackyellow"] button, :root[data-theme="blackyellow"] .btn,
+:root[data-theme="black"] .seg, :root[data-theme="blackyellow"] .seg, :root[data-theme="black"] .speedctl, :root[data-theme="blackyellow"] .speedctl,
+:root[data-theme="black"] .search input, :root[data-theme="blackyellow"] .search input, :root[data-theme="black"] .pager input, :root[data-theme="blackyellow"] .pager input {
+  background: #000; border: 2px solid var(--line);
+}
+:root[data-theme="black"] .seg button, :root[data-theme="blackyellow"] .seg button, :root[data-theme="black"] .speedctl button, :root[data-theme="blackyellow"] .speedctl button { border: 0; }
+:root[data-theme="black"] .primary, :root[data-theme="blackyellow"] .primary { background: var(--lapis); border-color: var(--lapis); color: var(--lapis-ink); }
+:root[data-theme="black"] .on, :root[data-theme="blackyellow"] .on, :root[data-theme="black"] .seg button.on, :root[data-theme="blackyellow"] .seg button.on { background: var(--reading); color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); }
+:root[data-theme="black"] .dock, :root[data-theme="blackyellow"] .dock, :root[data-theme="black"] .welcome, :root[data-theme="blackyellow"] .welcome { box-shadow: none; border: 2px solid var(--line); }
+:root[data-theme="black"] .file, :root[data-theme="blackyellow"] .file, :root[data-theme="black"] .formats span, :root[data-theme="blackyellow"] .formats span { background: #000; border: 1px solid var(--line); }
+@media (prefers-contrast: more) {
+  button, .btn, .seg, .speedctl, .search input, .pager input, .dock { border: 2px solid var(--ink); }
+  .seg button, .speedctl button { border: 0; }
+}
+
+/* ---- the dark look, blacker: a neutral near-black (no blue cast), as dark apps are today; the reading page darkest ---- */
+@media (prefers-color-scheme: dark) {
+  /* (only when no look was chosen: a chosen look keeps its own colours) */
+  :root:not([data-theme]), :root[data-theme="auto"] {
+    --paper: #0E0E10; --surface: #17171A; --ink: #ECECEE; --muted: #A2A2AA; --line: #2B2B31; --reading: #1E2532; --page: #131315; --page-edge: #27272C;
+  }
+}
+:root[data-theme="dark"] { --paper: #0E0E10; --surface: #17171A; --ink: #ECECEE; --muted: #A2A2AA; --line: #2B2B31; --reading: #1E2532; --page: #131315; --page-edge: #27272C; }
+
+/* ---- «نور شب»: for reading at night. Dark and warm: amber writing on a brown-black ground, almost no blue light, low contrast that
+   does not glare (the word being read keeps its strong mark) ---- */
+:root[data-theme="night"] {
+  --paper: #100B06; --surface: #19120A; --ink: #F0D7AE; --muted: #B4976E; --line: #382A18; --lapis: #E9A758; --lapis-ink: #1A1105; --turq: #D8A067;
+  --mark: #5B3E12; --mark-ink: #FFE9C4; --reading: #2A1D0D; --danger: #F0896C; --shade: rgba(0, 0, 0, .7); --page: #150F08; --page-edge: #33261A;
+  --hl-bg: #F2B24A; --hl-ink: #1A1105; --hl-ring: #F2B24A; --sent-bg: rgba(242, 178, 74, .16); color-scheme: dark;
+}
+:root[data-theme="night"] body { background: var(--paper); }
+
+/* ---- the glass looks: bars, the player and the side windows are frosted glass over a soft coloured ground (as on a new Mac).
+   The frosting is the one thing in the app that asks more of the device: on a slow phone choose another look. The page being
+   read stays almost solid, so the writing is as clear as ever. ---- */
+:root[data-theme="glass"] {
+  --paper: #E9EEF7; --surface: #FFFFFF; --ink: #141A26; --muted: #4E5869; --line: rgba(20, 26, 38, .14); --page: #FFFFFF; --page-edge: rgba(20, 26, 38, .12);
+  --glass: rgba(255, 255, 255, .56); --glass-edge: rgba(255, 255, 255, .85); --glass-btn: rgba(255, 255, 255, .5); color-scheme: light;
+  --lapis: #1F4FA0; --lapis-ink: #FFFFFF; --turq: #0E7F7B; --mark: #FFE08A; --mark-ink: #1A2130; --reading: #E3ECFB; --danger: #B3261E; --shade: rgba(16, 24, 40, .28);
+}
+:root[data-theme="glassdark"] {
+  --paper: #0B0D14; --surface: #171A22; --ink: #EEF0F5; --muted: #A9AFBD; --line: rgba(255, 255, 255, .14); --page: #12141B; --page-edge: rgba(255, 255, 255, .12);
+  --glass: rgba(30, 33, 44, .52); --glass-edge: rgba(255, 255, 255, .18); --glass-btn: rgba(255, 255, 255, .09); color-scheme: dark;
+  --lapis: #8FB4F7; --lapis-ink: #0B1220; --turq: #4CC2BC; --mark: #7A6418; --mark-ink: #FFF6D8; --reading: #1F2C44; --danger: #F2827A; --shade: rgba(0, 0, 0, .5);
+}
+:root[data-theme="glass"] body {
+  background: radial-gradient(900px 600px at 12% -10%, #BFD4FF 0%, transparent 60%), radial-gradient(800px 600px at 95% 10%, #FFD6E8 0%, transparent 55%),
+    radial-gradient(900px 700px at 50% 110%, #C9F1E4 0%, transparent 60%), var(--paper);
+  background-attachment: fixed;
+}
+:root[data-theme="glassdark"] body {
+  background: radial-gradient(900px 600px at 12% -10%, #253B7A 0%, transparent 60%), radial-gradient(800px 600px at 95% 10%, #5A2450 0%, transparent 55%),
+    radial-gradient(900px 700px at 50% 110%, #134A44 0%, transparent 60%), var(--paper);
+  background-attachment: fixed;
+}
+:root[data-theme^="glass"] .bar, :root[data-theme^="glass"] .dock, :root[data-theme^="glass"] .panel-body, :root[data-theme^="glass"] .welcome,
+:root[data-theme^="glass"] .toast, :root[data-theme^="glass"] .panel-body > .field {
+  background: var(--glass); -webkit-backdrop-filter: blur(24px) saturate(170%); backdrop-filter: blur(24px) saturate(170%);
+  border: 1px solid var(--glass-edge); box-shadow: inset 0 1px 0 var(--glass-edge), 0 10px 34px rgba(8, 12, 24, .18);
+}
+:root[data-theme^="glass"] .bar { border-width: 0 0 1px; }
+:root[data-theme^="glass"] .panel-head { background: transparent; }
+:root[data-theme^="glass"] .panel-body > .field { -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
+:root[data-theme^="glass"] .toast { color: var(--ink); }
+:root[data-theme^="glass"] button, :root[data-theme^="glass"] .btn, :root[data-theme^="glass"] .seg, :root[data-theme^="glass"] .speedctl,
+:root[data-theme^="glass"] .search input, :root[data-theme^="glass"] .pager input, :root[data-theme^="glass"] .file, :root[data-theme^="glass"] .formats span {
+  background: var(--glass-btn); border: 1px solid var(--glass-edge);
+}
+:root[data-theme^="glass"] .seg button, :root[data-theme^="glass"] .speedctl button { border: 0; background: transparent; }
+:root[data-theme^="glass"] .seg button.on { background: var(--glass-edge); }
+:root[data-theme^="glass"] .primary { background: var(--lapis); border-color: transparent; color: var(--lapis-ink); box-shadow: 0 6px 18px color-mix(in srgb, var(--lapis) 40%, transparent); }
+:root[data-theme^="glass"] .text { background: color-mix(in srgb, var(--page) 86%, transparent); border-color: var(--glass-edge); box-shadow: 0 14px 40px rgba(8, 12, 24, .16); }
+:root[data-theme^="glass"] .welcome { outline-color: var(--glass-edge); }
+/* (under «increase contrast» the glass turns solid) */
+@media (prefers-contrast: more) {
+  :root[data-theme^="glass"] .bar, :root[data-theme^="glass"] .dock, :root[data-theme^="glass"] .panel-body, :root[data-theme^="glass"] .welcome { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* «فایل‌های من»: the sound files kept inside the app */
+#libAudio { width: 100%; }
+.librow { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--surface); }
+.librow .name { font-weight: 600; overflow-wrap: anywhere; unicode-bidi: plaintext; }
+.librow .acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.librow .size { color: var(--muted); font-size: 14px; margin-inline-end: auto; }
+
+/* ---- the reader's own page: how wide the text runs and how much room is left round it (Settings) ---- */
+.text { max-width: min(100%, var(--pw, 46em)); padding: calc(clamp(26px, 6vw, 72px) * var(--pm, 1)) calc(clamp(20px, 6vw, 84px) * var(--pm, 1)); }
+#note { max-width: min(100%, var(--pw, 46em)); }
+.sheet { max-width: min(100%, calc(var(--pw, 966px) + 40px)); }
+@media (max-width: 600px) { .text { padding: calc(26px * var(--pm, 1)) calc(18px * var(--pm, 1)); } }
+
+/* the open book's name: small, out of the way */
+.file { font-size: 13px; padding: 2px 10px; max-width: min(26vw, 220px); opacity: .85; }
+@media (max-width: 640px) { .file { max-width: 44vw; } }
+
+/* finding a setting: a search box that stays in sight under the title */
+.setfind { position: sticky; top: 62px; z-index: 2; background: var(--paper); padding-bottom: 8px; margin-bottom: -6px; }
+.setfind input { width: 100%; border-radius: 99px; padding-inline: 18px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+:root[data-theme^="glass"] .setfind { background: transparent; }
+.field.found { outline: 3px solid var(--lapis); outline-offset: 2px; }
+
+/* ---- the 3-D looks: every control stands out of the page, lit from above, and goes down when pressed (as the icons of a phone's
+   home screen look). Gradients and shadows only: nothing that costs the device time. ---- */
+:root[data-theme="depth"] {
+  --paper: #E4E8F0; --surface: #F7F9FC; --ink: #151B28; --muted: #515B6C; --line: #C3CAD8; --lapis: #2458B8; --lapis-ink: #FFFFFF; --turq: #0E7F7B;
+  --mark: #FFE08A; --mark-ink: #1A2130; --reading: #DCE7FB; --danger: #B3261E; --shade: rgba(16, 24, 40, .35); --page: #FFFDF7; --page-edge: #D9D2BF;
+  --up-top: #FFFFFF; --up-bot: #DDE3EE; --up-edge: #AEB7C7; --up-drop: rgba(16, 24, 40, .22); color-scheme: light;
+}
+:root[data-theme="depthdark"] {
+  --paper: #0F1116; --surface: #1B1F28; --ink: #EDEFF4; --muted: #A4ABB9; --line: #333A48; --lapis: #86ADF5; --lapis-ink: #0B1220; --turq: #4CC2BC;
+  --mark: #7A6418; --mark-ink: #FFF6D8; --reading: #1F2C44; --danger: #F2827A; --shade: rgba(0, 0, 0, .6); --page: #15181F; --page-edge: #2B313D;
+  --up-top: #343B4A; --up-bot: #1E232D; --up-edge: #0A0C10; --up-drop: rgba(0, 0, 0, .55); color-scheme: dark;
+}
+:root[data-theme^="depth"] body { background: linear-gradient(var(--surface), var(--paper) 420px), var(--paper); background-attachment: fixed; }
+:root[data-theme^="depth"] button, :root[data-theme^="depth"] .btn, :root[data-theme^="depth"] .seg, :root[data-theme^="depth"] .speedctl {
+  background: linear-gradient(var(--up-top), var(--up-bot)); border: 1px solid var(--up-edge); border-radius: 16px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent), inset 0 -2px 0 color-mix(in srgb, #000 8%, transparent), 0 3px 0 var(--up-edge), 0 7px 14px var(--up-drop);
+  transition: transform .06s, box-shadow .06s;
+}
+:root[data-theme^="depth"] button:active:not(:disabled), :root[data-theme^="depth"] .btn:active {
+  transform: translateY(3px); background: linear-gradient(var(--up-bot), var(--up-top));
+  box-shadow: inset 0 2px 5px color-mix(in srgb, #000 25%, transparent), 0 0 0 var(--up-edge), 0 2px 4px var(--up-drop);
+}
+:root[data-theme^="depth"] .seg button, :root[data-theme^="depth"] .speedctl button { background: transparent; border: 0; box-shadow: none; border-radius: 12px; }
+:root[data-theme^="depth"] .seg button.on, :root[data-theme^="depth"] .on:not(.seg button) {
+  background: linear-gradient(color-mix(in srgb, var(--lapis) 26%, var(--up-bot)), color-mix(in srgb, var(--lapis) 14%, var(--up-top)));
+  box-shadow: inset 0 2px 5px color-mix(in srgb, #000 22%, transparent); color: var(--lapis);
+}
+:root[data-theme^="depth"] .primary, :root[data-theme^="depth"] button.primary:active:not(:disabled) {
+  background: linear-gradient(color-mix(in srgb, var(--lapis) 78%, #fff), var(--lapis) 55%, color-mix(in srgb, var(--lapis) 78%, #000));
+  border-color: color-mix(in srgb, var(--lapis) 60%, #000); color: var(--lapis-ink);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent), 0 3px 0 color-mix(in srgb, var(--lapis) 55%, #000), 0 9px 18px color-mix(in srgb, var(--lapis) 40%, transparent);
+  text-shadow: 0 1px 0 color-mix(in srgb, #000 30%, transparent);
+}
+:root[data-theme^="depth"] button.primary:active:not(:disabled) { box-shadow: inset 0 3px 6px color-mix(in srgb, #000 35%, transparent); }
+:root[data-theme^="depth"] .bar, :root[data-theme^="depth"] .dock, :root[data-theme^="depth"] .welcome, :root[data-theme^="depth"] .panel-body > .field {
+  background: linear-gradient(var(--surface), color-mix(in srgb, var(--surface) 88%, var(--paper))); border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 45%, transparent), 0 8px 22px var(--up-drop);
+}
+:root[data-theme^="depth"] .bar { border-width: 0 0 1px; }
+:root[data-theme^="depth"] .search input, :root[data-theme^="depth"] .pager input, :root[data-theme^="depth"] input[type="text"], :root[data-theme^="depth"] select, :root[data-theme^="depth"] .setfind input {
+  background: var(--surface); border: 1px solid var(--up-edge); box-shadow: inset 0 2px 4px color-mix(in srgb, #000 16%, transparent);
+}
+:root[data-theme^="depth"] .text { box-shadow: 0 1px 0 var(--page-edge), 0 3px 0 color-mix(in srgb, var(--page-edge) 70%, transparent), 0 18px 40px var(--up-drop); }
+:root[data-theme^="depth"] .file, :root[data-theme^="depth"] .formats span { background: var(--surface); border: 1px solid var(--line); box-shadow: inset 0 1px 3px color-mix(in srgb, #000 14%, transparent); }
+@media (prefers-reduced-motion: reduce) { :root[data-theme^="depth"] button:active:not(:disabled), :root[data-theme^="depth"] .btn:active { transform: none; } }
+
+/* the device is hot: said in the saving window */
+.hot { color: var(--danger); font-weight: 600; }
+
+/* ---------------- the app lock (web/lock.js) ---------------- */
+#lockScreen { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: var(--paper); color: var(--ink); overflow-y: auto; backdrop-filter: none; -webkit-backdrop-filter: none; }
+#lockScreen[hidden] { display: none; }
+#lockScreen .lockbox { width: min(380px, 100%); display: flex; flex-direction: column; gap: 14px; text-align: center; }
+#lockScreen .lockmark { font-size: 44px; line-height: 1; }
+#lockScreen h2 { margin: 0; font-size: 24px; }
+#lockScreen input { font: inherit; font-size: 18px; text-align: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
+#lockScreen details { text-align: start; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l, 12px); padding: 10px 12px; }
+#lockScreen summary { cursor: pointer; font-weight: 600; }
+.lockerr { color: var(--danger); min-height: 1.4em; margin: 0; font-size: 14px; }
+body.locked > :not(#lockScreen):not(script) { visibility: hidden; }
+body.locked { overflow: hidden; }
+
+/* First-use guidance and frequently used reading controls. */
+.welcome { padding: clamp(26px, 5vw, 48px) clamp(20px, 4vw, 40px); gap: 18px; }
+.welcome .hero { width: 76px; height: 68px; }
+.welcome h1 { font-size: clamp(24px, 3vw, 32px); line-height: 1.65; }
+.welcome > p { max-width: 52ch; }
+.welcome-badge { font-size: 13px; color: var(--turq); font-weight: 600; }
+.welcome-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.welcome-actions button { min-height: 54px; justify-content: center; }
+.welcome .drop-hint { font-size: 13px; }
+.welcome-steps { list-style: none; padding: 0; margin: 8px 0; width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; text-align: start; }
+.welcome-steps li { display: flex; align-items: flex-start; gap: 10px; padding: 16px; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; }
+.step-number { flex: 0 0 30px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--reading); color: var(--lapis); font-weight: 700; }
+.welcome-steps strong, .welcome-steps li div > span { display: block; }
+.welcome-steps strong { font-size: 15px; margin-bottom: 6px; }
+.welcome-steps li div > span { font-size: 13px; line-height: 1.9; color: var(--muted); }
+.welcome-help { white-space: normal; text-align: center; justify-content: center; color: var(--lapis); }
+.welcome .thanks { margin-top: 0; font-size: 16px; }
+.text-size { gap: 2px; }
+.text-size button { min-height: 44px; }
+#fontChip { min-width: 42px; justify-content: center; font-variant-numeric: tabular-nums; color: var(--muted); }
+.reading-context { flex: 1 1 100%; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; font-size: 13px; line-height: 1.7; }
+#readingState { color: var(--lapis); font-weight: 600; }
+#readingTip { color: var(--muted); }
+.guide-card h3 { font-size: 17px; margin: 0; }
+.guide-card p { margin: 0; font-size: 15px; line-height: 2; }
+.shortcut-list { margin: 0; display: grid; gap: 12px; }
+.shortcut-list > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.shortcut-list dt { direction: ltr; font-size: 13px; }
+.shortcut-list dd { margin: 0; font-size: 14px; }
+/* Measure the player instead of assuming a fixed height, including when labels wrap or text is enlarged. */
+body.has-doc main { padding-bottom: calc(var(--dock-height, 180px) + 40px + env(safe-area-inset-bottom, 0px)); }
+body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: calc(var(--dock-height, 180px) + 32px + env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 680px) {
+  .welcome-steps { grid-template-columns: 1fr; gap: 8px; }
+  .welcome-steps li { padding: 12px 14px; }
+  .welcome-steps strong { margin-bottom: 2px; }
+  .welcome-actions { width: 100%; }
+  .welcome-actions button { flex: 1 1 100%; white-space: normal; }
+  .reading-context { order: -2; }
+  #readingTip { display: none; }
+}
+
+/* Reading preferences apply to extracted text and its source comparison. */
+.text, .source-text { line-height: var(--reader-line-height, 2.2); }
+.source-text { font-size: var(--fs, 21px); white-space: pre-wrap; overflow-wrap: anywhere; }
+.text p[data-i]:focus-visible { outline: 3px solid currentColor; outline-offset: 5px; }
+button, .btn { min-block-size: 48px; }
+input[type="range"] { min-block-size: 44px; }
+.skip-link { position: fixed; inset-block-start: 8px; inset-inline-start: 8px; z-index: 200; padding: 12px 18px; background: var(--surface); color: var(--ink); border: 3px solid currentColor; transform: translateY(-160%); }
+.skip-link:focus { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important; }
+}
+@media (max-width: 680px) {
+  .welcome .welcome-actions { flex-direction: column; flex-wrap: nowrap; width: 100%; min-width: 0; }
+  .welcome .welcome-actions button { flex: 0 0 auto; width: 100%; max-width: 100%; min-width: 0; white-space: normal; }
+}
+
+/* Editing stays within the visible area above an on-screen keyboard. */
+.panel { top: var(--visual-top, 0px); bottom: auto; height: var(--visual-height, 100dvh); }
+#wordPanel .panel-body, #paraPanel .panel-body { width: min(620px, 100%); gap: 10px; padding-inline: 14px; }
+#wordPanel .panel-head, #paraPanel .panel-head { padding-block: 10px; }
+#wordPanel .panel-head h2 { font-size: 18px; }
+#wordPanel .field { padding: 8px 10px; gap: 3px; }
+#wordPanel input { font-size: 18px; min-height: 42px; }
+.edit-context { margin: 0; padding: 8px 10px; background: var(--surface); border-inline-start: 3px solid var(--lapis); max-height: 18vh; overflow: auto; font-size: 16px; line-height: 1.7; }
+.editor-actions, #paraPanel .inline { position: sticky; bottom: -1px; background: var(--paper); padding-block: 8px; z-index: 2; }
+#paraText { min-height: 96px; max-height: none; flex: 1 1 auto; resize: none; }
+.keyboard-open #wordPanel .hint { display: none; }
+.keyboard-open.editing-text .bar .top, .keyboard-open.editing-text .bar .tools, .keyboard-open.editing-text #editBar > .editnote { display: none; }
+.keyboard-open.editing-text .dock { display: none; }
+.keyboard-open.editing-text #editBar { gap: 6px; }
+#editBar { align-items: center; }
+#editBar button { min-height: 44px; padding-block: 5px; }
+.pron-letters, .pron-marks { display: flex; flex-wrap: wrap; gap: 8px; }
+.pron-letters button, .pron-marks button { min-width: 48px; min-height: 48px; font-size: 26px; line-height: 1.6; }
+.pron-letters button[aria-pressed="true"] { background: var(--lapis); color: var(--lapis-ink); outline: 2px solid var(--ink); outline-offset: 2px; }
+.pron-preview { font-family: var(--font); font-size: 36px; line-height: 2; overflow-wrap: anywhere; }
+#pronPanel .panel-body { width: min(620px, 100%); }
+
+/* A spacious interface with explicit outlines and scalable controls. */
+:root { --ui-scale: 1; }
+:root[data-theme="light"] { --paper: #EDF1F7; --surface: #FFFFFF; --ink: #14213A; --muted: #42516A; --line: #8593A9; --lapis: #183D91; --lapis-ink: #FFFFFF; --reading: #DFE9FC; }
+body { font-size: calc(17px * var(--ui-scale)); }
+.bar { padding: 10px 18px; border-bottom-width: 2px; }
+.bar-inner { max-width: 1320px; gap: 8px; }
+.brand { align-items: center; gap: 10px; }
+.brand-mark { display: inline-grid; place-items: center; width: 48px; height: 48px; border-radius: 15px; color: var(--lapis-ink); background: var(--lapis); flex: none; }
+.ui-icon { width: 26px; height: 26px; flex: none; }
+.logo { font-size: 30px; }
+.file { font-size: calc(16px * var(--ui-scale)); max-width: min(32vw, 360px); border-radius: 9px; background: transparent; padding-inline: 2px; }
+button, .btn, summary { font-size: calc(17px * var(--ui-scale)); min-height: calc(50px * var(--ui-scale)); }
+button, .btn { border: 2px solid var(--line); border-radius: 13px; padding: 8px 14px; background: var(--surface); line-height: 1.6; justify-content: center; }
+button:hover:not(:disabled), .btn:hover { border-color: var(--ink); }
+button:active:not(:disabled) { transform: none; }
+.primary { border-color: var(--lapis); }
+:focus-visible { outline: 4px solid var(--ink); outline-offset: 3px; }
+.search input, input[type="text"], input[type="password"], select, textarea { border: 2px solid var(--line); font-size: calc(17px * var(--ui-scale)); }
+.search input { border-radius: 12px; min-height: 50px; background: var(--surface); }
+.group + .group { border: 0; padding-inline-start: 0; }
+.tools { justify-content: flex-start; gap: 8px 14px; padding-top: 8px; border-top: 1px solid var(--line); }
+.seg { border: 1px solid var(--line); border-radius: 13px; }
+.seg button, .text-size button { min-height: calc(48px * var(--ui-scale)); }
+.seg button.on, .vision-options button[aria-pressed="true"] { outline: 3px solid var(--lapis); outline-offset: -3px; background: var(--reading); font-weight: 800; }
+.more-tools { position: relative; }
+.more-tools > summary { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border: 2px solid var(--line); border-radius: 13px; cursor: pointer; list-style: none; }
+.more-tools > summary::-webkit-details-marker { display: none; }
+.more-tools > summary::after { content: "⌄"; font-size: 24px; }
+.more-tools[open] > summary { outline: 3px solid var(--lapis); }
+.more-menu { position: absolute; top: calc(100% + 8px); inset-inline-end: 0; z-index: 9; min-width: 250px; max-width: calc(100vw - 24px); padding: 10px; background: var(--surface); border: 2px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); display: grid; gap: 8px; }
+.more-menu button { width: 100%; justify-content: flex-start; white-space: normal; }
+.focus-reading .tools > .group:not(.text-size), .focus-reading .search { display: none; }
+.focus-reading .tools { justify-content: center; }
+.welcome { outline: none; border: 2px solid var(--line); border-radius: 26px; padding: clamp(24px, 4vw, 44px); gap: 18px; box-shadow: 0 10px 32px #1020400C; }
+.welcome .hero { width: 112px; height: 100px; padding: 14px; border-radius: 24px; background: var(--reading); }
+.welcome h1 { font-size: clamp(28px, 3vw, 40px); line-height: 1.6; }
+.welcome > p { font-size: calc(19px * var(--ui-scale)); }
+.welcome-badge { color: var(--ink); font-size: calc(17px * var(--ui-scale)); font-weight: 700; }
+.welcome-actions { width: 100%; }
+.welcome-actions button { flex: 1 1 260px; min-height: 68px; font-size: calc(20px * var(--ui-scale)); border-radius: 16px; }
+.welcome-steps li { border: 1px solid var(--line); padding: 16px; border-radius: 16px; }
+.welcome-steps strong { font-size: calc(18px * var(--ui-scale)); }
+.welcome-steps li div > span { font-size: calc(16px * var(--ui-scale)); color: var(--muted); }
+.step-number { min-width: 36px; height: 36px; font-size: 19px; border: 1px solid var(--lapis); }
+.formats span { font-size: 15px; border: 1px solid var(--line); border-radius: 8px; }
+.welcome .thanks { font-size: 16px; }
+.text { border: 1px solid var(--line); box-shadow: none; }
+.panel-body { width: min(520px, 100%); gap: 18px; }
+.panel-head { border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+.panel-head h2 { font-size: calc(22px * var(--ui-scale)); line-height: 1.7; }
+.field > label, .field > .lbl, .check { font-size: calc(17px * var(--ui-scale)); }
+.hint { font-size: calc(15px * var(--ui-scale)); line-height: 1.9; }
+.field h3 { margin: 0 0 8px; font-size: calc(19px * var(--ui-scale)); }
+.vision-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.theme-sample.sample-light { background: #FFFFFF; color: #14213A; border-color: #14213A; }
+.theme-sample.sample-dark { background: #14213A; color: #FFFFFF; border-color: #8593A9; }
+.theme-sample.sample-yellow { background: #000000; color: #FFE600; border-color: #FFE600; }
+.vision-options .theme-sample[aria-pressed="true"] { outline: 4px solid var(--ink); outline-offset: 3px; }
+.dock { width: min(1100px, calc(100% - 24px)); border: 2px solid var(--line); border-radius: 22px; bottom: 10px; gap: 8px 24px; padding: 12px 16px; }
+.reading-context { font-size: calc(16px * var(--ui-scale)); }
+#play { min-height: calc(62px * var(--ui-scale)); min-width: 180px; border-radius: 16px; font-size: calc(23px * var(--ui-scale)); }
+#stop { border-radius: 13px; }
+.pager input { border: 2px solid var(--line); width: 4em; min-height: 50px; }
+.pager button { min-width: 50px; border-radius: 12px; }
+.speedctl { border: 1px solid var(--line); border-radius: 13px; }
+.speedctl button { min-width: 48px; min-height: 50px; border-radius: 10px; }
+#speedChip { font-size: calc(17px * var(--ui-scale)); }
+.dock .booktime { font-size: calc(15px * var(--ui-scale)); }
+.pron-letters button, .pron-marks button { font-size: calc(30px * var(--ui-scale)); min-height: 56px; min-width: 56px; }
+@media (max-width: 680px) {
+ .bar { padding: 8px; }
+ .top { gap: 8px; }
+ .brand { flex: 1 1 100%; }
+ .file { max-width: 65vw; }
+ .top > button, .more-tools { flex: 1 1 42%; }
+ .more-tools > summary { justify-content: center; }
+ .more-menu { inset-inline-end: 0; }
+ .tools > .group { width: 100%; }
+ .tools > .text-size { justify-content: center; }
+ .tools button { white-space: normal; }
+ .dock { gap: 8px; padding: 10px; }
+ .dock .transport { order: -1; flex: 1 1 100%; justify-content: center; }
+ .reading-context { order: -2; }
+ .welcome-steps { grid-template-columns: 1fr; }
+}
+@media (forced-colors: active) {
+ button, input, select, textarea, .more-tools > summary { border: 2px solid ButtonText; }
+ .pron-letters button[aria-pressed="true"], .vision-options button[aria-pressed="true"] { outline: 4px solid Highlight; }
+}
+:root[data-theme="auto"] { --paper: #EDF1F7; --surface: #FFFFFF; --ink: #14213A; --muted: #42516A; --line: #8593A9; --lapis: #183D91; --lapis-ink: #FFFFFF; --reading: #DFE9FC; }
+:root[data-theme="dark"] { --line: #8392AA; }
+@media (prefers-color-scheme: dark) {
+ :root[data-theme="auto"] { --paper: #10141B; --surface: #181E28; --ink: #E7EBF2; --muted: #B3BED0; --line: #8392AA; --lapis: #9DBFFF; --lapis-ink: #10141B; --reading: #263A5B; }
+}
+.brand-mark { background: transparent; }
+.brand-icon { width: 48px; height: 48px; }
+/* Quiet navigation with controls grouped on demand. */
+.top .brand { flex: 1 1 0; }
+.top > button, .top > .more-tools { flex: 0 0 auto; }
+.more-menu .search { display: flex; max-width: 100%; width: 100%; flex: none; }
+.more-menu .search input { width: 100%; }
+.book-tools > summary { cursor: pointer; padding: 6px 12px; border: 2px solid var(--line); border-radius: 12px; width: fit-content; min-height: 48px; display: flex; align-items: center; gap: 10px; }
+.book-tools > summary::after { content: '⌄'; }
+.book-tools > summary::-webkit-details-marker { display: none; }
+:root[data-theme="light"], :root[data-theme="auto"] { --lapis: #A71930; --lapis-ink: #FFFFFF; --reading: #FBE5E9; }
+:root[data-theme="dark"] { --lapis: #FFAFBA; --lapis-ink: #291018; --reading: #47212B; }
+@media (prefers-color-scheme: dark) { :root[data-theme="auto"] { --lapis: #FFAFBA; --lapis-ink: #291018; --reading: #47212B; } }
+.primary { background: linear-gradient(160deg, color-mix(in srgb, var(--lapis) 85%, white), var(--lapis) 45%, color-mix(in srgb, var(--lapis) 80%, black)); box-shadow: inset 0 1px 0 #FFFFFF50, 0 3px 0 color-mix(in srgb, var(--lapis) 65%, black); }
+.primary:active:not(:disabled) { box-shadow: inset 0 2px 4px #00000030; }
+.brand-icon { filter: drop-shadow(0 2px 1px #00000030); }
+@media (prefers-reduced-motion: no-preference) {
+ .welcome .hero { animation: welcome-rise .45s ease-out both; }
+ button { transition: box-shadow .15s, background-color .15s; }
+ @keyframes welcome-rise { from { opacity: .6; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+}
+:root[data-theme="black"] .primary, :root[data-theme="blackyellow"] .primary { background: var(--lapis); box-shadow: none; }
+@media (max-width: 680px) { .top .brand .logo { display: none; } }
+/* Open settings sections, with emphasis reserved for actions and selected choices. */
+.more-tools > summary::after, .book-tools > summary::after { content: none; }
+.panel-body > .field { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; padding: 18px 0; }
+.panel-body > .field:last-child { border-bottom: 0; }
+.panel-body > .field > label, .panel-body > .field > .lbl { font-weight: 750; }
+.panel-body .inline > button:not(.primary):not(.theme-sample) { background: var(--tone); border-color: transparent; box-shadow: none; }
+.panel-head button { border-color: transparent; background: transparent; color: var(--ink); box-shadow: none; }
+.panel-body button:hover:not(:disabled), .panel-head button:focus-visible { outline: 3px solid var(--lapis); outline-offset: 2px; }
+#myDel, #forgetAll, #edReset { color: var(--danger); border-color: var(--danger); background: var(--surface); }
+.pron-letters button[aria-pressed="true"], .vision-options button[aria-pressed="true"] { border-color: var(--lapis); }
+.book-tools[open] > summary { background: var(--reading); border-color: var(--lapis); font-weight: 700; }
+.more-tools > summary { min-width: 52px; min-height: 52px; justify-content: center; padding-inline: 12px; }
+.more-tools > summary .ui-icon { width: 28px; height: 28px; }
+/* One compact navigation row on tablet and phone. */
+.bar { padding: 4px 12px; }
+.bar-inner { gap: 0; }
+.brand-mark, .brand-icon { width: 40px; height: 40px; }
+.logo { font-size: 26px; }
+.top { gap: 8px; }
+.more-tools > summary { min-width: 48px; min-height: 48px; }
+.more-menu { max-height: calc(var(--visual-height, 100dvh) - 72px); overflow-y: auto; overflow-x: hidden; }
+.more-menu .book-tools { min-width: 0; width: 100%; }
+.more-menu .book-tools > summary { width: 100%; }
+.more-menu .tools { width: 100%; }
+.more-menu .tools > .group { width: 100%; padding: 0; border: 0; }
+.more-menu .tools button { white-space: normal; }
+.focus-reading .more-menu .tools > .group { display: flex; }
+.more-tools:not([open]) > .more-menu, .book-tools:not([open]) > .tools { display: none; }
+
+/* Phone-only quick controls are enabled by the Android shell. */
+.mobile-dock-button { display: none; }
+
+/* ---------------- "modern" theme (the default; a saved choice of any other look is kept) ----------------
+   Design rules: one clear brand colour (the app's red, for links and the main action only), an 8-point rhythm,
+   soft surfaces instead of hard borders, 12-16 px corners, text sizes that do not shrink, 44 px touch targets
+   on touch screens, and the same contrast in light and dark. The reading highlight (--hl-*) is not changed here. */
+:root {
+  --m-radius: 12px; --m-radius-lg: 18px; --m-shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 8px 24px rgba(15, 23, 42, .07);
+  --m-soft: rgba(15, 23, 42, .045); --m-soft-2: rgba(15, 23, 42, .085);
+}
+:root[data-theme="modern"] {
+  --paper: #F5F6F8; --surface: #FFFFFF; --ink: #161B24; --muted: #5A6373; --line: #E4E7EC;
+  --lapis: #A71930; --lapis-ink: #FFFFFF; --turq: #0B7A76; --reading: #FCE8EC; --danger: #B3261E;
+  --shade: rgba(15, 23, 42, .4); color-scheme: light;
+  --m-soft: rgba(15, 23, 42, .045); --m-soft-2: rgba(15, 23, 42, .085);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="modern"] {
+    --paper: #0E1116; --surface: #161A21; --ink: #ECEFF4; --muted: #A0A8B6; --line: #262C36;
+    --lapis: #FF9DAE; --lapis-ink: #2A0F16; --turq: #5ED0C9; --reading: #3A1A22; --danger: #F2827A;
+    --shade: rgba(0, 0, 0, .6); color-scheme: dark;
+    --m-soft: rgba(255, 255, 255, .05); --m-soft-2: rgba(255, 255, 255, .1);
+  }
+}
+:root[data-theme="modern"] body { background: var(--paper); }
+:root[data-theme="modern"] .bar {
+  background: var(--surface); border-bottom: 0; box-shadow: 0 1px 0 var(--line), 0 6px 20px rgba(15, 23, 42, .04);
+  padding: 8px 16px;
+}
+:root[data-theme="modern"] .logo { font-weight: 800; letter-spacing: -.02em; }
+:root[data-theme="modern"] button, :root[data-theme="modern"] .btn {
+  background: var(--m-soft); border: 1px solid transparent; border-radius: var(--m-radius); font-weight: 600;
+  padding: 8px 16px; min-height: 44px; box-shadow: none; transition: background-color .15s, color .15s, box-shadow .15s;
+}
+:root[data-theme="modern"] button:hover:not(:disabled), :root[data-theme="modern"] .btn:hover { background: var(--m-soft-2); border-color: transparent; }
+:root[data-theme="modern"] button:active:not(:disabled) { transform: scale(.98); }
+:root[data-theme="modern"] .primary, :root[data-theme="modern"] .primary:hover:not(:disabled) {
+  background: var(--lapis); color: var(--lapis-ink); border-color: transparent; box-shadow: 0 2px 10px color-mix(in srgb, var(--lapis) 35%, transparent);
+}
+:root[data-theme="modern"] .primary:active:not(:disabled) { box-shadow: 0 1px 4px color-mix(in srgb, var(--lapis) 30%, transparent); }
+:root[data-theme="modern"] .seg, :root[data-theme="modern"] .speedctl { border: 0; background: var(--m-soft); border-radius: var(--m-radius); padding: 3px; gap: 2px; }
+:root[data-theme="modern"] .seg button, :root[data-theme="modern"] .speedctl button { border-radius: 9px; }
+:root[data-theme="modern"] .seg button + button, :root[data-theme="modern"] .speedctl button + button { border-inline-start: 0; }
+:root[data-theme="modern"] .on { background: var(--surface); color: var(--lapis); box-shadow: 0 1px 3px rgba(15, 23, 42, .12); }
+:root[data-theme="modern"] input[type=number], :root[data-theme="modern"] input[type=search], :root[data-theme="modern"] select {
+  border: 1px solid transparent; background: var(--m-soft); border-radius: var(--m-radius); padding: 8px 12px;
+}
+:root[data-theme="modern"] .text {
+  border: 0; border-radius: var(--m-radius-lg); box-shadow: var(--m-shadow); background: var(--surface);
+}
+:root[data-theme="modern"] .text p { border-radius: 8px; }
+:root[data-theme="modern"] .welcome { border: 0; border-radius: 22px; box-shadow: var(--m-shadow); background: var(--surface); }
+:root[data-theme="modern"] .note { border: 0; border-radius: var(--m-radius); background: var(--m-soft); }
+:root[data-theme="modern"] .formats span { border: 0; border-radius: 99px; background: var(--m-soft); }
+:root[data-theme="modern"] .toast { border-radius: 14px; }
+:root[data-theme="modern"] .book-tools > summary, :root[data-theme="modern"] .more-tools > summary {
+  border: 0; border-radius: var(--m-radius); background: var(--m-soft);
+}
+:root[data-theme="modern"] .book-tools[open] > summary { background: var(--reading); }
+:root[data-theme="modern"] .dock {
+  background: color-mix(in srgb, var(--surface) 92%, transparent); border: 0; border-radius: 999px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, .16); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+:root[data-theme="modern"] .panel-body > .field { padding: 24px 0; }
+:root[data-theme="modern"] :focus-visible { outline: 3px solid color-mix(in srgb, var(--lapis) 45%, transparent); outline-offset: 2px; }
+/* Every control at least 44 px high (the skill's touch-target rule), with 8 px between them. */
+:root[data-theme="modern"] input[type=search], :root[data-theme="modern"] .more-tools > summary { min-height: 44px; }
+:root[data-theme="modern"] .row { gap: 8px; }
+@media (prefers-reduced-motion: reduce) { :root[data-theme="modern"] button:active:not(:disabled) { transform: none; } }
+
+/* ---------------- iOS look (the "modern" theme, last layer): Apple's system colours, a blurred top bar, pill buttons,
+   grouped settings cards with separators, and a floating dock. Light and dark follow the phone's setting. ---------------- */
+:root[data-theme="modern"] {
+  --paper: #F2F2F7; --surface: #FFFFFF; --ink: #000000; --muted: rgba(60, 60, 67, .6); --line: rgba(60, 60, 67, .18);
+  --lapis: #007AFF; --lapis-ink: #FFFFFF; --reading: #E5F0FF; --brand: #A71930; --shade: rgba(0, 0, 0, .3);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="modern"] {
+    --paper: #000000; --surface: #1C1C1E; --ink: #FFFFFF; --muted: rgba(235, 235, 245, .6); --line: rgba(84, 84, 88, .65);
+    --lapis: #0A84FF; --lapis-ink: #FFFFFF; --reading: #0B2A4A; --brand: #FF9DAE; --shade: rgba(0, 0, 0, .6);
+  }
+}
+:root[data-theme="modern"] body { font-size: 16px; line-height: 1.5; }
+:root[data-theme="modern"] .bar {
+  background: color-mix(in srgb, var(--surface) 78%, transparent); backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: none; border-bottom: .5px solid var(--line); padding: 10px 16px;
+}
+:root[data-theme="modern"] .logo { color: var(--brand); font-weight: 700; font-size: 24px; letter-spacing: -.02em; }
+:root[data-theme="modern"] button, :root[data-theme="modern"] .btn {
+  background: transparent; color: var(--lapis); border: 0; border-radius: 10px; padding: 8px 12px; font-weight: 500; min-height: 44px; box-shadow: none;
+}
+:root[data-theme="modern"] button:hover:not(:disabled), :root[data-theme="modern"] .btn:hover { background: rgba(120, 120, 128, .12); border-color: transparent; }
+:root[data-theme="modern"] .primary, :root[data-theme="modern"] .primary:hover:not(:disabled) {
+  background: var(--lapis); color: #FFFFFF; border: 0; border-radius: 999px; padding: 8px 18px; font-weight: 600; box-shadow: none;
+}
+:root[data-theme="modern"] .seg, :root[data-theme="modern"] .speedctl {
+  background: rgba(118, 118, 128, .12); border: 0; border-radius: 9px; padding: 2px;
+}
+:root[data-theme="modern"] .seg button, :root[data-theme="modern"] .speedctl button { color: var(--ink); border-radius: 7px; padding: 6px 12px; }
+:root[data-theme="modern"] .on { background: var(--surface); color: var(--ink); box-shadow: 0 2px 6px rgba(0, 0, 0, .14); }
+:root[data-theme="modern"] .text, :root[data-theme="modern"] .welcome {
+  background: var(--surface); border: 0; border-radius: 14px; box-shadow: none;
+}
+:root[data-theme="modern"] .note { background: var(--surface); border: 0; border-radius: 12px; color: var(--muted); }
+:root[data-theme="modern"] input[type=search], :root[data-theme="modern"] input[type=number], :root[data-theme="modern"] select {
+  background: rgba(118, 118, 128, .12); border: 0; border-radius: 10px; color: var(--ink); min-height: 36px;
+}
+:root[data-theme="modern"] .dock {
+  background: color-mix(in srgb, var(--surface) 82%, transparent); border: 0; border-radius: 999px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .14); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+/* settings: grouped cards, separators between rows, section titles in the grey of iOS */
+:root[data-theme="modern"] .panel-body { background: var(--paper); }
+:root[data-theme="modern"] .panel-body > .field {
+  background: var(--surface); border: 0; border-radius: 12px; box-shadow: none; margin: 0 16px 20px; padding: 12px 16px;
+}
+:root[data-theme="modern"] .panel-body > .field > label, :root[data-theme="modern"] .panel-body > .field > .lbl {
+  display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px;
+}
+:root[data-theme="modern"] .hlpick { flex-direction: column; gap: 0; }
+:root[data-theme="modern"] .hlpick label { width: 100%; padding: 11px 0; border-bottom: .5px solid var(--line); font-size: 16px; }
+:root[data-theme="modern"] .hlpick label:last-child { border-bottom: 0; }
+:root[data-theme="modern"] .hlpick input, :root[data-theme="modern"] input[type=radio], :root[data-theme="modern"] input[type=checkbox] { accent-color: var(--lapis); }
+:root[data-theme="modern"] :focus-visible { outline: 2px solid var(--lapis); outline-offset: 2px; }
+/* the settings button: a round grey button with the gear in it, as on an iPhone */
+:root[data-theme="modern"] #settingsBtn {
+  width: 44px; height: 44px; padding: 0; justify-content: center; border-radius: 50%;
+  background: rgba(120, 120, 128, .14); color: var(--ink);
+}
+:root[data-theme="modern"] #settingsBtn .ui-icon { width: 24px; height: 24px; stroke-width: 2; }
+:root[data-theme="modern"] #settingsBtn:hover:not(:disabled) { background: rgba(120, 120, 128, .24); }
+/* inside the tools menu the settings item is a full-width row, like the others, not the round top-bar button */
+:root[data-theme="modern"] .more-menu #settingsBtn { width: 100%; height: auto; min-height: 44px; padding: 8px 12px; border-radius: 12px; justify-content: flex-start; background: transparent; white-space: normal; }
+:root[data-theme="modern"] .more-menu #settingsBtn .ui-icon { width: 26px; height: 26px; flex: none; }
+:root[data-theme="modern"] .more-tools > summary { border-radius: 50%; }
+/* the start page in another Persian face (Noto Naskh Arabic, SIL Open Font License; bundled, works offline); the rest of the page keeps Vazirmatn */
+@font-face { font-family: "KhanaNaskh"; src: url("NotoNaskhArabic-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+:root[data-theme="modern"] .welcome, :root[data-theme="modern"] .welcome h1, :root[data-theme="modern"] .welcome p, :root[data-theme="modern"] .welcome-badge {
+  font-family: var(--font);
+}
+
+/* ---------------- text font (Settings > قلم متن): all fonts are bundled in the app, nothing is downloaded ---------------- */
+:root[data-font="naskh"] { --font: "KhanaNaskh", serif; }
+
+/* ---------------- 3D icons: each icon sits on a glossy tile with a highlight and a shadow ---------------- */
+svg.ui-icon {
+  box-sizing: border-box; padding: 5px; border-radius: 28%; color: #FFFFFF; stroke-width: 2;
+  background: linear-gradient(180deg, #6FB2FF 0%, #0A6CFF 55%, #0055D4 100%);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .6), inset 0 -2px 3px rgba(0, 0, 0, .22), 0 3px 6px rgba(0, 0, 0, .28);
+}
+.primary svg.ui-icon { background: linear-gradient(180deg, #FFFFFF 0%, #E3ECFB 100%); color: #0A6CFF; }
+#settingsBtn svg.ui-icon, .more-tools > summary svg.ui-icon {
+  background: linear-gradient(180deg, #A8A8AE 0%, #8E8E93 55%, #6E6E73 100%); color: #FFFFFF;
+}
+.hero { filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .22)); }
+
+/* start page: one title (the line under the fish), one description, the actions, the formats, then the help and the footer */
+.welcome { gap: 16px; padding: 40px 24px 32px; }
+.welcome .welcome-badge { font-size: 24px; font-weight: 700; color: var(--ink); line-height: 1.5; }
+.welcome > p { font-size: 17px; line-height: 1.9; margin: 0; }
+.welcome .welcome-actions { margin-top: 8px; }
+.welcome-help { margin-top: 8px; }
+
+/* a short quotation at the foot of the start page, with its source */
+.page-quote { margin: 8px 0 0; padding: 12px 16px; border-inline-start: 3px solid var(--line); color: var(--muted); max-width: 46ch; }
+.page-quote p { margin: 0 0 6px; font-size: 15px; line-height: 1.9; }
+.page-quote cite { font-style: normal; font-size: 13px; }
+.page-quote { display: flex; align-items: flex-start; gap: 12px; }
+.page-quote .quote-fish { flex: none; margin-top: 4px; }
+.page-quote p { margin: 0; }
+
+/* the fish above the quotation */
+.quote-wrap { display: grid; justify-items: center; gap: 4px; margin-top: 12px; }
+.quote-wrap .quote-fish { display: block; }
+.page-quote { display: block; }
+/* Settings: each choice is shown in its own face as a sample */
+.font-sample { font-size: 18px; }
+.f-vazir { font-family: "Vazirmatn", sans-serif; }
+.f-naskh { font-family: "KhanaNaskh", serif; }
+
+/* the fish sits on a warm round tile, so it shows in light and dark themes */
+.quote-wrap .quote-fish {
+  width: 84px !important; height: 76px !important; padding: 10px; box-sizing: border-box; border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #FFF6D6 0%, #F4D98C 100%);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .7), 0 4px 10px rgba(0, 0, 0, .18);
+}
+
+/* the fish leaping out of the water, at the foot of the start page */
+.jump-art { width: min(100%, 320px); margin: 20px auto 0; padding: 14px 14px 0; box-sizing: border-box; border-radius: 22px; overflow: hidden; background: radial-gradient(circle at 50% 35%, #FFF6D6 0%, #F4D98C 100%); box-shadow: 0 4px 12px rgba(0, 0, 0, .2); cursor: pointer; }
+.jump-art:focus-visible { outline: 3px solid var(--lapis, #1E6091); outline-offset: 3px; }
+/* a bigger card on a tablet, a window or a Mac; the phone keeps the small one */
+@media (min-width: 700px) { .jump-art { width: min(100%, 480px); } .jump-art .water-quote { font-size: 19px; } }
+@media (min-width: 1000px) { .jump-art { width: min(100%, 600px); } .jump-art .water-quote { font-size: 22px; } }
+/* the text in the water appears when the fish is pressed: it rises and fades in; off for people who ask for less motion */
+.jump-art .water-quote { opacity: 0; transform: translateY(14px); transition: opacity .7s ease, transform .7s ease; }
+.jump-art.show-quote .water-quote { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .jump-art .water-quote { transition: none; transform: none; } }
+.quote-in-water { margin: 0 -14px; padding: 12px 18px 16px; background: linear-gradient(180deg, #2F7FD0 0%, #1F5FA8 100%); color: #FFFFFF; font-size: 15px; line-height: 1.9; text-align: center; }
+.jump-art svg { display: block; }
+.jump-art .jump-deco { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+.jump-art .jump-fish { position: relative; }
+.jump-art { position: relative; }
+.water-quote { position: absolute; left: 12px; right: 12px; bottom: 14px; margin: 0; padding: 10px 14px; box-sizing: border-box; border-radius: 14px; background: rgba(8, 34, 70, .72); text-align: center; direction: rtl; font-family: "Vazirmatn", "KhanaNaskh", sans-serif; font-size: 15px; font-weight: 700; line-height: 1.8; color: #FFFFFF; }
+
+/* the quotation inside the water: its own strong rules, so the page's paragraph rules do not override them */
+/* the quotation in the water: the page's paragraph rules (.welcome p) set a grey colour and narrow width, so this one wins */
+.welcome .jump-art .water-quote { color: #FFFFFF; max-width: none; margin: 0; font-weight: 700; }
+.welcome .jump-art .quote-in-water {
+  display: block !important; margin: 0 -14px !important; padding: 14px 18px 18px !important; max-width: none !important;
+  background: linear-gradient(180deg, #2F7FD0 0%, #1F5FA8 100%) !important; color: #FFFFFF !important;
+  font-size: 15px !important; line-height: 1.9 !important; text-align: center !important;
+}
+
+/* the quotation drawn inside the water of the start-page graphic (SVG text, Noto Naskh Arabic) */
+.jump-art svg text { font-family: "KhanaNaskh", serif; }
+
+/* phones: the reading card and its sheet use the full width, so the card lines up with the rest of the screen */
+@media (max-width: 600px) { .text, #note, .sheet { max-width: 100% !important; width: 100%; margin-inline: 0 !important; box-sizing: border-box; } }
+/* phones: the bottom controls are one row of equal height, with their borders in line */
+@media (max-width: 600px) { .dock { align-items: center; } .dock .transport button, .dock .pager button, .dock .pager input, .dock .speedctl button, .dock .mobile-dock-button { height: 56px; min-height: 56px; box-sizing: border-box; align-self: center; } }
+/* the voice picker on the reading bar: a small label and a select, easy to find and to press */
+.quick-voice { display: inline-flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 700; margin-inline-start: 10px; }
+.quick-voice select { min-height: 44px; font-size: 16px; border-radius: 10px; padding: 4px 8px; max-width: 46vw; }
+/* the glass themes: the tools menu and the settings panels are solid, so the start page behind them does not show through */
+:root[data-theme^="glass"] .more-menu, :root[data-theme^="glass"] .panel-body { background: var(--paper) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+/* the tools menu: the text size is one compact row, «متن −  ۲۱  متن +», not three full-width rows */
+.more-menu .group.text-size { display: flex; align-items: stretch; gap: 6px; width: 100%; }
+.more-menu .text-size button { width: auto; flex: 1 1 0; min-height: 48px; justify-content: center; padding-inline: 6px; font-size: 17px; font-weight: 700; }
+.more-menu .text-size #fontChip { flex: 0 0 64px; font-variant-numeric: tabular-nums; }
+
+/* the Persian question box (replaces the phone's English confirm box) */
+.confirm-back { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .55); }
+.confirm-box { width: min(440px, 100%); background: var(--surface); color: var(--ink); border-radius: 18px; padding: 22px; box-shadow: 0 12px 40px rgba(0, 0, 0, .35); }
+.confirm-box p { margin: 0 0 18px; font-size: 18px; line-height: 1.9; }
+.confirm-actions { display: flex; gap: 10px; justify-content: flex-start; flex-direction: row-reverse; }
+.confirm-actions button { min-height: 48px; min-width: 120px; font-size: 17px; font-weight: 700; }
+/* phones: the reading card is the full width of the screen, with no offset */
+@media (max-width: 600px) { #textView.text, .sheet:has(#textView) { width: 100% !important; max-width: 100% !important; margin: 0 !important; left: 0 !important; transform: none !important; } main { overflow-x: hidden; } }
+/* phones: the water card sits right under the fish, smaller, so the start page fits on one screen */
+@media (max-width: 600px) { .jump-art { width: min(100%, 240px); margin: 10px auto 0; } .welcome .hero { width: 76px; height: 68px; } }
+/* the glass themes: the top bar and its tools menu are drawn above the start page, not behind it */
+:root[data-theme^="glass"] .bar, :root[data-theme^="glass"] .top { position: relative; z-index: 40; }
+:root[data-theme^="glass"] .more-menu { z-index: 60; }
+/* the start page: one fish only (the one in the water), and the quotation sits on the water, inside its edges */
+.welcome > svg.hero { display: none; }
+.jump-art .water-quote { left: 16px; right: 16px; bottom: 14px; padding: 0; background: transparent; border-radius: 0; box-shadow: none; text-shadow: 0 1px 3px rgba(0, 0, 0, .55); font-size: 14px; line-height: 1.75; }
+/* phones: the quotation fits inside the water: a wider card and a slightly smaller text */
+@media (max-width: 600px) { .jump-art { width: min(100%, 290px); } .jump-art .water-quote { left: 10px; right: 10px; font-size: 12.5px; line-height: 1.7; } }
+/* the top bar and its tools menu sit above the start page in every theme (phone and tablet) */
+header.bar { z-index: 50; }
+.more-menu { z-index: 60; }
+/* panels are given z-index 70 and up while they are open: the delete dialog and the toast messages stay above them */
+.toast { z-index: 900; }
+/* phones: the settings search box scrolls with the page, so it never covers the title */
+@media (max-width: 600px) { .setfind { position: static; margin-bottom: 0; } }
+/* the note under the two start buttons: for people with a speech or language disability */
+.welcome .type-hint { margin: -6px 0 0; max-width: 48ch; font-size: 15px; line-height: 1.8; text-align: center; }
+/* more tile colours for the icons, as on an iPhone: green, orange, red, purple */
+svg.ui-icon.ic-green { background: linear-gradient(180deg, #7EE08F 0%, #34C759 55%, #1E9E43 100%); }
+svg.ui-icon.ic-orange { background: linear-gradient(180deg, #FFC266 0%, #FF9F0A 55%, #D97F00 100%); }
+svg.ui-icon.ic-red { background: linear-gradient(180deg, #FF8A80 0%, #FF453A 55%, #D12A20 100%); }
+svg.ui-icon.ic-purple { background: linear-gradient(180deg, #D9A6F0 0%, #AF52DE 55%, #8A3CBA 100%); }
+/* menu rows with an icon: the tile and the text on one line */
+.more-menu button:has(> svg.ui-icon) { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.more-menu button > svg.ui-icon { width: 26px; height: 26px; flex: none; }
+.book-tools .tools button > svg.ui-icon { width: 24px; height: 24px; flex: none; margin-inline-end: 6px; vertical-align: middle; }
+/* phones: the whole start page fits one screen, with the note under the buttons */
+@media (max-width: 600px) {
+  #welcome { padding: 12px 14px 14px; gap: 9px; }
+  #welcome h1 { font-size: 24px; line-height: 1.5; }
+  #welcome > p:not(.type-hint):not(.drop-hint) { font-size: 15.5px; line-height: 1.75; }
+  #welcome .big { min-height: 50px; font-size: 18px; }
+  #welcome .formats { gap: 6px; }
+  #welcome .formats span { padding: 3px 12px; font-size: 14px; }
+  #welcome .type-hint { font-size: 14px; line-height: 1.7; margin-top: -3px; }
+  #welcome .drop-hint { font-size: 13.5px; }
+  #welcome .welcome-help { min-height: 44px; padding: 6px 16px; font-size: 15px; }
+}
+/* settings: the text, sliders and choices sit inside the dividing lines and boxes, not on them (all themes except the default one, which has its own padding) */
+:root:not([data-theme="modern"]) .panel-body > .field { padding-inline: 14px; }
+:root:not([data-theme="modern"]) .panel-head { padding-inline: 6px; }
+/* the save-audio button in the top bar: a round button with a tile icon, shown when a text is open */
+svg.ui-icon.ic-teal { background: linear-gradient(180deg, #7FE3E8 0%, #1FB5C4 55%, #0E8A99 100%); }
+.top-save { width: 48px; height: 48px; min-width: 48px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; flex: 0 0 auto; }
+.top-save svg.ui-icon { width: 28px; height: 28px; }
+
+/* ---------------- "your taste" settings: app colour, icon style, corners ---------------- */
+.sw-a-blue { background: #007AFF; color: #fff; }
+.sw-a-green { background: #1E9E5A; color: #fff; }
+.sw-a-orange { background: #E8730C; color: #fff; }
+.sw-a-pink { background: #D63384; color: #fff; }
+.sw-a-purple { background: #7E57C2; color: #fff; }
+.sw-a-teal { background: #0E9AA7; color: #fff; }
+.sw-a-red { background: #D32F2F; color: #fff; }
+html:root[data-accent="green"] { --lapis: #1E9E5A; --reading: color-mix(in srgb, #1E9E5A 16%, var(--paper)); }
+html:root[data-accent="orange"] { --lapis: #E8730C; --reading: color-mix(in srgb, #E8730C 16%, var(--paper)); }
+html:root[data-accent="pink"] { --lapis: #D63384; --reading: color-mix(in srgb, #D63384 16%, var(--paper)); }
+html:root[data-accent="purple"] { --lapis: #7E57C2; --reading: color-mix(in srgb, #7E57C2 16%, var(--paper)); }
+html:root[data-accent="teal"] { --lapis: #0E9AA7; --reading: color-mix(in srgb, #0E9AA7 16%, var(--paper)); }
+html:root[data-accent="red"] { --lapis: #D32F2F; --reading: color-mix(in srgb, #D32F2F 16%, var(--paper)); }
+/* the plain tiles follow the chosen colour (the grey gear and the coloured ones keep theirs) */
+html:root[data-accent]:not([data-accent="blue"]) svg.ui-icon:not([class*="ic-"]) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--lapis) 72%, #fff) 0%, var(--lapis) 55%, color-mix(in srgb, var(--lapis) 78%, #000) 100%);
+}
+html:root[data-accent]:not([data-accent="blue"]) .primary svg.ui-icon { background: linear-gradient(180deg, #FFFFFF 0%, #E3ECFB 100%); }
+/* flat icons: one colour, no gloss and no shadow */
+html:root[data-icons="flat"] svg.ui-icon { background-image: none; background-color: var(--lapis); box-shadow: none; }
+html:root[data-icons="flat"] .primary svg.ui-icon { background-color: #FFFFFF; }
+html:root[data-icons="flat"] #settingsBtn svg.ui-icon, html:root[data-icons="flat"] .more-tools > summary svg.ui-icon { background-color: #8E8E93; }
+html:root[data-icons="flat"] svg.ui-icon.ic-green { background-color: #34C759; }
+html:root[data-icons="flat"] svg.ui-icon.ic-orange { background-color: #FF9F0A; }
+html:root[data-icons="flat"] svg.ui-icon.ic-red { background-color: #FF453A; }
+html:root[data-icons="flat"] svg.ui-icon.ic-purple { background-color: #AF52DE; }
+html:root[data-icons="flat"] svg.ui-icon.ic-teal { background-color: #1FB5C4; }
+/* corners: softer or sharp (the round gear and save buttons, radio buttons and sliders stay as they are) */
+html:root[data-corners="soft"] :is(button:not(#settingsBtn):not(.top-save), .btn, .primary, .welcome, .panel-body > .field, .more-menu, .dock, .confirm-box, .formats span, input:not([type=radio]):not([type=checkbox]):not([type=range]), select, textarea) { border-radius: 12px !important; }
+html:root[data-corners="sharp"] :is(button:not(#settingsBtn):not(.top-save), .btn, .primary, .welcome, .panel-body > .field, .more-menu, .dock, .confirm-box, .formats span, input:not([type=radio]):not([type=checkbox]):not([type=range]), select, textarea) { border-radius: 3px !important; }
+/* the grey gear tile keeps its grey with any app colour; flat icons are flat with any app colour too */
+html:root[data-accent]:not([data-accent="blue"]) #settingsBtn svg.ui-icon,
+html:root[data-accent]:not([data-accent="blue"]) .more-tools > summary svg.ui-icon {
+  background: linear-gradient(180deg, #A8A8AE 0%, #8E8E93 55%, #6E6E73 100%);
+}
+html:root[data-icons="flat"][data-accent]:not([data-accent="blue"]) svg.ui-icon:not([class*="ic-"]) { background-image: none; background-color: var(--lapis); }
+html:root[data-icons="flat"][data-accent]:not([data-accent="blue"]) #settingsBtn svg.ui-icon,
+html:root[data-icons="flat"][data-accent]:not([data-accent="blue"]) .more-tools > summary svg.ui-icon { background-image: none; background-color: #8E8E93; }
+html:root[data-icons="flat"][data-accent]:not([data-accent="blue"]) .primary svg.ui-icon { background-image: none; background-color: #FFFFFF; }
+/* Settings in groups: a row of tabs under the search box, one group of settings at a time */
+.settabs { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 4px; scrollbar-width: none; }
+.settabs::-webkit-scrollbar { display: none; }
+.settabs button { flex: 0 0 auto; white-space: nowrap; min-height: 40px; padding: 6px 14px; border-radius: 999px; font-size: 15px; font-weight: 700; }
+.settabs button[aria-selected="true"] { background: var(--lapis); color: var(--lapis-ink, #fff); }
+.panel-body > .field.set-off { display: none !important; }
+
+/* corners: the cards, notes, tabs and the rest follow the same shape as the buttons and the bar, so everything fits its frame */
+html:root[data-corners="soft"] :is(.text, #textView, .note, .sheet, .toast, .voicebox, .jump-art, .settabs button, .quick-voice select, .more-menu button, .panel-body, .confirm-actions button, #welcome .formats span, .welcome-help) { border-radius: 12px !important; }
+html:root[data-corners="sharp"] :is(.text, #textView, .note, .sheet, .toast, .voicebox, .jump-art, .settabs button, .quick-voice select, .more-menu button, .panel-body, .confirm-actions button, #welcome .formats span, .welcome-help) { border-radius: 3px !important; }
+.dock { overflow: hidden; }
+/* phones that are not very tall (most of them): the whole start page still fits one screen, without scrolling */
+@media (max-width: 600px) and (max-height: 860px) {
+  #welcome .drop-part { display: none; }
+  #welcome .formats { display: none; }
+  #welcome .jump-art { width: min(100%, 210px); margin-top: 0; }
+  #welcome .jump-art .water-quote { left: 8px; right: 8px; bottom: 8px; font-size: 10.5px; line-height: 1.6; }
+  #welcome h1 { font-size: 22px; }
+}
+@media (max-width: 600px) and (max-height: 700px) {
+  #welcome .jump-art { width: min(100%, 150px); }
+  #welcome .jump-art .water-quote { font-size: 8.5px; left: 5px; right: 5px; bottom: 5px; }
+  #welcome > p:not(.type-hint):not(.drop-hint) { font-size: 14px; line-height: 1.6; }
+  #welcome .type-hint { font-size: 13px; line-height: 1.6; }
+  #welcome { gap: 6px; padding-top: 8px; padding-bottom: 8px; }
+}
+/* phones: the top bar (and its open tools menu) is drawn above the text, even above the word being read */
+@media (max-width: 640px) { html:root .bar { position: relative; z-index: 50; } }
+/* phones of medium height: a larger picture, there is room for it */
+@media (max-width: 600px) and (min-height: 760px) and (max-height: 860px) {
+  #welcome .jump-art { width: min(100%, 270px); }
+  #welcome .jump-art .water-quote { font-size: 12px; left: 10px; right: 10px; bottom: 10px; }
+}
+/* the Settings tabs wrap onto a second row on narrow screens, so all of them are in sight */
+.settabs { flex-wrap: wrap; overflow: visible; }
+.settabs button { min-height: 38px; padding: 5px 12px; font-size: 14.5px; }
+
+/* PDF outline/bookmarks */
+.outline-list { list-style: none; margin: 0; padding: 0; }
+.outline-list li { margin: 0 0 4px; }
+.outline-list button { width: 100%; padding: 10px 12px; text-align: start; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); cursor: pointer; }
+.outline-list button:hover { background: color-mix(in srgb, var(--lapis) 12%, transparent); border-color: var(--lapis); }
+#bookmarkList .hint { color: var(--muted); font-size: 13px; padding: 10px 0; }
