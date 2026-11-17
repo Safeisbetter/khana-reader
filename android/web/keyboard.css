@@ -59,3 +59,9 @@
  .android-reader body.has-doc:not(.reading-tools-open) .dock { width: calc(100% - 16px); max-width: 520px; }
 }
 .android-reader body.has-doc.keyboard-open.editing-text .dock { display: none; }
+
+/* The voice picker stays on the reading bar: one full-width row under the buttons. The status text stays for screen readers only. */
+.android-reader body.has-doc .dock .reading-context { display: flex; position: static; width: auto; height: auto; overflow: visible; clip-path: none; pointer-events: auto; grid-column: 1 / -1; grid-row: 2; order: 0; justify-content: center; flex: 1 1 100%; white-space: normal; }
+.android-reader body.has-doc .dock .reading-context #readingState, .android-reader body.has-doc .dock .reading-context #readingTip { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.android-reader body.has-doc .dock .quick-voice { display: flex; width: 100%; }
+.android-reader body.has-doc .dock .quick-voice select { flex: 1 1 auto; width: 100%; min-width: 0; }

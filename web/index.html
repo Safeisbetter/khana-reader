@@ -18,7 +18,7 @@
         <span class="file" id="fileName"></span>
       </div>
 
-      <button type="button" class="primary" id="openFileBtn" title="بازکردن فایل (⌘O / Ctrl+O)"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 7h7l2 3h9v10H3z M3 7V4h6l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>بازکردن</button>
+      <button type="button" class="primary" id="openFileBtn" title="باز کردن فایل (⌘O / Ctrl+O)"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 7h7l2 3h9v10H3z M3 7V4h6l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>باز کردن</button>
 
 
 
@@ -39,20 +39,20 @@
         <button type="button" id="fontUp" aria-label="بزرگ‌تر کردن متن" title="متن بزرگ‌تر">متن +</button>
       </div>
       <div class="group" id="searchRow" role="group" aria-label="کار روی متن">
-        <button id="editBtn" type="button" title="تغییر یا حذف یک بند یا کلمه‌ی متن؛ برای خواندن، ذخیره‌ی MP3 و PDF هم اثر می‌کند">✎ ویرایش متن</button>
-        <button id="voiceBtn" type="button" hidden title="با صدای خودتان یک کلمه را عوض یا حذف کنید، یا بندی را که می‌شنوید حذف کنید">🎤 ویرایش با صدا</button>
+        <button id="editBtn" type="button" title="تغییر یا حذف یک بند یا کلمه‌ی متن؛ برای خواندن، ذخیره‌ی MP3 و PDF هم اثر می‌کند"><svg class="ui-icon ic-orange" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 19.5l.9-3.9L16 5a2.1 2.1 0 0 1 3 3L8.4 18.6z"/><path d="M14 7l3 3"/></g></svg>ویرایش متن</button>
+        <button id="voiceBtn" type="button" hidden title="با صدای خودتان یک کلمه را عوض یا حذف کنید، یا بندی را که می‌شنوید حذف کنید"><svg class="ui-icon ic-red" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></g></svg>ویرایش با صدا</button>
         <button id="copy" type="button">کپی متن</button>
       </div>
       <div class="group" role="group" aria-label="ذخیره">
         <button id="mp3Btn" type="button">ذخیره‌ی صدا</button>
-        <button id="pdfBtn" type="button" hidden title="ترجمه‌ی فارسی سند را به صورت PDF ذخیره می‌کند (⇧⌘S)">ذخیرهٔ PDF</button>
+        <button id="pdfBtn" type="button" hidden title="ترجمه‌ی فارسی سند را به صورت PDF ذخیره می‌کند (⇧⌘S)">ذخیره‌ی PDF</button>
       </div>
     </div>
     </details>
 <button id="readingToolsBtn" type="button" hidden aria-expanded="false">صفحه و سرعت</button><button id="settingsBtn" type="button" aria-label="تنظیمات"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18.74 9.46L21.02 10.17L21.02 13.83L18.74 14.54L18.56 14.97L19.67 17.08L17.08 19.67L14.97 18.56L14.54 18.74L13.83 21.02L10.17 21.02L9.46 18.74L9.03 18.56L6.92 19.67L4.33 17.08L5.44 14.97L5.26 14.54L2.98 13.83L2.98 10.17L5.26 9.46L5.44 9.03L4.33 6.92L6.92 4.33L9.03 5.44L9.46 5.26L10.17 2.98L13.83 2.98L14.54 5.26L14.97 5.44L17.08 4.33L19.67 6.92L18.56 9.03Z M15.2 12a3.2 3.2 0 1 0-6.4 0 3.2 3.2 0 0 0 6.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>تنظیمات</button><button id="visionBtn" type="button" aria-haspopup="dialog" aria-controls="visionPanel"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12 M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>دید بهتر</button><button id="focusBtn" hidden class="needs-doc" type="button" aria-pressed="false">نمای خلوت</button><div class="search needs-text">
         <input id="q" type="search" placeholder="جستجو در این صفحه…" title="کلید ورود: مورد بعدی" aria-label="جستجو">
         <span class="count" id="count"></span>
-      </div><button type="button" id="libBtn" hidden title="فایل‌های صدایی که ساخته‌اید، داخل خودِ برنامه">🎧 فایل‌های من</button><button type="button" id="typeBtn" title="متن را بنویسید یا بچسبانید تا خوانده شود و به صورت فایل صدا ذخیره شود">✎ نوشتن متن</button><button type="button" id="helpBtn" aria-haspopup="dialog" aria-controls="helpPanel">راهنما</button></div></details>
+      </div><button type="button" id="libBtn" hidden title="فایل‌های صدایی که ساخته‌اید، داخل خودِ برنامه"><svg class="ui-icon ic-green" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="6" rx="1.6"/><rect x="17" y="14" width="4" height="6" rx="1.6"/></g></svg>فایل‌های من</button><button type="button" id="typeBtn" title="متن را بنویسید یا بچسبانید تا خوانده شود و به صورت فایل صدا ذخیره شود"><svg class="ui-icon ic-orange" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 19.5l.9-3.9L16 5a2.1 2.1 0 0 1 3 3L8.4 18.6z"/><path d="M14 7l3 3"/></g></svg>نوشتن متن</button><button type="button" id="helpBtn" aria-haspopup="dialog" aria-controls="helpPanel"><svg class="ui-icon ic-purple" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1.1.9-1.1 1.7"/><path d="M12 16.8h.01"/></g></svg>راهنما</button></div></details>
       <input id="fileInput" type="file" hidden multiple accept=".pdf,.doc,.docx,.pptx,.epub,.rtf,.odt,.txt,.md,.html,.htm,.fb2,.png,.jpg,.jpeg,.webp,.gif,.bmp,.heic,image/*">
     </div>
     <!-- the open book's tools, in three groups: how it is shown, working on its text, saving it -->
@@ -60,7 +60,7 @@
 
       <button id="edWordBtn" type="button">اصلاح کلمه</button>
       <button id="edUndo" type="button" title="آخرین تغییر بند یا کلمه؛ تا زمانی که این کتاب باز است" disabled>برگرداندن آخرین تغییر</button>
-      <button id="edReset" type="button" title="همه‌ی ویرایش‌های این کتاب و کلمه‌های اصلاح‌شده‌ی همه‌ی کتاب‌ها را پاک می‌کند">پاک کردن همهٔ اصلاح‌ها</button>
+      <button id="edReset" type="button" title="همه‌ی ویرایش‌های این کتاب و کلمه‌های اصلاح‌شده‌ی همه‌ی کتاب‌ها را پاک می‌کند">پاک کردن همه‌ی اصلاح‌ها</button>
       <button id="edDone" type="button">پایان ویرایش</button>
       <span id="edInfo" class="editnote"></span>
     </div>
@@ -86,17 +86,6 @@
         <circle cx="29.5" cy="44" r="2.7" fill="#0B0B0C"/>
         <circle cx="28.4" cy="42.8" r=".9" fill="#FFFFFF"/>
       </svg>
-      <h1 class="welcome-badge">پول و وقت خواندن ندارید؟ کتاب را گوش کنید.</h1>
-      <p>کتاب، نوشته یا عکسِ یک صفحه را انتخاب کنید. خوانا متن فارسی را برایتان می‌خواند.</p>
-      <div class="actions welcome-actions">
-        <button type="button" class="primary big" id="welcomeOpen">انتخاب فایل برای خواندن</button>
-        <button type="button" class="big" id="typeBtn2">نوشتن متن</button>
-      </div>
-      <p class="hint drop-hint">کاملاً آفلاین · می‌توانید فایل را اینجا بکشید و رها کنید.</p>
-
-      <div class="formats" aria-label="فایل‌های پشتیبانی‌شده"><span>PDF</span><span>Word</span><span>EPUB</span><span>TXT</span><span>عکس صفحه</span><span>و قالب‌های دیگر</span></div>
-      <button type="button" id="welcomeHelp" class="welcome-help" aria-haspopup="dialog" aria-controls="helpPanel">اولین بار است؟ راهنمای کوتاه را ببینید</button>
-      
       <div class="jump-art" id="jumpArt" role="button" tabindex="0" aria-expanded="false" aria-controls="waterQuote" aria-label="متن را ببینید: روی ماهی بزنید">
         <svg class="jump-deco" viewBox="0 0 240 176" aria-hidden="true" focusable="false">
           <circle cx="196" cy="34" r="20" fill="#FFD45C"/>
@@ -108,20 +97,40 @@
         <svg class="jump-fish" viewBox="0 0 240 176" width="100%" height="auto" focusable="false">
           <path d="M0 74 Q15 62 30 74 T60 74 T90 74 T120 74 T150 74 T180 74 T210 74 T240 74 V176 H0 Z" fill="#5AA9E6" opacity=".9"/>
           <path d="M0 86 Q15 74 30 86 T60 86 T90 86 T120 86 T150 86 T180 86 T210 86 T240 86 V176 H0 Z" fill="#2F7FD0"/>
-          <g transform="translate(118 42) rotate(-32)">
-            <path d="M-30 0 C-16 -22 14 -24 32 0 C14 22 -16 22 -30 0 Z" fill="#111111" stroke="#E5231B" stroke-width="3" stroke-linejoin="round"/>
-            <path d="M28 0 L48 -14 L44 0 L48 14 Z" fill="#111111" stroke="#E5231B" stroke-width="3" stroke-linejoin="round"/>
-            <circle cx="-18" cy="-2" r="4" fill="#FFFFFF"/>
-            <circle cx="-17" cy="-2" r="2" fill="#111111"/>
+          <defs><linearGradient id="fishBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3C3C40"/><stop offset=".5" stop-color="#141416"/><stop offset="1" stop-color="#050505"/></linearGradient></defs>
+          <g transform="translate(118 44) rotate(-30) scale(.82) translate(-58 -48)">
+            <path d="M82 50C90 42 96 34 104 28C102 40 100 46 98 50C100 56 102 62 104 72C96 66 90 58 82 50Z" fill="#1A1A1C" stroke="#8E8E93" stroke-width="1" stroke-linejoin="round"/>
+            <path d="M40 27C44 10 60 8 72 24C62 26 52 27 40 27Z" fill="#161618" stroke="#8E8E93" stroke-width="1" stroke-linejoin="round"/>
+            <path d="M54 71C58 80 68 82 76 76C70 74 62 73 54 71Z" fill="#161618" stroke="#8E8E93" stroke-width="1" stroke-linejoin="round"/>
+            <path d="M16 50C18 34 38 24 58 26C74 28 84 40 84 50C84 60 74 70 58 72C38 74 18 66 16 50Z" fill="url(#fishBody)" stroke="#8E8E93" stroke-width="1.2"/>
+            <path d="M30 44C44 40 60 40 74 44" fill="none" stroke="#5A5A5E" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+            <g fill="none" stroke="#4A4A4E" stroke-width=".8" opacity=".7"><path d="M44 48q3 4 6 0"/><path d="M54 46q3 4 6 0"/><path d="M64 48q3 4 6 0"/><path d="M48 56q3 4 6 0"/><path d="M58 56q3 4 6 0"/><path d="M68 56q3 4 6 0"/></g>
+            <path d="M34 56C28 62 30 70 40 68C40 63 38 59 34 56Z" fill="#1C1C1E" stroke="#8E8E93" stroke-width=".9" stroke-linejoin="round"/>
+            <path d="M34 38C30 46 30 56 34 64" fill="none" stroke="#8E8E93" stroke-width="1.1" stroke-linecap="round"/>
+            <circle cx="30" cy="44" r="5.2" fill="#D9D9DE"/>
+            <circle cx="29.5" cy="44" r="2.7" fill="#0B0B0C"/>
+            <circle cx="28.4" cy="42.8" r=".9" fill="#FFFFFF"/>
           </g>
-          <circle cx="96" cy="62" r="3.5" fill="#BFE3FF"/>
-          <circle cx="142" cy="60" r="3" fill="#BFE3FF"/>
+          <circle cx="80" cy="64" r="3.5" fill="#BFE3FF"/>
+          <circle cx="72" cy="56" r="3" fill="#BFE3FF"/>
           <circle cx="120" cy="54" r="2.5" fill="#BFE3FF"/>
           <circle cx="152" cy="70" r="2.5" fill="#BFE3FF"/>
         </svg>
         <p class="water-quote" id="waterQuote" dir="rtl" lang="fa" aria-hidden="true">البته اگر یک وقتی ناچار با مرگ<br>روبرو شوم که می‌شوم، مهم نیست؛<br>مهم این است که زندگی یا مرگ من<br>چه اثری در زندگی دیگران داشته باشد.</p>
         <p class="sr-only">البته اگر یک وقتی ناچار با مرگ روبرو شوم که می‌شوم، مهم نیست؛ مهم این است که زندگی یا مرگ من چه اثری در زندگی دیگران داشته باشد.</p>
       </div>
+      <h1 class="welcome-badge">پول و وقت خواندن ندارید؟</h1>
+      <p>کتاب، نوشته یا عکسِ یک صفحه را انتخاب کنید. خوانا متن فارسی را برایتان می‌خواند.</p>
+      <div class="actions welcome-actions">
+        <button type="button" class="primary big" id="welcomeOpen">انتخاب فایل برای خواندن</button>
+        <button type="button" class="big" id="typeBtn2" aria-describedby="typeHint">نوشتن متن</button>
+      </div>
+      <p class="hint type-hint" id="typeHint">«نوشتن متن» برای افراد با معلولیت گفتاری یا زبانی مناسب است: بنویسید و خوانا برایتان بخواند.</p>
+      <p class="hint drop-hint">کاملاً آفلاین · می‌توانید فایل را اینجا بکشید و رها کنید.</p>
+
+      <div class="formats" aria-label="فایل‌های پشتیبانی‌شده"><span>PDF</span><span>Word</span><span>EPUB</span><span>TXT</span><span>عکس صفحه</span><span>و قالب‌های دیگر</span></div>
+      <button type="button" id="welcomeHelp" class="welcome-help" aria-haspopup="dialog" aria-controls="helpPanel">اولین بار است؟ راهنمای کوتاه را ببینید</button>
+      
     </section>
     <div class="note" id="note" role="status" aria-live="polite" hidden></div>
     <p id="paragraphHelp" class="sr-only">با کلیدهای بالا و پایین میان بندها حرکت کنید. برای خواندن از بند انتخاب‌شده، Enter را بزنید. کلید فاصله خواندن را مکث یا ادامه می‌دهد.</p>
@@ -131,12 +140,12 @@
 </main>
 
 <nav class="dock" id="docTools" aria-label="خواندن، صفحه و سرعت" hidden>
-  <div class="reading-context"><span id="readingState" role="status" aria-live="polite">آماده‌ی خواندن</span><span id="readingTip">برای شروع از هرجا، روی جمله بزنید.</span></div>
+  <div class="reading-context"><span id="readingState" role="status" aria-live="polite">آماده‌ی خواندن</span><span id="readingTip">برای شروع از هر جا، روی یک جمله بزنید.</span><label class="quick-voice"><select id="dockVoice" aria-label="صدای خواندن"></select></label></div>
   <div id="pageControls" class="pager" role="group" aria-label="انتخاب صفحه">
-        <button id="prev" type="button" aria-label="صفحه قبل">←</button>
-        <input id="pageInput" type="text" inputmode="numeric" value="۱" aria-label="شماره صفحه">
+        <button id="prev" type="button" aria-label="صفحه‌ی قبل">←</button>
+        <input id="pageInput" type="text" inputmode="numeric" value="۱" aria-label="شماره‌ی صفحه">
         <span>از <span id="pageCount">۰</span></span>
-        <button id="next" type="button" aria-label="صفحه بعد">→</button>
+        <button id="next" type="button" aria-label="صفحه‌ی بعد">→</button>
       </div>
   <button id="quickPage" class="mobile-dock-button" type="button" aria-expanded="false" aria-controls="pageControls" hidden><span>صفحه</span><span id="quickPageNumber">۱</span></button>
   <div class="transport">
@@ -163,21 +172,21 @@
 <div class="panel" id="visionPanel" hidden>
   <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="visionTitle">
     <div class="panel-head"><h2 id="visionTitle">دید بهتر، خواندن راحت‌تر</h2><button type="button" data-close>بستن</button></div>
-    <section class="field"><h3>اندازهٔ نوشتهٔ کتاب</h3><div class="inline"><button type="button" id="visionFontDown">متن کوچک‌تر −</button><button type="button" id="visionFontUp">متن بزرگ‌تر +</button></div></section>
-    <section class="field"><h3>اندازهٔ دکمه‌ها و منوها</h3><div class="vision-options" role="group" aria-label="اندازهٔ ابزارها"><button type="button" data-ui-scale="1">معمولی</button><button type="button" data-ui-scale="1.15">بزرگ</button><button type="button" data-ui-scale="1.3">خیلی بزرگ</button></div></section>
+    <section class="field"><h3>اندازه‌ی نوشته‌ی کتاب</h3><div class="inline"><button type="button" id="visionFontDown">متن کوچک‌تر −</button><button type="button" id="visionFontUp">متن بزرگ‌تر +</button></div></section>
+    <section class="field"><h3>اندازه‌ی دکمه‌ها و منوها</h3><div class="vision-options" role="group" aria-label="اندازه‌ی ابزارها"><button type="button" data-ui-scale="1">معمولی</button><button type="button" data-ui-scale="1.15">بزرگ</button><button type="button" data-ui-scale="1.3">خیلی بزرگ</button></div></section>
     <section class="field"><h3>رنگ و تضاد</h3><div class="vision-options" role="group" aria-label="رنگ صفحه"><button type="button" class="theme-sample sample-light" data-vision-theme="light">روشن</button><button type="button" class="theme-sample sample-dark" data-vision-theme="dark">تیره</button><button type="button" class="theme-sample sample-yellow" data-vision-theme="blackyellow">زرد روی سیاه</button></div></section>
-    <p class="hint">برای ابزارهای متن، آیکون تنظیمات را بزنید. در گوشی، صفحه و سرعت کنار دکمهٔ خواندن هستند.</p>
+    <p class="hint">برای ابزارهای متن، آیکون تنظیمات را بزنید. در گوشی، صفحه و سرعت کنار دکمه‌ی خواندن هستند.</p>
   </div>
 </div>
 
 <div class="panel" id="helpPanel" hidden>
   <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
     <div class="panel-head"><h2 id="helpTitle">راهنمای کوتاه خوانا</h2><button type="button" data-close>بستن</button></div>
-    <section class="field guide-card"><h3>بازکردن و خواندن</h3><p>«بازکردن فایل» را بزنید یا «نوشتن متن» را انتخاب کنید. سپس با «خواندن» گوش بدهید. «مکث» خواندن را نگه می‌دارد و «ادامه» از همان‌جا پیش می‌رود؛ «توقف» خواندن را تمام می‌کند.</p></section>
+    <section class="field guide-card"><h3>باز کردن و خواندن</h3><p>«باز کردن فایل» را بزنید یا «نوشتن متن» را انتخاب کنید. سپس با «خواندن» گوش بدهید. «مکث» خواندن را نگه می‌دارد و «ادامه» از همان‌جا پیش می‌رود؛ «توقف» خواندن را تمام می‌کند.</p></section>
     <section class="field guide-card"><h3>از جمله‌ی دلخواه شروع کنید</h3><p>در نمای «متن»، روی یک جمله بزنید. با Tab وارد متن شوید، با کلیدهای بالا و پایین بند را انتخاب کنید و با Enter خواندن را شروع کنید. با دکمه‌های صفحه‌ی قبل و بعد یا نوشتن شماره‌ی صفحه جابه‌جا شوید. نمای «صفحه» شکل اصلی فایل را نشان می‌دهد، اگر در دسترس باشد.</p></section>
-    <section class="field guide-card"><h3>خواندن راحت‌تر</h3><p>با «متن +» نوشته را بزرگ کنید. در «دید بهتر» اندازهٔ دکمه‌ها و رنگ صفحه را انتخاب کنید. سرعت را با + و − کنار درصد تغییر دهید. ترجمه را با «مقایسه با اصل» بررسی کنید؛ ممکن است اشتباه کند.</p><button type="button" id="helpSettings">رفتن به تنظیمات</button></section>
+    <section class="field guide-card"><h3>خواندن راحت‌تر</h3><p>با «متن +» نوشته را بزرگ کنید. در «دید بهتر» اندازه‌ی دکمه‌ها و رنگ صفحه را انتخاب کنید. سرعت را با + و − کنار درصد تغییر دهید. ترجمه را با «مقایسه با اصل» بررسی کنید؛ ممکن است اشتباه کند.</p><button type="button" id="helpSettings">رفتن به تنظیمات</button></section>
     <section class="field guide-card"><h3>ذخیره برای بعد</h3><p>«ذخیره‌ی صدا» از متن فایل صوتی می‌سازد. در پنجره‌ی ذخیره می‌توانید همه‌ی متن یا چند صفحه را انتخاب کنید.</p></section>
-    <section class="field guide-card"><h3>کلیدهای میانبر</h3><dl class="shortcut-list"><div><dt><kbd>Space</kbd></dt><dd>خواندن، مکث یا ادامه</dd></div><div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>صفحه‌ی قبل و بعد</dd></div><div><dt><kbd>⌘O</kbd> / <kbd>Ctrl+O</kbd></dt><dd>بازکردن فایل</dd></div><div><dt><kbd>⌘F</kbd> / <kbd>Ctrl+F</kbd></dt><dd>جستجو در متن همین صفحه</dd></div><div><dt><kbd>Esc</kbd></dt><dd>بستن پنجره‌ی باز</dd></div></dl><p class="hint">میانبرهای خواندن هنگام نوشتن در کادرها یا باز بودن پنجره‌ها فعال نیستند.</p></section>
+    <section class="field guide-card"><h3>کلیدهای میانبر</h3><dl class="shortcut-list"><div><dt><kbd>Space</kbd></dt><dd>خواندن، مکث یا ادامه</dd></div><div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>صفحه‌ی قبل و بعد</dd></div><div><dt><kbd>⌘O</kbd> / <kbd>Ctrl+O</kbd></dt><dd>باز کردن فایل</dd></div><div><dt><kbd>⌘F</kbd> / <kbd>Ctrl+F</kbd></dt><dd>جستجو در متن همین صفحه</dd></div><div><dt><kbd>Esc</kbd></dt><dd>بستن پنجره‌ی باز</dd></div></dl><p class="hint">میانبرهای خواندن هنگام نوشتن در کادرها یا باز بودن پنجره‌ها فعال نیستند.</p></section>
     <p class="privacy">خواندن، تشخیص متن و ترجمه روی همین دستگاه انجام می‌شوند. فایل‌هایتان به جایی فرستاده نمی‌شوند.</p>
   </div>
 </div>
@@ -235,8 +244,8 @@
       </div>
     </div>
     <div class="field">
-      <label for="fontSize">اندازهٔ متن: <span id="fontVal"></span></label>
-      <input id="fontSize" type="range" aria-label="اندازهٔ متن" min="14" max="72" step="1">
+      <label for="fontSize">اندازه‌ی متن: <span id="fontVal"></span></label>
+      <input id="fontSize" type="range" aria-label="اندازه‌ی متن" min="14" max="72" step="1">
     </div>
     <div class="field">
       <label for="lineHeight">فاصله‌ی خط‌ها: <span id="lineHeightVal"></span></label>
@@ -247,8 +256,8 @@
       <label for="pageWidth">پهنای متن: <span id="pageWidthVal"></span></label>
       <input id="pageWidth" type="range" aria-label="پهنای متن" min="26" max="100" step="2">
       <div class="scale"><span>باریک</span><span>تمام‌عرض</span></div>
-      <label for="pageMargin">حاشیهٔ متن: <span id="pageMarginVal"></span></label>
-      <input id="pageMargin" type="range" aria-label="حاشیهٔ متن" min="20" max="200" step="10">
+      <label for="pageMargin">حاشیه‌ی متن: <span id="pageMarginVal"></span></label>
+      <input id="pageMargin" type="range" aria-label="حاشیه‌ی متن" min="20" max="200" step="10">
       <div class="scale"><span>کم</span><span>زیاد</span></div>
     </div>
     <div class="field">
@@ -309,11 +318,11 @@
         </div>
         <span class="hint">نشانگر بزرگ سیاه با لبه‌ی سفید است؛ روی دکمه‌ها و گزینه‌ها زرد می‌شود.</span>
       </div>
-      <label class="check"><input id="sentenceLines" type="checkbox"><span>هر جمله در یک خط<br><span class="hint">جملهٔ بعد از نقطه از سر خط شروع می‌شود. فقط نمایش متن تغییر می‌کند.</span></span></label>
+      <label class="check"><input id="sentenceLines" type="checkbox"><span>هر جمله در یک خط<br><span class="hint">جمله‌ی بعد از نقطه از سر خط شروع می‌شود. فقط نمایش متن تغییر می‌کند.</span></span></label>
       <label class="check"><input id="clickSound" type="checkbox"><span>صدا هنگام لمس دکمه‌ها<br><span class="hint">روشن شدن یک گزینه صدای زیرتر و خاموش شدنش صدای بم‌تر دارد.</span></span></label>
       <label class="check"><input id="naturalTone" type="checkbox"><span>خواندن طبیعی (لحن پرسش، پایان جمله و عنوان)</span></label>
-      <label class="check"><input id="autoPlay" type="checkbox"><span>خواندن خودکار پس از بازکردن فایل</span></label>
-      <label class="check"><input id="autoNext" type="checkbox"><span>ادامهٔ خواندن در صفحهٔ بعد</span></label>
+      <label class="check"><input id="autoPlay" type="checkbox"><span>خواندن خودکار پس از باز کردن فایل</span></label>
+      <label class="check"><input id="autoNext" type="checkbox"><span>ادامه‌ی خواندن در صفحه‌ی بعد</span></label>
       <label class="check"><input id="persianYeh" type="checkbox"><span>تبدیل «ي» و «ك» عربی به «ی» و «ک» فارسی</span></label>
       <label class="check"><input id="reversed" type="checkbox"><span>متن وارونه است<br><span class="hint">برای بعضی PDFها که حروف از آخر به اول درمی‌آیند.</span></span></label>
     </div>
@@ -333,7 +342,7 @@
     </div>
     <div class="field" id="lockField">
       <label>قفل برنامه (رمز)</label>
-      <p class="editnote">برای بازکردن خوانا رمز بگذارید. زمان قفل خودکار را هم می‌توانید انتخاب کنید. این قفل دسترسی به برنامه را محدود می‌کند؛ فایل‌ها را رمزگذاری نمی‌کند.</p>
+      <p class="editnote">برای باز کردن خوانا رمز بگذارید. زمان قفل خودکار را هم می‌توانید انتخاب کنید. این قفل دسترسی به برنامه را محدود می‌کند؛ فایل‌ها را رمزگذاری نمی‌کند.</p>
       <p class="hint" id="lockState">قفل خاموش است.</p>
       <div class="inline">
         <button type="button" id="lockOn" class="primary">فعال کردن قفل</button>
@@ -383,7 +392,7 @@
     <p class="hint" id="pwHint">این PDF با رمز محافظت شده است. رمز را وارد کنید.</p>
     <div class="field"><input type="password" id="pwInput" aria-label="رمز PDF" autocomplete="off" autocapitalize="off" spellcheck="false" dir="ltr"></div>
     <div class="inline">
-      <button type="button" class="primary" id="pwOk">بازکردن</button>
+      <button type="button" class="primary" id="pwOk">باز کردن</button>
       <button type="button" data-close>انصراف</button>
     </div>
   </div>
@@ -418,7 +427,7 @@
       <button type="button" data-mark="" aria-label="پاک کردن حرکت‌های حرف انتخاب‌شده">پاک کردن حرکت</button>
     </div>
     <output id="pronPreview" class="pron-preview" aria-live="polite" dir="rtl"></output>
-    <p class="hint">تلفظ در خواندن و فایل صوتی اصلاح می‌شود، بدون تغییر نوشتهٔ کتاب. این اصلاح در همهٔ کتاب‌ها می‌ماند.</p>
+    <p class="hint">تلفظ در خواندن و فایل صوتی اصلاح می‌شود، بدون تغییر نوشته‌ی کتاب. این اصلاح در همه‌ی کتاب‌ها می‌ماند.</p>
     <div class="inline"><button type="button" id="pronListen">شنیدن</button><button type="button" class="primary" id="pronSave">ذخیره</button><button type="button" data-close>انصراف</button></div>
   </div>
 </div>
@@ -426,13 +435,13 @@
   <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="wordTitle">
     <div class="panel-head"><h2 id="wordTitle">اصلاح کلمه</h2><button type="button" data-close>بستن</button></div>
     <p id="wordContext" class="edit-context" dir="auto" hidden></p>
-    <div class="field"><label for="edFrom">کلمهٔ فعلی</label><input id="edFrom" type="text" autocomplete="off"></div>
+    <div class="field"><label for="edFrom">کلمه‌ی فعلی</label><input id="edFrom" type="text" autocomplete="off"></div>
     <div class="field"><label for="edTo">جایگزین (خالی = حذف)</label><input id="edTo" type="text" autocomplete="off"></div>
     <span class="hint">فقط همین کلمه عوض می‌شود، نه جایی که بخشی از کلمه‌ای دیگر است. روی خواندن، MP3 و PDF اثر می‌کند.</span>
     <div class="inline editor-actions">
       <button type="button" class="primary" id="edWord">ذخیره</button>
       <button type="button" id="edMarks">حرکت‌ها</button>
-      <button type="button" id="edEzafe" title="کلمه‌ی بالا در خواندن همیشه با «ـِ» (کسره‌ی اضافه) خوانده شود، مثل «کتابِ من». نوشته‌ی کتاب عوض نمی‌شود.">کسرهٔ آخر کلمه</button>
+      <button type="button" id="edEzafe" title="کلمه‌ی بالا در خواندن همیشه با «ـِ» (کسره‌ی اضافه) خوانده شود، مثل «کتابِ من». نوشته‌ی کتاب عوض نمی‌شود.">کسره‌ی آخر کلمه</button>
       <button type="button" data-close>انصراف</button>
     </div>
   </div>
@@ -442,7 +451,7 @@
 <div class="panel" id="typePanel" hidden>
   <div class="panel-body" role="dialog" aria-modal="true" aria-labelledby="typeTitle">
     <div class="panel-head"><h2 id="typeTitle">نوشتن متن</h2><button type="button" data-close>بستن</button></div>
-    <p class="hint">متن را بنویسید یا بچسبانید؛ سپس «خواندن» یا «ذخیرهٔ صدا» را بزنید.</p>
+    <p class="hint">متن را بنویسید یا بچسبانید؛ سپس «خواندن» یا «ذخیره‌ی صدا» را بزنید.</p>
     <div class="field"><textarea id="typeText" dir="auto" rows="12" placeholder="متن شما…" aria-label="متن"></textarea></div>
     <div id="sttRow" hidden>
       <p class="hint">گفتار را به متن فارسی تبدیل کنید: یک فایل صدا (MP3، M4A، WAV…) انتخاب کنید یا مستقیم صحبت کنید. نوشته در بالا اضافه می‌شود و می‌توانید آن را ویرایش کنید. همه‌چیز روی همین دستگاه انجام می‌شود.</p>
@@ -456,7 +465,7 @@
     </div>
     <div class="inline">
       <button type="button" class="primary" id="typeRead">▶ خواندن</button>
-      <button type="button" id="typeSave">ذخیرهٔ صدا</button>
+      <button type="button" id="typeSave">ذخیره‌ی صدا</button>
       <button type="button" data-close>انصراف</button>
     </div>
   </div>
@@ -470,7 +479,7 @@
     <div class="field">
       <span class="lbl">کدام بخش؟</span>
       <div class="radio">
-        <label><input type="radio" name="scope" value="page" checked> فقط صفحه فعلی</label>
+        <label><input type="radio" name="scope" value="page" checked> فقط صفحه‌ی فعلی</label>
         <label><input type="radio" name="scope" value="all"> کل سند</label>
         <label><input type="radio" name="scope" value="range"> از صفحه
           <input id="from" type="text" inputmode="numeric" value="۱" class="num"> تا
@@ -499,6 +508,9 @@
       <label><input type="checkbox" id="fastExport"> سریع‌تر: صدا بعد از ساخته شدن دوباره بررسی نمی‌شود (روی گوشی و تبلت فقط کمی سریع‌تر است)</label>
       <span class="hint">ممکن است گاهی کلمه‌ای جا بیفتد یا نامفهوم باشد. برای کیفیت بهتر، آن را خاموش بگذارید.</span>
     </div>
+    <div class="field" id="endWordField">
+      <label><input type="checkbox" id="endWordExport" checked> در پایان فایل صدا بگوید «پایان متن»</label>
+    </div>
     <p class="hint" id="mp3Voice"></p>
     <div class="inline">
       <button type="button" class="primary" id="mp3Start">ساخت فایل صوتی</button>
@@ -516,7 +528,7 @@
 <div class="panel" id="libPanel" role="dialog" aria-modal="true" aria-labelledby="libTitle" hidden>
   <div class="panel-body">
     <div class="panel-head"><h2 id="libTitle">فایل‌های من</h2><button type="button" data-close>بستن</button></div>
-    <p class="editnote">فایل‌ها در فضای خصوصی خوانا می‌مانند. برای کپی به پوشهٔ دلخواه، «ذخیره در دستگاه» را بزنید. نسخهٔ کپی‌شده ممکن است در دسترس برنامه‌های دیگر باشد.</p>
+    <p class="editnote">فایل‌ها در فضای خصوصی خوانا می‌مانند. برای کپی به پوشه‌ی دلخواه، «ذخیره در دستگاه» را بزنید. نسخه‌ی کپی‌شده ممکن است در دسترس برنامه‌های دیگر باشد.</p>
     <div class="field" id="libPlayer" hidden>
       <span class="lbl" id="libNow"></span>
       <audio id="libAudio" controls preload="none"></audio>
@@ -526,7 +538,7 @@
   </div>
 </div>
 
-<div class="drop" id="drop" hidden>فایل را این‌جا رها کنید</div>
+<div class="drop" id="drop" hidden>فایل را اینجا رها کنید</div>
 <div class="voicebox" id="voiceStatus" role="status" aria-live="assertive" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 <div class="sr-only" id="srLive" role="status" aria-live="polite" aria-atomic="true"></div>

@@ -8,8 +8,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.khana.reader"
     android:targetSandboxVersion="2"
-    android:versionCode="9"
-    android:versionName="1.22">
+    android:versionCode="10"
+    android:versionName="1.24">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="37" />
 

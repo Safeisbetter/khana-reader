@@ -1010,3 +1010,69 @@ svg.ui-icon {
 
 /* the quotation drawn inside the water of the start-page graphic (SVG text, Noto Naskh Arabic) */
 .jump-art svg text { font-family: "KhanaNaskh", serif; }
+
+/* phones: the reading card and its sheet use the full width, so the card lines up with the rest of the screen */
+@media (max-width: 600px) { .text, #note, .sheet { max-width: 100% !important; width: 100%; margin-inline: 0 !important; box-sizing: border-box; } }
+/* phones: the bottom controls are one row of equal height, with their borders in line */
+@media (max-width: 600px) { .dock { align-items: center; } .dock .transport button, .dock .pager button, .dock .pager input, .dock .speedctl button, .dock .mobile-dock-button { height: 56px; min-height: 56px; box-sizing: border-box; align-self: center; } }
+/* the voice picker on the reading bar: a small label and a select, easy to find and to press */
+.quick-voice { display: inline-flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 700; margin-inline-start: 10px; }
+.quick-voice select { min-height: 44px; font-size: 16px; border-radius: 10px; padding: 4px 8px; max-width: 46vw; }
+/* the glass themes: the tools menu and the settings panels are solid, so the start page behind them does not show through */
+:root[data-theme^="glass"] .more-menu, :root[data-theme^="glass"] .panel-body { background: var(--paper) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+/* the tools menu: the text size is one compact row, «متن −  ۲۱  متن +», not three full-width rows */
+.more-menu .group.text-size { display: flex; align-items: stretch; gap: 6px; width: 100%; }
+.more-menu .text-size button { width: auto; flex: 1 1 0; min-height: 48px; justify-content: center; padding-inline: 6px; font-size: 17px; font-weight: 700; }
+.more-menu .text-size #fontChip { flex: 0 0 64px; font-variant-numeric: tabular-nums; }
+
+/* the Persian question box (replaces the phone's English confirm box) */
+.confirm-back { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .55); }
+.confirm-box { width: min(440px, 100%); background: var(--surface); color: var(--ink); border-radius: 18px; padding: 22px; box-shadow: 0 12px 40px rgba(0, 0, 0, .35); }
+.confirm-box p { margin: 0 0 18px; font-size: 18px; line-height: 1.9; }
+.confirm-actions { display: flex; gap: 10px; justify-content: flex-start; flex-direction: row-reverse; }
+.confirm-actions button { min-height: 48px; min-width: 120px; font-size: 17px; font-weight: 700; }
+/* phones: the reading card is the full width of the screen, with no offset */
+@media (max-width: 600px) { #textView.text, .sheet:has(#textView) { width: 100% !important; max-width: 100% !important; margin: 0 !important; left: 0 !important; transform: none !important; } main { overflow-x: hidden; } }
+/* phones: the water card sits right under the fish, smaller, so the start page fits on one screen */
+@media (max-width: 600px) { .jump-art { width: min(100%, 240px); margin: 10px auto 0; } .welcome .hero { width: 76px; height: 68px; } }
+/* the glass themes: the top bar and its tools menu are drawn above the start page, not behind it */
+:root[data-theme^="glass"] .bar, :root[data-theme^="glass"] .top { position: relative; z-index: 40; }
+:root[data-theme^="glass"] .more-menu { z-index: 60; }
+/* the start page: one fish only (the one in the water), and the quotation sits on the water, inside its edges */
+.welcome > svg.hero { display: none; }
+.jump-art .water-quote { left: 16px; right: 16px; bottom: 14px; padding: 0; background: transparent; border-radius: 0; box-shadow: none; text-shadow: 0 1px 3px rgba(0, 0, 0, .55); font-size: 14px; line-height: 1.75; }
+/* phones: the quotation fits inside the water: a wider card and a slightly smaller text */
+@media (max-width: 600px) { .jump-art { width: min(100%, 290px); } .jump-art .water-quote { left: 10px; right: 10px; font-size: 12.5px; line-height: 1.7; } }
+/* the top bar and its tools menu sit above the start page in every theme (phone and tablet) */
+header.bar { z-index: 50; }
+.more-menu { z-index: 60; }
+/* panels are given z-index 70 and up while they are open: the delete dialog and the toast messages stay above them */
+.toast { z-index: 900; }
+/* phones: the settings search box scrolls with the page, so it never covers the title */
+@media (max-width: 600px) { .setfind { position: static; margin-bottom: 0; } }
+/* the note under the two start buttons: for people with a speech or language disability */
+.welcome .type-hint { margin: -6px 0 0; max-width: 48ch; font-size: 15px; line-height: 1.8; text-align: center; }
+/* more tile colours for the icons, as on an iPhone: green, orange, red, purple */
+svg.ui-icon.ic-green { background: linear-gradient(180deg, #7EE08F 0%, #34C759 55%, #1E9E43 100%); }
+svg.ui-icon.ic-orange { background: linear-gradient(180deg, #FFC266 0%, #FF9F0A 55%, #D97F00 100%); }
+svg.ui-icon.ic-red { background: linear-gradient(180deg, #FF8A80 0%, #FF453A 55%, #D12A20 100%); }
+svg.ui-icon.ic-purple { background: linear-gradient(180deg, #D9A6F0 0%, #AF52DE 55%, #8A3CBA 100%); }
+/* menu rows with an icon: the tile and the text on one line */
+.more-menu button:has(> svg.ui-icon) { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.more-menu button > svg.ui-icon { width: 26px; height: 26px; flex: none; }
+.book-tools .tools button > svg.ui-icon { width: 24px; height: 24px; flex: none; margin-inline-end: 6px; vertical-align: middle; }
+/* phones: the whole start page fits one screen, with the note under the buttons */
+@media (max-width: 600px) {
+  #welcome { padding: 12px 14px 14px; gap: 9px; }
+  #welcome h1 { font-size: 24px; line-height: 1.5; }
+  #welcome > p:not(.type-hint):not(.drop-hint) { font-size: 15.5px; line-height: 1.75; }
+  #welcome .big { min-height: 50px; font-size: 18px; }
+  #welcome .formats { gap: 6px; }
+  #welcome .formats span { padding: 3px 12px; font-size: 14px; }
+  #welcome .type-hint { font-size: 14px; line-height: 1.7; margin-top: -3px; }
+  #welcome .drop-hint { font-size: 13.5px; }
+  #welcome .welcome-help { min-height: 44px; padding: 6px 16px; font-size: 15px; }
+}
+/* settings: the text, sliders and choices sit inside the dividing lines and boxes, not on them (all themes except the default one, which has its own padding) */
+:root:not([data-theme="modern"]) .panel-body > .field { padding-inline: 14px; }
+:root:not([data-theme="modern"]) .panel-head { padding-inline: 6px; }
