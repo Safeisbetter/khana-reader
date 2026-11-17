@@ -27,8 +27,8 @@ pub const VOICES: &[VoiceInfo] = &[
     VoiceInfo { id: "khabari", wav: "male_news.wav", name: "مدل صدا ۱", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
     VoiceInfo { id: "seda2", wav: "donated_andrea.wav", name: "مدل صدا ۲", gender: "زن", group: "natural", extra: false, tempo: 1.1 },
     VoiceInfo { id: "seda3", wav: "donated_aryobe.wav", name: "مدل صدا ۳", gender: "مرد", group: "natural", extra: false, tempo: 1.1 },
-    VoiceInfo { id: "seda4", wav: "donated_imran.wav", name: "مدل صدا ۴", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
-    VoiceInfo { id: "seda5", wav: "donated_taiyo.wav", name: "مدل صدا ۵", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
+    VoiceInfo { id: "seda4", wav: "donated_imran.wav", name: "مدل صدا ۴", gender: "مرد", group: "natural", extra: false, tempo: 1.12 },
+    VoiceInfo { id: "seda5", wav: "donated_taiyo.wav", name: "مدل صدا ۵", gender: "مرد", group: "natural", extra: false, tempo: 1.25 },
     VoiceInfo { id: "seda6", wav: "donated_roscoe.wav", name: "مدل صدا ۶", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
 ];
 
@@ -93,7 +93,7 @@ fn all_voices() -> Vec<(String, String, String, String)> {
 fn default_settings() -> Map<String, Value> {
     let first = voices().first().map(|v| v.id).unwrap_or("");
     let v = json!({"voice": first, "speed": 1.0, "fontSize": 21, "lineHeight": 2.2, "reversed": false, "persianYeh": true, "autoNext": true,
-                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "font": "vazir", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "normal", "cursor": "large"});
+                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "font": "vazir", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "normal", "cursor": "large", "accent": "blue", "iconStyle": "glossy", "corners": "round", "startSound": true});
     v.as_object().unwrap().clone()
 }
 

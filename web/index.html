@@ -23,6 +23,7 @@
 
 
 
+      <button type="button" class="needs-doc top-save" id="mp3TopBtn" aria-label="ذخیره‌ی صدا (MP3)" title="ذخیره‌ی صدا (MP3)"><svg class="ui-icon ic-teal" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"/><path d="M8 10.5l4 4 4-4"/><path d="M5 15.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2.5"/></g></svg></button>
       <details class="more-tools" id="moreTools"><summary aria-label="تنظیمات و ابزارها" title="تنظیمات و ابزارها"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18.74 9.46L21.02 10.17L21.02 13.83L18.74 14.54L18.56 14.97L19.67 17.08L17.08 19.67L14.97 18.56L14.54 18.74L13.83 21.02L10.17 21.02L9.46 18.74L9.03 18.56L6.92 19.67L4.33 17.08L5.44 14.97L5.26 14.54L2.98 13.83L2.98 10.17L5.26 9.46L5.44 9.03L4.33 6.92L6.92 4.33L9.03 5.44L9.46 5.26L10.17 2.98L13.83 2.98L14.54 5.26L14.97 5.44L17.08 4.33L19.67 6.92L18.56 9.03Z M15.2 12a3.2 3.2 0 1 0-6.4 0 3.2 3.2 0 0 0 6.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></summary><div class="more-menu">    <details id="bookTools" class="needs-doc book-tools"><summary>ابزارهای متن</summary>
     <div class="row tools needs-doc">
       <div class="group" role="group" aria-label="نمایش">
@@ -126,7 +127,7 @@
         <button type="button" class="big" id="typeBtn2" aria-describedby="typeHint">نوشتن متن</button>
       </div>
       <p class="hint type-hint" id="typeHint">«نوشتن متن» برای افراد با معلولیت گفتاری یا زبانی مناسب است: بنویسید و خوانا برایتان بخواند.</p>
-      <p class="hint drop-hint">کاملاً آفلاین · می‌توانید فایل را اینجا بکشید و رها کنید.</p>
+      <p class="hint drop-hint">کاملاً آفلاین<span class="drop-part"> · می‌توانید فایل را اینجا بکشید و رها کنید.</span></p>
 
       <div class="formats" aria-label="فایل‌های پشتیبانی‌شده"><span>PDF</span><span>Word</span><span>EPUB</span><span>TXT</span><span>عکس صفحه</span><span>و قالب‌های دیگر</span></div>
       <button type="button" id="welcomeHelp" class="welcome-help" aria-haspopup="dialog" aria-controls="helpPanel">اولین بار است؟ راهنمای کوتاه را ببینید</button>
@@ -198,8 +199,15 @@
     <div class="setfind">
       <input id="setFind" type="search" placeholder="جستجو در تنظیمات… (مثلاً: صدا، رنگ، قلم)" aria-label="جستجو در تنظیمات" autocomplete="off">
       <p class="hint" id="setNone" hidden>تنظیمی با این نام پیدا نشد.</p>
+          <div class="settabs" id="setTabs" role="tablist" aria-label="گروه‌های تنظیمات">
+        <button type="button" role="tab" data-tab="voice">صدا و خواندن</button>
+        <button type="button" role="tab" data-tab="text">شکل متن</button>
+        <button type="button" role="tab" data-tab="look">ظاهر برنامه</button>
+        <button type="button" role="tab" data-tab="words">متن و تلفظ</button>
+        <button type="button" role="tab" data-tab="safe">امنیت</button>
+      </div>
     </div>
-    <div class="field">
+    <div class="field" data-set="voice">
       <label for="voice">صدا</label>
       <div class="inline">
         <select id="voice"></select>
@@ -207,7 +215,7 @@
       </div>
       <span class="hint">صدای دلخواه را انتخاب کنید و با «شنیدن» امتحان کنید.</span>
     </div>
-    <div class="field">
+    <div class="field" data-set="voice">
       <span class="lbl">صدای من</span>
       <div class="myvoice">
         <span class="hint">خوانا می‌تواند با صدای خود شما بخواند. در جای آرام، جمله‌ی زیر را با صدای معمولی و شمرده بخوانید (۱۰ تا ۱۵ ثانیه). فقط ۵ ثانیه‌ی اول صحبت شما به کار می‌رود.</span>
@@ -223,7 +231,7 @@
         <span class="hint" id="myStatus"></span>
       </div>
     </div>
-    <div class="field">
+    <div class="field" data-set="voice">
       <label for="speed">سرعت خواندن: <span id="speedVal"></span></label>
       <input id="speed" type="range" aria-label="سرعت خواندن" min="0.5" max="2" step="0.01">
       <div class="scale"><span>آهسته ۵۰٪</span><span>۱۰۰٪</span><span>تند ۲۰۰٪</span></div>
@@ -234,7 +242,7 @@
         <button type="button" data-speed="1.5">۱۵۰٪</button>
       </div>
     </div>
-    <div class="field">
+    <div class="field" data-set="voice">
       <span class="lbl">مکث در ویرگول و نقطه‌ویرگول</span>
       <span class="hint">اگر کتاب ویرگول زیاد دارد و خواندن کند به نظر می‌رسد، مکث را کوتاه کنید.</span>
       <div class="hlpick" role="radiogroup" aria-label="مکث در ویرگول">
@@ -243,16 +251,16 @@
         <label><input type="radio" name="comma" value="long"><span>بلند</span></label>
       </div>
     </div>
-    <div class="field">
+    <div class="field" data-set="text">
       <label for="fontSize">اندازه‌ی متن: <span id="fontVal"></span></label>
       <input id="fontSize" type="range" aria-label="اندازه‌ی متن" min="14" max="72" step="1">
     </div>
-    <div class="field">
+    <div class="field" data-set="text">
       <label for="lineHeight">فاصله‌ی خط‌ها: <span id="lineHeightVal"></span></label>
       <input id="lineHeight" type="range" min="1.5" max="3" step="0.1">
       <p class="hint">فاصله‌ی بیشتر می‌تواند دنبال‌کردن خط‌ها را آسان‌تر کند.</p>
     </div>
-    <div class="field">
+    <div class="field" data-set="text">
       <label for="pageWidth">پهنای متن: <span id="pageWidthVal"></span></label>
       <input id="pageWidth" type="range" aria-label="پهنای متن" min="26" max="100" step="2">
       <div class="scale"><span>باریک</span><span>تمام‌عرض</span></div>
@@ -260,14 +268,14 @@
       <input id="pageMargin" type="range" aria-label="حاشیه‌ی متن" min="20" max="200" step="10">
       <div class="scale"><span>کم</span><span>زیاد</span></div>
     </div>
-    <div class="field">
+    <div class="field" data-set="text">
       <span class="lbl">قلم متن</span>
       <div class="hlpick" role="radiogroup" aria-label="قلم متن">
         <label><input type="radio" name="font" value="vazir"><span class="font-sample f-vazir">کتاب فارسی را بخوانید</span></label>
         <label><input type="radio" name="font" value="naskh"><span class="font-sample f-naskh">کتاب فارسی را بخوانید</span></label>
       </div>
     </div>
-    <div class="field">
+    <div class="field" data-set="look">
       <span class="lbl">رنگ پس‌زمینه</span>
       <span class="hint">«خودکار»: مثل حالت تاریک یا روشن دستگاه.</span>
       <div class="hlpick" role="radiogroup" aria-label="رنگ پس‌زمینه">
@@ -284,7 +292,34 @@
         <label><input type="radio" name="theme" value="depthdark"><span>سه‌بعدی تیره</span></label>
       </div>
     </div>
-    <div class="field">
+    <div class="field" data-set="look" id="lookField">
+      <span class="lbl">سلیقه‌ی شما</span>
+      <span class="hint">رنگ برنامه، شکل آیکون‌ها و گوشه‌ها را خودتان انتخاب کنید.</span>
+      <span class="hint">رنگ برنامه:</span>
+      <div class="hlpick" role="radiogroup" aria-label="رنگ برنامه">
+        <label><input type="radio" name="accent" value="blue"><span class="sw sw-a-blue">آبی</span></label>
+        <label><input type="radio" name="accent" value="green"><span class="sw sw-a-green">سبز</span></label>
+        <label><input type="radio" name="accent" value="orange"><span class="sw sw-a-orange">نارنجی</span></label>
+        <label><input type="radio" name="accent" value="pink"><span class="sw sw-a-pink">صورتی</span></label>
+        <label><input type="radio" name="accent" value="purple"><span class="sw sw-a-purple">بنفش</span></label>
+        <label><input type="radio" name="accent" value="teal"><span class="sw sw-a-teal">فیروزه‌ای</span></label>
+        <label><input type="radio" name="accent" value="red"><span class="sw sw-a-red">قرمز</span></label>
+      </div>
+      <span class="hint">شکل آیکون‌ها:</span>
+      <div class="hlpick" role="radiogroup" aria-label="شکل آیکون‌ها">
+        <label><input type="radio" name="iconStyle" value="glossy"><span>براق (پیش‌فرض)</span></label>
+        <label><input type="radio" name="iconStyle" value="flat"><span>ساده و تخت</span></label>
+      </div>
+      <span class="hint">گوشه‌ها:</span>
+      <div class="hlpick" role="radiogroup" aria-label="گوشه‌ها">
+        <label><input type="radio" name="corners" value="round"><span>گرد (پیش‌فرض)</span></label>
+        <label><input type="radio" name="corners" value="soft"><span>کمی گرد</span></label>
+        <label><input type="radio" name="corners" value="sharp"><span>تیز</span></label>
+      </div>
+      <label class="check"><input id="clickSound" type="checkbox"><span>صدا هنگام لمس دکمه‌ها<br><span class="hint">روشن شدن یک گزینه صدای زیرتر و خاموش شدنش صدای بم‌تر دارد.</span></span></label>
+      <label><input type="checkbox" id="startSound"> صدای آغاز برنامه (سه نت ملایم)</label>
+    </div>
+    <div class="field" data-set="text">
       <span class="lbl">رنگ کلمه‌ای که خوانده می‌شود</span>
       <span class="hint">رنگی را انتخاب کنید که برای چشم شما راحت‌تر دیده می‌شود.</span>
       <div class="hlpick" role="radiogroup" aria-label="رنگ کلمه‌ی در حال خواندن">
@@ -307,26 +342,28 @@
         </div>
       </div>
     </div>
-    <div class="field">
-      <span class="lbl">متن</span>
-      <div class="field" id="cursorField">
-        <span class="lbl">اندازه‌ی نشانگر ماوس</span>
-        <div class="inline" role="radiogroup" aria-label="اندازه‌ی نشانگر ماوس">
-          <label><input type="radio" name="cursor" value="normal"><span>معمولی</span></label>
-          <label><input type="radio" name="cursor" value="large"><span>بزرگ</span></label>
-          <label><input type="radio" name="cursor" value="huge"><span>خیلی بزرگ</span></label>
-        </div>
-        <span class="hint">نشانگر بزرگ سیاه با لبه‌ی سفید است؛ روی دکمه‌ها و گزینه‌ها زرد می‌شود.</span>
-      </div>
-      <label class="check"><input id="sentenceLines" type="checkbox"><span>هر جمله در یک خط<br><span class="hint">جمله‌ی بعد از نقطه از سر خط شروع می‌شود. فقط نمایش متن تغییر می‌کند.</span></span></label>
-      <label class="check"><input id="clickSound" type="checkbox"><span>صدا هنگام لمس دکمه‌ها<br><span class="hint">روشن شدن یک گزینه صدای زیرتر و خاموش شدنش صدای بم‌تر دارد.</span></span></label>
+    <div class="field" data-set="voice">
+      <span class="lbl">رفتار خواندن</span>
       <label class="check"><input id="naturalTone" type="checkbox"><span>خواندن طبیعی (لحن پرسش، پایان جمله و عنوان)</span></label>
       <label class="check"><input id="autoPlay" type="checkbox"><span>خواندن خودکار پس از باز کردن فایل</span></label>
       <label class="check"><input id="autoNext" type="checkbox"><span>ادامه‌ی خواندن در صفحه‌ی بعد</span></label>
+    </div>
+    <div class="field" data-set="words">
+      <span class="lbl">متن</span>
+      <label class="check"><input id="sentenceLines" type="checkbox"><span>هر جمله در یک خط<br><span class="hint">جمله‌ی بعد از نقطه از سر خط شروع می‌شود. فقط نمایش متن تغییر می‌کند.</span></span></label>
       <label class="check"><input id="persianYeh" type="checkbox"><span>تبدیل «ي» و «ك» عربی به «ی» و «ک» فارسی</span></label>
       <label class="check"><input id="reversed" type="checkbox"><span>متن وارونه است<br><span class="hint">برای بعضی PDFها که حروف از آخر به اول درمی‌آیند.</span></span></label>
     </div>
-    <div class="field" id="lexField">
+    <div class="field" id="cursorField" data-set="look">
+      <span class="lbl">اندازه‌ی نشانگر ماوس</span>
+      <div class="inline" role="radiogroup" aria-label="اندازه‌ی نشانگر ماوس">
+        <label><input type="radio" name="cursor" value="normal"><span>معمولی</span></label>
+        <label><input type="radio" name="cursor" value="large"><span>بزرگ</span></label>
+        <label><input type="radio" name="cursor" value="huge"><span>خیلی بزرگ</span></label>
+      </div>
+      <span class="hint">نشانگر بزرگ سیاه با لبه‌ی سفید است؛ روی دکمه‌ها و گزینه‌ها زرد می‌شود.</span>
+    </div>
+    <div class="field" data-set="words" id="lexField">
       <span class="lbl">تلفظ کلمه‌ها</span>
       <span class="hint">برای اصلاح تلفظ، کلمه را انتخاب کنید و «انتخاب حرکت‌ها» را بزنید. می‌توانید تلفظ را هم بنویسید؛ مثل «مِهر».</span>
       <div class="inline">
@@ -340,7 +377,7 @@
       </div>
       <details id="lexDetails" hidden><summary id="lexSummary">فهرست اصلاح‌ها</summary><div class="lexlist" id="lexList"></div></details>
     </div>
-    <div class="field" id="lockField">
+    <div class="field" data-set="safe" id="lockField">
       <label>قفل برنامه (رمز)</label>
       <p class="editnote">برای باز کردن خوانا رمز بگذارید. زمان قفل خودکار را هم می‌توانید انتخاب کنید. این قفل دسترسی به برنامه را محدود می‌کند؛ فایل‌ها را رمزگذاری نمی‌کند.</p>
       <p class="hint" id="lockState">قفل خاموش است.</p>
@@ -361,7 +398,7 @@
         </select>
       </div>
     </div>
-    <div class="field" id="forgetField">
+    <div class="field" data-set="safe" id="forgetField">
       <label>ردهای برنامه روی این دستگاه</label>
       <p class="editnote">خوانا این‌ها را روی همین دستگاه نگه می‌دارد: ویرایش‌های شما (که جمله‌هایی از کتاب‌ها در آن‌هاست)، صدای ضبط‌شده‌ی شما، تنظیمات و فهرست اصلاح تلفظ. با این دکمه همه پاک می‌شود. فایل‌های MP3 و PDF که ذخیره کرده‌اید و خودِ کتاب‌ها پاک نمی‌شوند؛ آن‌ها را خودتان پاک کنید.</p>
       <button type="button" id="forgetAll">پاک کردن همه‌ی ردها</button>

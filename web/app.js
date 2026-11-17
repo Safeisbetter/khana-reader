@@ -62,6 +62,17 @@ function applySettings() {
   document.documentElement.dataset.theme = THEMES.includes(chosenTheme) ? chosenTheme : "auto";
   document.querySelectorAll("input[name=comma]").forEach(r => r.checked = r.value === (s.commaPause || "short"));
   document.querySelectorAll("input[name=theme]").forEach(r => r.checked = r.value === (THEMES.includes(chosenTheme) ? chosenTheme : "auto"));
+  const ACCENTS = ["blue", "green", "orange", "pink", "purple", "teal", "red"];
+  const accent = ACCENTS.includes(s.accent) ? s.accent : "blue";
+  document.documentElement.dataset.accent = accent;
+  document.querySelectorAll("input[name=accent]").forEach(r => r.checked = r.value === accent);
+  const iconStyle = s.iconStyle === "flat" ? "flat" : "glossy";
+  document.documentElement.dataset.icons = iconStyle;
+  document.querySelectorAll("input[name=iconStyle]").forEach(r => r.checked = r.value === iconStyle);
+  const corners = ["soft", "sharp"].includes(s.corners) ? s.corners : "round";
+  document.documentElement.dataset.corners = corners;
+  document.querySelectorAll("input[name=corners]").forEach(r => r.checked = r.value === corners);
+  $("startSound").checked = s.startSound !== false;
   const chosenFont = ["vazir", "naskh"].includes(s.font) ? s.font : "vazir";
   document.documentElement.dataset.font = chosenFont;
   document.querySelectorAll("input[name=font]").forEach(r => r.checked = r.value === chosenFont);
@@ -161,6 +172,10 @@ document.querySelectorAll("input[name=fc]").forEach(r => r.onchange = () => setS
 document.querySelectorAll("input[name=comma]").forEach(r => r.onchange = () => { setSetting("commaPause", r.value); ttsCache.clear(); restartReading(); });
 document.querySelectorAll("input[name=theme]").forEach(r => r.onchange = () => setSetting("theme", r.value));
 document.querySelectorAll("input[name=font]").forEach(r => r.onchange = () => setSetting("font", r.value));
+document.querySelectorAll("input[name=accent]").forEach(r => r.onchange = () => setSetting("accent", r.value));
+document.querySelectorAll("input[name=iconStyle]").forEach(r => r.onchange = () => setSetting("iconStyle", r.value));
+document.querySelectorAll("input[name=corners]").forEach(r => r.onchange = () => setSetting("corners", r.value));
+$("startSound").onchange = e => setSetting("startSound", e.target.checked);
 $("pageWidth").oninput = e => setSetting("pageWidth", Number(e.target.value));
 $("pageMargin").oninput = e => setSetting("pageMargin", Number(e.target.value));
 $("sentenceLines").onchange = e => {
@@ -205,6 +220,24 @@ addEventListener("click", e => {
 }, true);
 
 /* ---------------- finding a setting by a word of its name ---------------- */
+// Settings in groups (tabs): one group at a time; a search looks in all of them
+const SET_TABS = ["voice", "text", "look", "words", "safe"];
+let setTab = "voice";
+try { const t = localStorage.getItem("khana-set-tab"); if (SET_TABS.includes(t)) setTab = t; } catch (e) {}
+function applySetTabs() {
+  const searching = $("setFind").value.trim() !== "";
+  document.querySelectorAll("#settings .panel-body > .field").forEach(f => {
+    f.classList.toggle("set-off", !searching && (f.dataset.set || "safe") !== setTab);
+  });
+  $("setTabs").hidden = searching;
+  document.querySelectorAll("#setTabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === setTab)));
+}
+document.querySelectorAll("#setTabs button").forEach(b => b.onclick = () => {
+  setTab = b.dataset.tab;
+  try { localStorage.setItem("khana-set-tab", setTab); } catch (e) {}
+  applySetTabs();
+  document.querySelector("#settings .panel-body").scrollTop = 0;
+});
 $("setFind").oninput = () => {
   const q = $("setFind").value.trim().replace(/ي/g, "ی").replace(/ك/g, "ک");
   let shown = 0;
@@ -214,7 +247,9 @@ $("setFind").oninput = () => {
     if (hit) shown++;
   });
   $("setNone").hidden = shown > 0;
+  applySetTabs();
 };
+applySetTabs();
 new MutationObserver(() => { if ($("settings").hidden && $("setFind").value) { $("setFind").value = ""; $("setFind").oninput(); } }).observe($("settings"), { attributes: true, attributeFilter: ["hidden"] });
 $("persianYeh").onchange = e => setSetting("persianYeh", e.target.checked, true);
 $("reversed").onchange = e => setSetting("reversed", e.target.checked, true);
@@ -556,7 +591,6 @@ function startChime() {
     setTimeout(() => ctx.close && ctx.close(), 2000);
   } catch (e) { /* no sound is fine */ }
 }
-startChime();
 // the fish in the water: a press shows or hides the quotation in the water
 {
   const jump = $("jumpArt");
@@ -1499,6 +1533,7 @@ function openSave(kind) {
 function syncBitrate() { $("bitrateField").hidden = saveKind === "pdf" || document.querySelector("input[name=afmt]:checked").value !== "mp3"; }
 document.querySelectorAll("input[name=afmt]").forEach(r => r.addEventListener("change", syncBitrate));
 $("mp3Btn").onclick = () => openSave("mp3");
+$("mp3TopBtn").onclick = () => $("mp3Btn").click();
 $("pdfBtn").onclick = () => openSave("pdf");
 for (const id of ["pageInput", "from", "to"]) $(id).addEventListener("input", e => { const t = fa(latinDigits(e.target.value).replace(/\D/g, "")); if (t !== e.target.value) e.target.value = t; });
 $("from").oninput = $("to").oninput = () => { document.querySelector('input[name=scope][value=range]').checked = true; showSaveLength(); };
@@ -1646,6 +1681,7 @@ async function init() {
     $("sttLive").hidden = !(navigator.mediaDevices && !window.KHANA_NO_MIC);
     fillVoices(r.voices);
     applySettings(); renderLexicon(); syncChrome(); setPlayButton();
+    if (S.settings.startSound !== false) startChime();
   } catch (e) { note("برنامه درست اجرا نشد: " + esc(e.message), true); }
 }
 // (after every script has run: web/lock.js comes after this one)

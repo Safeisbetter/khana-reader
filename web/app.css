@@ -1076,3 +1076,84 @@ svg.ui-icon.ic-purple { background: linear-gradient(180deg, #D9A6F0 0%, #AF52DE 
 /* settings: the text, sliders and choices sit inside the dividing lines and boxes, not on them (all themes except the default one, which has its own padding) */
 :root:not([data-theme="modern"]) .panel-body > .field { padding-inline: 14px; }
 :root:not([data-theme="modern"]) .panel-head { padding-inline: 6px; }
+/* the save-audio button in the top bar: a round button with a tile icon, shown when a text is open */
+svg.ui-icon.ic-teal { background: linear-gradient(180deg, #7FE3E8 0%, #1FB5C4 55%, #0E8A99 100%); }
+.top-save { width: 48px; height: 48px; min-width: 48px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; flex: 0 0 auto; }
+.top-save svg.ui-icon { width: 28px; height: 28px; }
+
+/* ---------------- "your taste" settings: app colour, icon style, corners ---------------- */
+.sw-a-blue { background: #007AFF; color: #fff; }
+.sw-a-green { background: #1E9E5A; color: #fff; }
+.sw-a-orange { background: #E8730C; color: #fff; }
+.sw-a-pink { background: #D63384; color: #fff; }
+.sw-a-purple { background: #7E57C2; color: #fff; }
+.sw-a-teal { background: #0E9AA7; color: #fff; }
+.sw-a-red { background: #D32F2F; color: #fff; }
+html:root[data-accent="green"] { --lapis: #1E9E5A; --reading: color-mix(in srgb, #1E9E5A 16%, var(--paper)); }
+html:root[data-accent="orange"] { --lapis: #E8730C; --reading: color-mix(in srgb, #E8730C 16%, var(--paper)); }
+html:root[data-accent="pink"] { --lapis: #D63384; --reading: color-mix(in srgb, #D63384 16%, var(--paper)); }
+html:root[data-accent="purple"] { --lapis: #7E57C2; --reading: color-mix(in srgb, #7E57C2 16%, var(--paper)); }
+html:root[data-accent="teal"] { --lapis: #0E9AA7; --reading: color-mix(in srgb, #0E9AA7 16%, var(--paper)); }
+html:root[data-accent="red"] { --lapis: #D32F2F; --reading: color-mix(in srgb, #D32F2F 16%, var(--paper)); }
+/* the plain tiles follow the chosen colour (the grey gear and the coloured ones keep theirs) */
+html:root[data-accent]:not([data-accent="blue"]) svg.ui-icon:not([class*="ic-"]) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--lapis) 72%, #fff) 0%, var(--lapis) 55%, color-mix(in srgb, var(--lapis) 78%, #000) 100%);
+}
+html:root[data-accent]:not([data-accent="blue"]) .primary svg.ui-icon { background: linear-gradient(180deg, #FFFFFF 0%, #E3ECFB 100%); }
+/* flat icons: one colour, no gloss and no shadow */
+html:root[data-icons="flat"] svg.ui-icon { background-image: none; background-color: var(--lapis); box-shadow: none; }
+html:root[data-icons="flat"] .primary svg.ui-icon { background-color: #FFFFFF; }
+html:root[data-icons="flat"] #settingsBtn svg.ui-icon, html:root[data-icons="flat"] .more-tools > summary svg.ui-icon { background-color: #8E8E93; }
+html:root[data-icons="flat"] svg.ui-icon.ic-green { background-color: #34C759; }
+html:root[data-icons="flat"] svg.ui-icon.ic-orange { background-color: #FF9F0A; }
+html:root[data-icons="flat"] svg.ui-icon.ic-red { background-color: #FF453A; }
+html:root[data-icons="flat"] svg.ui-icon.ic-purple { background-color: #AF52DE; }
+html:root[data-icons="flat"] svg.ui-icon.ic-teal { background-color: #1FB5C4; }
+/* corners: softer or sharp (the round gear and save buttons, radio buttons and sliders stay as they are) */
+html:root[data-corners="soft"] :is(button:not(#settingsBtn):not(.top-save), .btn, .primary, .welcome, .panel-body > .field, .more-menu, .dock, .confirm-box, .formats span, input:not([type=radio]):not([type=checkbox]):not([type=range]), select, textarea) { border-radius: 12px !important; }
+html:root[data-corners="sharp"] :is(button:not(#settingsBtn):not(.top-save), .btn, .primary, .welcome, .panel-body > .field, .more-menu, .dock, .confirm-box, .formats span, input:not([type=radio]):not([type=checkbox]):not([type=range]), select, textarea) { border-radius: 3px !important; }
+/* the grey gear tile keeps its grey with any app colour; flat icons are flat with any app colour too */
+html:root[data-accent]:not([data-accent="blue"]) #settingsBtn svg.ui-icon,
+html:root[data-accent]:not([data-accent="blue"]) .more-tools > summary svg.ui-icon {
+  background: linear-gradient(180deg, #A8A8AE 0%, #8E8E93 55%, #6E6E73 100%);
+}
+html:root[data-icons="flat"][data-accent]:not([data-accent="blue"]) svg.ui-icon:not([class*="ic-"]) { background-image: none; background-color: var(--lapis); }
+html:root[data-icons="flat"][data-accent]:not([data-accent="blue"]) #settingsBtn svg.ui-icon,
+html:root[data-icons="flat"][data-accent]:not([data-accent="blue"]) .more-tools > summary svg.ui-icon { background-image: none; background-color: #8E8E93; }
+html:root[data-icons="flat"][data-accent]:not([data-accent="blue"]) .primary svg.ui-icon { background-image: none; background-color: #FFFFFF; }
+/* Settings in groups: a row of tabs under the search box, one group of settings at a time */
+.settabs { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 4px; scrollbar-width: none; }
+.settabs::-webkit-scrollbar { display: none; }
+.settabs button { flex: 0 0 auto; white-space: nowrap; min-height: 40px; padding: 6px 14px; border-radius: 999px; font-size: 15px; font-weight: 700; }
+.settabs button[aria-selected="true"] { background: var(--lapis); color: var(--lapis-ink, #fff); }
+.panel-body > .field.set-off { display: none !important; }
+
+/* corners: the cards, notes, tabs and the rest follow the same shape as the buttons and the bar, so everything fits its frame */
+html:root[data-corners="soft"] :is(.text, #textView, .note, .sheet, .toast, .voicebox, .jump-art, .settabs button, .quick-voice select, .more-menu button, .panel-body, .confirm-actions button, #welcome .formats span, .welcome-help) { border-radius: 12px !important; }
+html:root[data-corners="sharp"] :is(.text, #textView, .note, .sheet, .toast, .voicebox, .jump-art, .settabs button, .quick-voice select, .more-menu button, .panel-body, .confirm-actions button, #welcome .formats span, .welcome-help) { border-radius: 3px !important; }
+.dock { overflow: hidden; }
+/* phones that are not very tall (most of them): the whole start page still fits one screen, without scrolling */
+@media (max-width: 600px) and (max-height: 860px) {
+  #welcome .drop-part { display: none; }
+  #welcome .formats { display: none; }
+  #welcome .jump-art { width: min(100%, 210px); margin-top: 0; }
+  #welcome .jump-art .water-quote { left: 8px; right: 8px; bottom: 8px; font-size: 10.5px; line-height: 1.6; }
+  #welcome h1 { font-size: 22px; }
+}
+@media (max-width: 600px) and (max-height: 700px) {
+  #welcome .jump-art { width: min(100%, 150px); }
+  #welcome .jump-art .water-quote { font-size: 8.5px; left: 5px; right: 5px; bottom: 5px; }
+  #welcome > p:not(.type-hint):not(.drop-hint) { font-size: 14px; line-height: 1.6; }
+  #welcome .type-hint { font-size: 13px; line-height: 1.6; }
+  #welcome { gap: 6px; padding-top: 8px; padding-bottom: 8px; }
+}
+/* phones: the top bar (and its open tools menu) is drawn above the text, even above the word being read */
+@media (max-width: 640px) { html:root .bar { position: relative; z-index: 50; } }
+/* phones of medium height: a larger picture, there is room for it */
+@media (max-width: 600px) and (min-height: 760px) and (max-height: 860px) {
+  #welcome .jump-art { width: min(100%, 270px); }
+  #welcome .jump-art .water-quote { font-size: 12px; left: 10px; right: 10px; bottom: 10px; }
+}
+/* the Settings tabs wrap onto a second row on narrow screens, so all of them are in sight */
+.settabs { flex-wrap: wrap; overflow: visible; }
+.settabs button { min-height: 38px; padding: 5px 12px; font-size: 14.5px; }
