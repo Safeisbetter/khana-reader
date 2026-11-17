@@ -55,7 +55,7 @@ jobs:
           $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader.apk" } else { "KhanaReader-lite.apk" }
           gh release download $env:MODELS_RELEASE --repo $env:GITHUB_REPOSITORY -p $apk -D apk
           if ($LASTEXITCODE -ne 0) { throw "Model package download failed" }
-          $expected = if ("${{ matrix.edition }}" -eq "full") { "78e4bbe934ce320e327b6a31c850058a392ffacd69080d455174b2168263bb8" } else { "d3136d0b3be57f627e3fc10a5f24d2ffaa2725161743c6a470ddc593551889bce9ad2c79c145c0d1f8af5b675b08810b4367470f1c90ead8cb2c3a8ecfa48f9227e3fc10a5f24d2ffaa2725161743c6a470ddc593551889bce9ad2c79c145c0d
+          $expected = if ("${{ matrix.edition }}" -eq "full") { "6b82244d8c3681fdbe8aa02a7c41c56ea0e7133280ffd8d0e20bae01fe05c776" } else { "27e3fc10a5f24d2ffaa2725161743c6a470ddc593551889bce9ad2c79c145c0d" }
           if ((Get-FileHash "apk/$apk" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Model package checksum mismatch" }
           Move-Item "apk/$apk" apk/models.zip
           Expand-Archive apk/models.zip -DestinationPath apk/x
