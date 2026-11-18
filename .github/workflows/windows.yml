@@ -41,11 +41,20 @@ jobs:
 
       - name: ONNX Runtime for Windows
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          Invoke-WebRequest "https://github.com/microsoft/onnxruntime/releases/download/v$env:ORT_VERSION/onnxruntime-win-x64-$env:ORT_VERSION.zip" -OutFile ort.zip
-          # (the file must be the size Microsoft published for this version: 64,540,734 bytes; GitHub gives no checksum for it)
-          if ((Get-Item ort.zip).Length -ne 64540734) { throw "onnxruntime zip: unexpected size $((Get-Item ort.zip).Length)" }
-          Expand-Archive ort.zip -DestinationPath ort
+          # Microsoft's onnxruntime page on GitHub is gone (2026-11-18), so the DLL is taken from Khana's own
+          # v1.27 Windows package, which carries onnxruntime.dll from the size-checked Microsoft 1.19.2 zip.
+          gh release download v1.27 --repo $env:GITHUB_REPOSITORY -p KhanaReader-Windows-light-experimental.zip -D ortpkg
+          if ($LASTEXITCODE -ne 0) { throw "ONNX Runtime package download failed" }
+          if ((Get-FileHash ortpkg/KhanaReader-Windows-light-experimental.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne "5f37dc64a46304a5e318569ba45397141a33445495a629b655eb9ea838cc6105") { throw "ONNX Runtime package checksum mismatch" }
+          Expand-Archive ortpkg/KhanaReader-Windows-light-experimental.zip -DestinationPath ortpkg/x
+          New-Item -ItemType Directory -Force ort | Out-Null
+          $dll = Get-ChildItem -Recurse ortpkg/x -Filter onnxruntime*.dll
+          if (-not $dll) { throw "onnxruntime.dll not found in the v1.27 package" }
+          $dll | ForEach-Object { Copy-Item $_.FullName ort/ }
+          Remove-Item -Recurse -Force ortpkg
 
       - name: Models (from the Android download of the release)
         shell: pwsh
