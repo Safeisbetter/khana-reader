@@ -206,6 +206,7 @@ pub struct Engine {
     dec_out_small: Vec<usize>,
     dec_out_kv: Vec<usize>,
     voice_memo: Mutex<Vec<(String, Arc<(Vec<f32>, usize)>)>>,
+    voice_build: Mutex<()>,
     pub g2p: LexiconG2P,
     pace: Mutex<HashMap<String, Vec<f64>>>,
     pitch: Mutex<HashMap<String, Vec<f64>>>,
@@ -217,6 +218,7 @@ struct Voice<'a> {
     id: &'a str,
     cache: &'a [f32],
     off: usize,
+    quick: bool,
 }
 
 impl Engine {
@@ -269,6 +271,7 @@ impl Engine {
             dec_out_small,
             dec_out_kv,
             voice_memo: Mutex::new(Vec::new()),
+            voice_build: Mutex::new(()),
             g2p: LexiconG2P::new(base),
             pace: Mutex::new(HashMap::new()),
             pitch: Mutex::new(HashMap::new()),
@@ -328,6 +331,13 @@ impl Engine {
                 let v = hit.1.clone();
                 memo.push(hit);
                 return Ok(v);
+            }
+        }
+        let _one = self.voice_build.lock().unwrap_or_else(|e| e.into_inner());
+        {
+            let memo = self.voice_memo.lock().unwrap();
+            if let Some(hit) = memo.iter().find(|x| x.0 == key) {
+                return Ok(hit.1.clone());
             }
         }
         let (mut a, sr) = audio::read_wav(wav)?;
@@ -415,7 +425,7 @@ impl Engine {
         Ok(out)
     }
 
-    fn generate_chunk(&self, voice: &Voice, chunk: &str, rng: &mut rand::rngs::StdRng) -> Result<Vec<Vec<f32>>, String> {
+    fn generate_chunk(&self, voice: &Voice, chunk: &str, rng: &mut rand::rngs::StdRng, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Vec<Vec<f32>>, String> {
         let tokens = self.sp.encode(chunk);
         let mut text_emb = Vec::with_capacity(tokens.len() * self.dim);
         for &t in &tokens {
@@ -433,6 +443,9 @@ impl Engine {
         let max_gen_len = ((tokens.len() as f64 / self.tps_est + self.gen_pad) * self.frame_rate).ceil() as usize;
         let mut eos_step: Option<usize> = None;
         for step in 0..max_gen_len {
+            if step % 8 == 7 && cancel() {
+                return Err("cancelled".to_string());
+            }
             let last = latents.last().unwrap().clone();
             let (lat, eos, o) = self.flow_step(&last, 1, &[], 0, off, &noise(), &mut cache)?;
             off = o;
@@ -601,7 +614,7 @@ impl Engine {
     }
 
 
-    fn generate_checked(&self, voice: &Voice, chunk: &str, rng: &mut rand::rngs::StdRng, depth: usize) -> Result<Vec<f32>, String> {
+    fn generate_checked(&self, voice: &Voice, chunk: &str, rng: &mut rand::rngs::StdRng, depth: usize, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Vec<f32>, String> {
         let tokens = self.sp.encode(chunk).len();
         let usual = {
             let p = self.pitch.lock().unwrap();
@@ -617,14 +630,18 @@ impl Engine {
         let mut best_heard: Option<(Option<f64>, Vec<String>)> = None;
         let mut cut_short = 0;
         let mut last_wrong: Option<(Vec<String>, bool, bool, bool)> = None;
-        for take in 0..MAX_TRIES.load(std::sync::atomic::Ordering::Relaxed) {
+        let tries = MAX_TRIES.load(std::sync::atomic::Ordering::Relaxed);
+        for take in 0..if voice.quick { tries.min(2) } else { tries } {
             PROFILE[5].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             if take == 0 {
                 PROFILE[4].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
+            if cancel() {
+                return Err("cancelled".to_string());
+            }
             let t = std::time::Instant::now();
             cool_down();
-            let latents = self.generate_chunk(voice, chunk, rng)?;
+            let latents = self.generate_chunk(voice, chunk, rng, cancel)?;
             lap(0, t);
             let t = std::time::Instant::now();
             let a = self.decode_all(&latents)?;
@@ -652,7 +669,7 @@ impl Engine {
             };
             lap(2, t_check);
             let t = std::time::Instant::now();
-            let (heard, missing) = if loud_ok && LISTEN.load(std::sync::atomic::Ordering::Relaxed) { asr::heard_score(chunk, &speech, RATE) } else { (None, Vec::new()) };
+            let (heard, missing) = if loud_ok && !voice.quick && LISTEN.load(std::sync::atomic::Ordering::Relaxed) { asr::heard_score(chunk, &speech, RATE) } else { (None, Vec::new()) };
             lap(3, t);
             let words_ok = asr::heard_ok(heard, &missing);
             let b = |x: bool| if x { 1.0 } else { 0.0 };
@@ -722,8 +739,8 @@ impl Engine {
         if let Some((h, m)) = &best_heard {
             if h.is_some() && asr::heard_bad(*h, m) && words.len() >= 2 && depth == 0 {
                 let half = words.len() / 2;
-                let a = self.generate_checked(voice, &words[..half].join(" "), rng, 1)?;
-                let b = self.generate_checked(voice, &words[half..].join(" "), rng, 1)?;
+                let a = self.generate_checked(voice, &words[..half].join(" "), rng, 1, cancel)?;
+                let b = self.generate_checked(voice, &words[half..].join(" "), rng, 1, cancel)?;
                 let mut joined = a;
                 joined.extend(std::iter::repeat(0f32).take((RATE as f64 * 0.06) as usize));
                 joined.extend(b);
@@ -771,7 +788,7 @@ impl Engine {
         sentences
     }
 
-    pub fn synthesize_text(&self, text: &str, voice_id: &str, wav: &Path, workers: usize, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Vec<f32>, String> {
+    pub fn synthesize_text(&self, text: &str, voice_id: &str, wav: &Path, workers: usize, quick: bool, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Vec<f32>, String> {
         let sentences = if text.chars().any(|c| ('\u{0600}'..='\u{06ff}').contains(&c)) {
             self.plan_text_kinds(text)
         } else if strip(text).is_empty() {
@@ -783,7 +800,7 @@ impl Engine {
             return Ok(Vec::new());
         }
         let vc = self.voice_cache(wav)?;
-        let voice = Voice { id: voice_id, cache: &vc.0, off: vc.1 };
+        let voice = Voice { id: voice_id, cache: &vc.0, off: vc.1, quick };
         let chunker = Chunker { tok: &self.sp };
         let mut jobs: Vec<(usize, String, f64)> = Vec::new();
         for (si, (_, plan, _)) in sentences.iter().enumerate() {
@@ -811,7 +828,7 @@ impl Engine {
                         Err("cancelled".to_string())
                     } else {
                         let mut rng = rand::rngs::StdRng::seed_from_u64(seeds[i]);
-                        self.generate_checked(&voice, &jobs[i].1, &mut rng, 0)
+                        self.generate_checked(&voice, &jobs[i].1, &mut rng, 0, cancel)
                     };
                     *results[i].lock().unwrap() = Some(r);
                 });

@@ -80,6 +80,46 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         // Keep a chosen page theme until the page supplies its updated colours. Resetting to
         // green here left the bar green when the page's colour had not changed (and was cached).
         if (outer != null) applyBarColors(pageBarPainted ? barGround : defaultBarGround(), pageBarPainted ? barInk : defaultBarInk());
+        applyFullScreen();
+    }
+
+    /** A phone held sideways (a tablet, 600 dp and wider, keeps its bars: sideways is how it is usually held). */
+    private boolean landscape() {
+        android.content.res.Configuration c = getResources().getConfiguration();
+        return c.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE && c.smallestScreenWidthDp < 600;
+    }
+
+    /** Sideways: the system bars hidden (they come back for a moment with a swipe from the edge); upright: shown as usual. */
+    private void applyFullScreen() {
+        if (Build.VERSION.SDK_INT < 30 || outer == null) return;
+        android.view.WindowInsetsController c = getWindow().getInsetsController();
+        if (c == null) return;
+        if (landscape()) {
+            c.setSystemBarsBehavior(android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            c.hide(WindowInsets.Type.systemBars());
+        } else {
+            c.show(WindowInsets.Type.systemBars());
+        }
+        outer.requestApplyInsets();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) applyFullScreen();
+    }
+
+    /** The camera's corner at the side of the screen, in the page's pixels, so the page keeps its text clear of it. */
+    private int cutLeft, cutRight;
+    private void setCut(int left, int right) {
+        cutLeft = left;
+        cutRight = right;
+        sendCut();
+    }
+    private void sendCut() {
+        if (web == null) return;
+        float d = getResources().getDisplayMetrics().density;
+        web.evaluateJavascript("(function(s){s.setProperty('--cut-l','" + Math.round(cutLeft / d) + "px');s.setProperty('--cut-r','" + Math.round(cutRight / d) + "px');})(document.documentElement.style)", null);
     }
 
     private int defaultBarGround() { return night() ? Color.rgb(24, 30, 40) : Color.WHITE; }
@@ -99,10 +139,22 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         root = new FrameLayout(this);
         root.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
         outer.addView(root, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        // Held sideways the page fills the whole screen: the status and navigation bars are hidden (a swipe from the edge brings
+        // them back for a moment), and the page goes under the camera's corner too, with only its text kept clear of it (--cut-l,
+        // --cut-r). Before, a band of the bar's colour ran down the side and along the top.
+        if (Build.VERSION.SDK_INT >= 30) getWindow().getAttributes().layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        else if (Build.VERSION.SDK_INT >= 28) getWindow().getAttributes().layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         outer.setOnApplyWindowInsetsListener((v, in) -> {
             if (Build.VERSION.SDK_INT >= 30) {
-                android.graphics.Insets i = in.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
-                v.setPadding(i.left, i.top, i.right, i.bottom);
+                android.graphics.Insets i = in.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.ime());
+                android.graphics.Insets c = in.getInsets(WindowInsets.Type.displayCutout());
+                if (landscape()) {
+                    v.setPadding(i.left, i.top, i.right, i.bottom);
+                    setCut(Math.max(0, c.left - i.left), Math.max(0, c.right - i.right));
+                } else {
+                    v.setPadding(Math.max(i.left, c.left), Math.max(i.top, c.top), Math.max(i.right, c.right), Math.max(i.bottom, c.bottom));
+                    setCut(0, 0);
+                }
             } else {
                 v.setPadding(in.getSystemWindowInsetLeft(), in.getSystemWindowInsetTop(), in.getSystemWindowInsetRight(), in.getSystemWindowInsetBottom());
             }
@@ -110,6 +162,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         });
         setContentView(outer);
         applyBarColors(defaultBarGround(), defaultBarInk());
+        applyFullScreen();
         if (Build.VERSION.SDK_INT >= 33) {
             // (the back gesture, Android 13 and newer; for an app made for Android 16 and newer the only way)
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::goBack);
@@ -260,6 +313,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         @Override
         public void onPageFinished(WebView view, String url) {
             if (START.equals(url)) givePort();
+            sendCut();
         }
 
         @Override
@@ -440,6 +494,11 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         a.runOnUiThread(() -> {
             if (secure) a.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
             else a.getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+            // (Android 14 and newer: apps that use the «accessibility» permission without being a real aid, a common way spying
+            // apps read the screen, no longer see the book's text; TalkBack and other real aids for the blind still read it)
+            if (Build.VERSION.SDK_INT >= 34 && a.outer != null) {
+                a.outer.setAccessibilityDataSensitive(secure ? android.view.View.ACCESSIBILITY_DATA_SENSITIVE_YES : android.view.View.ACCESSIBILITY_DATA_SENSITIVE_AUTO);
+            }
         });
     }
 

@@ -100,3 +100,227 @@ html.android-reader:root .bar { position: sticky; top: 0; z-index: 50; }
   html.android-reader:root body.has-doc .dock #play { font-size: calc(16px * var(--ui-scale)); }
   html.android-reader:root body.has-doc .dock .quick-voice select { min-height: 38px; padding-block: 4px; font-size: calc(14px * var(--ui-scale)); border-radius: 12px; }
 }
+
+/* A phone held sideways (MainActivity hides the system bars and lets the page run under the camera's corner, --cut-l/--cut-r):
+   the screen is wide and low, so the text uses the whole width, the top bar is smaller and the reading controls are one slim row. */
+@media (orientation: landscape) and (max-height: 520px) {
+  html.android-reader:root .bar { zoom: .74; padding-left: max(28px, var(--cut-l, 0px)); padding-right: max(28px, var(--cut-r, 0px)); }
+  html.android-reader:root main { padding-left: 0; padding-right: 0; padding-top: 0; }
+  html.android-reader:root .sheet { max-width: none; margin: 0; }
+  html.android-reader:root #textView.text { max-width: none !important; width: 100% !important; margin: 0 !important; border-radius: 0; border-inline: 0; box-shadow: none;
+    padding-left: max(28px, var(--cut-l, 0px)); padding-right: max(28px, var(--cut-r, 0px)); padding-top: 14px; }
+  html.android-reader:root #welcome, html.android-reader:root .welcome { margin-left: 10px; margin-right: 10px; }
+  html.android-reader:root body.has-doc .dock { zoom: .8; display: flex !important; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 8px;
+    width: auto; max-width: min(760px, 92vw); padding: 6px 10px; bottom: 6px; border-radius: 22px; grid-template-columns: none; }
+  html.android-reader:root body.has-doc .dock .reading-context { display: flex; align-items: center; margin: 0; padding: 0; flex: 1 1 260px; min-width: 0; }
+  html.android-reader:root body.has-doc .dock #readingState, html.android-reader:root body.has-doc .dock #readingTip { display: none; }
+  html.android-reader:root body.has-doc .dock .quick-voice, html.android-reader:root body.has-doc .dock .quick-voice select { width: 100%; margin: 0; }
+  html.android-reader:root body.has-doc .dock .transport { display: flex; flex: 0 0 auto; gap: 8px; margin: 0; }
+  html.android-reader:root body.has-doc .dock .transport button { height: 52px; min-height: 52px; padding-inline: 18px; }
+}
+
+
+/* ===== The iOS / macOS look (1.27.1) =====
+   As Apple's own apps: grouped white cards on a soft grey ground, thin separator lines instead of boxes, flat tinted buttons,
+   a segmented control for the settings groups, switches for on/off. Only flat colours, thin lines and small soft shadows: no
+   blur behind panels and no glow, which slowed old phones (each blur is drawn again on every scroll). The high-contrast themes
+   (black, black-yellow, night) keep their own look. */
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) {
+  --ios-bg: #F2F2F7; --ios-card: #FFFFFF; --ios-sep: rgba(60, 60, 67, .16); --ios-fill: rgba(118, 118, 128, .12);
+  --ios-fill2: rgba(120, 120, 128, .2); --ios-label: #1C1C1E; --ios-label2: rgba(60, 60, 67, .74); --tint: #C1203F; --tint-ink: #B01C38; --ios-seg: #FFFFFF;
+  --ios-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 6px 20px rgba(0, 0, 0, .07); --ios-r: 14px;
+}
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]):is([data-theme="dark"], [data-theme="glassdark"], [data-theme="depthdark"]) {
+  --ios-bg: #000000; --ios-card: #1C1C1E; --ios-sep: rgba(84, 84, 88, .6); --ios-fill: rgba(118, 118, 128, .24);
+  --ios-fill2: rgba(120, 120, 128, .36); --ios-label: #F2F2F7; --ios-label2: rgba(235, 235, 245, .6); --tint: #C8243F; --tint-ink: #FF8A9C; --ios-seg: #636366;
+  --ios-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 20px rgba(0, 0, 0, .35);
+}
+@media (prefers-color-scheme: dark) {
+  html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"])[data-theme="auto"] {
+    --ios-bg: #000000; --ios-card: #1C1C1E; --ios-sep: rgba(84, 84, 88, .6); --ios-fill: rgba(118, 118, 128, .24);
+    --ios-fill2: rgba(120, 120, 128, .36); --ios-label: #F2F2F7; --ios-label2: rgba(235, 235, 245, .6); --tint: #C8243F; --tint-ink: #FF8A9C; --ios-seg: #636366;
+    --ios-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 20px rgba(0, 0, 0, .35);
+  }
+}
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) * { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+
+/* the top bar: a plain bar with a hairline under it, a filled «open» capsule, the gear without a frame */
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .bar { background: var(--ios-card) !important; box-shadow: none !important; border-bottom: .5px solid var(--ios-sep) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .bar #openFileBtn { background: var(--tint) !important; background-image: none !important; color: #fff !important; border: 0 !important;
+  border-radius: 999px !important; box-shadow: 0 2px 8px color-mix(in srgb, var(--tint) 30%, transparent) !important; font-weight: 600; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .bar #moreTools > summary, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .bar #libBtn, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .bar #mp3TopBtn { background: transparent !important; background-image: none !important; border: 0 !important; box-shadow: none !important; }
+
+/* menus: one card with lines between the rows, as a long-press menu on the iPhone */
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu { background: var(--ios-card) !important; border: 0 !important; border-radius: var(--ios-r) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .08), 0 18px 48px rgba(0, 0, 0, .18) !important; padding: 4px 0 !important; overflow: hidden; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu button, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu summary, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu label { background: transparent !important; background-image: none !important;
+  border: 0 !important; border-radius: 0 !important; box-shadow: none !important; color: var(--ios-label) !important; min-height: 50px; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu :is(button, summary, label) { box-shadow: inset 0 -.5px 0 var(--ios-sep) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu button:active { background: var(--ios-fill) !important; }
+
+/* panels (Settings and the others): grey ground, white grouped cards, a large title, «بستن» as a plain tinted word */
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body { background: var(--ios-bg) !important; color: var(--ios-label); }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-head { background: var(--ios-bg) !important; border: 0 !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-head h2 { font-size: 28px; font-weight: 800; letter-spacing: -.3px; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-head [data-close] { background: transparent !important; background-image: none !important; border: 0 !important; box-shadow: none !important;
+  color: var(--tint-ink) !important; font-weight: 600; min-height: 44px; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > .field, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > section.field { background: var(--ios-card) !important; border: 0 !important;
+  border-radius: var(--ios-r) !important; box-shadow: none !important; padding: 14px 16px !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > .field > label, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > .field > .lbl, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > .field > h3 { color: var(--ios-label); font-weight: 700; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body .hint { color: var(--ios-label2) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body hr, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body .sep { border: 0; height: .5px; background: var(--ios-sep); }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > .field + .field { margin-top: 2px; }
+
+/* the search field and the settings groups as a segmented control */
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) #setFind { background: var(--ios-fill) !important; border: 0 !important; border-radius: 12px !important; box-shadow: none !important;
+  min-height: 44px; padding-inline: 16px !important; color: var(--ios-label); }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .settabs { background: var(--ios-fill) !important; border: 0 !important; border-radius: 12px !important; padding: 3px !important; gap: 0 !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .settabs button { flex: 1 1 0; background: transparent !important; background-image: none !important; border: 0 !important; border-radius: 9px !important;
+  box-shadow: none !important; color: var(--ios-label) !important; min-height: 38px; font-size: 14px; font-weight: 600; padding-inline: 6px !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .settabs button[aria-selected="true"] { background: var(--ios-seg) !important; color: var(--ios-label) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .12), 0 0 0 .5px rgba(0, 0, 0, .04) !important; }
+
+/* buttons and fields inside panels: flat, filled, rounded; the main action filled with the app's red */
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body button:not([data-close]):not([role="tab"]) { background: var(--ios-fill) !important; background-image: none !important; border: 0 !important;
+  border-radius: 12px !important; box-shadow: none !important; color: var(--tint-ink) !important; font-weight: 600; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body button.primary:not([data-close]):not([role="tab"]) { background: var(--tint) !important; color: #fff !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body select, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body input[type="text"], html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body input[type="password"], html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body input[type="number"], html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body textarea {
+  background: var(--ios-fill) !important; border: 0 !important; border-radius: 10px !important; box-shadow: none !important; color: var(--ios-label) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body .check:hover, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body label:hover { background: transparent !important; }
+
+/* on/off as an iPhone switch */
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) input[type="checkbox"] { -webkit-appearance: none; appearance: none; flex: 0 0 auto; width: 51px; height: 31px; margin: 0 0 0 8px; border-radius: 999px;
+  background: var(--ios-fill2); position: relative; cursor: pointer; transition: background .2s; border: 0; vertical-align: middle; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) input[type="checkbox"]::before { content: ""; position: absolute; top: 2px; right: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .2), 0 0 0 .5px rgba(0, 0, 0, .04); transition: transform .2s; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) input[type="checkbox"]:checked { background: #34C759; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) input[type="checkbox"]:checked::before { transform: translateX(-20px); }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) input[type="checkbox"]:focus-visible { outline: 3px solid color-mix(in srgb, var(--tint) 45%, transparent); outline-offset: 2px; }
+
+/* the start card: no grey frame, a soft shadow; flat buttons; the file kinds as grey capsules */
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) #welcome { border: 0 !important; box-shadow: var(--ios-shadow) !important; border-radius: 28px !important; background: var(--ios-card) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) #welcome .big { background: var(--ios-fill) !important; background-image: none !important; border: 0 !important; border-radius: 16px !important;
+  box-shadow: none !important; color: var(--tint-ink) !important; font-weight: 700; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) #welcome .big.primary { background: var(--tint) !important; color: #fff !important; box-shadow: 0 4px 14px color-mix(in srgb, var(--tint) 30%, transparent) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) #welcome .formats span { background: var(--ios-fill) !important; border: 0 !important; color: var(--ios-label2) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) #welcome button:not(.big) { background: transparent !important; background-image: none !important; border: 0 !important; box-shadow: none !important; color: var(--tint-ink) !important; }
+
+/* the reading controls at the bottom: a white floating card, a red play capsule, a grey stop */
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) body.has-doc .dock { background: var(--ios-card) !important; border: 0 !important; box-shadow: 0 1px 3px rgba(0, 0, 0, .06), 0 10px 32px rgba(0, 0, 0, .14) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .dock #play { background: var(--tint) !important; background-image: none !important; border: 0 !important; border-radius: 999px !important; color: #fff !important; box-shadow: none !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .dock button:not(#play), html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .dock select { background: var(--ios-fill) !important; background-image: none !important; border: 0 !important; border-radius: 999px !important;
+  box-shadow: none !important; color: var(--ios-label) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .dock #stop { color: var(--tint-ink) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .dock #stop:disabled { color: var(--ios-label2) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body .setfind { background: var(--ios-bg) !important; border: 0 !important; box-shadow: none !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body label.btn { background: var(--ios-fill) !important; background-image: none !important; border: 0 !important; border-radius: 12px !important;
+  box-shadow: none !important; color: var(--tint-ink) !important; font-weight: 600; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body .myvoice { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body .say { background: var(--ios-fill) !important; border: 0 !important; border-radius: 12px !important; box-shadow: none !important; color: var(--ios-label); }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body label:has(> input[type="radio"]) { background: var(--ios-fill) !important; background-image: none !important; border: 0 !important;
+  border-radius: 12px !important; box-shadow: none !important; color: var(--ios-label) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body label:has(> input[type="radio"]:checked) { background: var(--lapis) !important; color: #fff !important;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--lapis) 30%, transparent) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body label:has(> input[type="radio"]:checked) * { color: #fff !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .settabs button:focus:not(:focus-visible) { outline: none !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) #setFind:focus { outline: none !important; box-shadow: 0 0 0 2px color-mix(in srgb, var(--lapis) 55%, transparent) !important; }
+
+/* Wider screens (a phone held sideways, a tablet): page and speed are always on the reading bar, beside the voice and Play, in one row
+   (two on a narrow tablet). Before, they were hidden there and the button that opens them too, so they could not be reached. */
+@media (min-width: 681px) {
+  html.android-reader:root body.has-doc .dock { display: flex !important; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center;
+    gap: 8px 10px; width: auto; max-width: calc(100% - 24px); grid-template-columns: none; }
+  html.android-reader:root body.has-doc .dock .pager, html.android-reader:root body.has-doc .dock .speedctl { display: inline-flex !important; position: static;
+    flex: 0 0 auto; align-items: center; }
+  html.android-reader:root body.has-doc .dock .mobile-dock-button, html.android-reader:root body.has-doc .dock .booktime { display: none !important; }
+  html.android-reader:root body.has-doc .dock .reading-context { display: flex !important; flex: 0 1 230px; min-width: 150px; margin: 0; padding: 0; }
+  html.android-reader:root body.has-doc .dock #readingState, html.android-reader:root body.has-doc .dock #readingTip { display: none; }
+  html.android-reader:root body.has-doc .dock .quick-voice, html.android-reader:root body.has-doc .dock .quick-voice select { width: 100%; margin: 0; }
+  html.android-reader:root body.has-doc .dock .transport { display: flex; flex: 0 0 auto; gap: 8px; margin: 0; }
+  html.android-reader:root body.has-doc .dock .pager input { width: 3.6em; }
+  html.android-reader:root body.has-doc .dock :is(.pager, .speedctl) button { min-width: 44px; min-height: 44px; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  html.android-reader:root body.has-doc .dock { flex-wrap: nowrap; max-width: none; zoom: .78; }
+}
+
+/* segmented switches (Text / Page), the speed control, the page number and the file's name: grey fill, full-contrast text, the chosen
+   part a raised card; the same in light and dark, so nothing is dark grey on black (this app is made for readers who see poorly) */
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) :is(.seg, .speedctl) { background: var(--ios-fill) !important; background-image: none !important; border: 0 !important; box-shadow: none !important;
+  border-radius: 12px !important; padding: 3px !important; gap: 2px; overflow: visible; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) :is(.seg, .speedctl) button { background: transparent !important; background-image: none !important; border: 0 !important; box-shadow: none !important;
+  color: var(--ios-label) !important; border-radius: 9px !important; font-weight: 600; opacity: 1 !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .seg button:is(.on, [aria-pressed="true"]) { background: var(--ios-seg) !important; color: var(--ios-label) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .18) !important; outline: none !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .speedctl #speedChip { background: var(--ios-seg) !important; box-shadow: 0 1px 3px rgba(0, 0, 0, .15) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .pager input { background: var(--ios-fill) !important; background-image: none !important; color: var(--ios-label) !important; border: 0 !important;
+  box-shadow: none !important; border-radius: 10px !important; font-weight: 700; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .pager, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .pager span { color: var(--ios-label) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .pager button:disabled, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .dock button:disabled { color: var(--ios-label2) !important; opacity: .55 !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .bar .file { background: var(--ios-fill) !important; color: var(--ios-label) !important; border: 0 !important; box-shadow: none !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu * { color: var(--ios-label); }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu :is(.tools, .group, .row) { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu > :is(button, summary, label):last-child, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu > :last-child > :is(button, summary, label):last-child { box-shadow: none !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu input[type="search"], html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu input[type="text"] { width: calc(100% - 24px) !important; max-width: none !important; margin: 8px 12px !important;
+  background: var(--ios-fill) !important; border: 0 !important; border-radius: 10px !important; box-shadow: none !important; color: var(--ios-label) !important; min-height: 44px; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu :has(> input[type="search"]) { width: 100% !important; max-width: none !important; box-sizing: border-box; flex: 1 1 100% !important; background: transparent !important; border: 0 !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu .search, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu :has(> .search) { grid-column: 1 / -1 !important; width: 100% !important; max-width: none !important; justify-self: stretch !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu .search .count:empty { display: none !important; }
+
+/* (a phone has no keyboard shortcuts: their card in the guide is for the Mac and Windows versions) */
+html.android-reader .guide-card.shortcut-card { display: none !important; }
+
+/* The settings groups as five framed categories with their own coloured icons (as the categories of the iPhone's Settings), not five
+   words squeezed into one bar: one row of tiles, the chosen one framed in the app colour. */
+#setTabs .tab-ic { display: none; }
+html.android-reader:root #setTabs .tab-ic { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; margin: 0 auto 6px;
+  box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .12); }
+html.android-reader:root #setTabs .tab-ic svg { width: 22px; height: 22px; }
+html.android-reader:root .tab-ic-voice { background: linear-gradient(#FF5E57, #E8352B); }
+html.android-reader:root .tab-ic-text { background: linear-gradient(#3D9BFF, #0A6CF0); }
+html.android-reader:root .tab-ic-look { background: linear-gradient(#C46BF0, #9B3FD0); }
+html.android-reader:root .tab-ic-words { background: linear-gradient(#FFAE3D, #F58A07); }
+html.android-reader:root .tab-ic-safe { background: linear-gradient(#9C9CA3, #6E6E75); }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .settabs { display: grid !important; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px !important; background: transparent !important; padding: 0 !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .settabs button { display: flex !important; flex-direction: column; align-items: center; justify-content: flex-start; background: var(--ios-card) !important;
+  border-radius: 14px !important; min-height: 92px; padding: 10px 4px 8px !important; font-size: 13px !important; line-height: 1.35; font-weight: 600;
+  text-align: center; white-space: normal; box-shadow: none !important; outline: 0; border: 2px solid transparent !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .settabs button[aria-selected="true"] { background: var(--ios-card) !important; border-color: var(--lapis) !important;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--lapis) 25%, transparent) !important; }
+html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .settabs { margin-top: 10px !important; }
+
+/* the high-contrast themes (black, black-yellow, night light) keep their colours, but get the same five category tiles and the same
+   full-width search in the menu, framed in their own text colour */
+html.android-reader:root:is([data-theme="black"], [data-theme="blackyellow"], [data-theme="night"]) .settabs { display: grid !important; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px !important; overflow: visible !important;
+  flex-wrap: nowrap; margin-top: 10px; padding: 0 !important; background: transparent !important; border: 0 !important; }
+html.android-reader:root:is([data-theme="black"], [data-theme="blackyellow"], [data-theme="night"]) .settabs button { display: flex !important; flex-direction: column; align-items: center; justify-content: flex-start; min-width: 0 !important;
+  min-height: 92px; padding: 10px 4px 8px !important; border-radius: 14px !important; font-size: 13px !important; line-height: 1.35; white-space: normal;
+  text-align: center; background: var(--paper) !important; color: var(--ink) !important; border: 2px solid color-mix(in srgb, var(--ink) 45%, transparent) !important; }
+html.android-reader:root:is([data-theme="black"], [data-theme="blackyellow"], [data-theme="night"]) .settabs button[aria-selected="true"] { border: 3px solid var(--ink) !important; background: var(--paper) !important; color: var(--ink) !important; }
+html.android-reader .more-menu .search .count:empty { display: none !important; }
+html.android-reader .more-menu .search { grid-column: 1 / -1 !important; width: 100% !important; max-width: none !important; box-sizing: border-box; }
+html.android-reader .more-menu .search input { width: 100% !important; max-width: none !important; box-sizing: border-box; }
+
+/* small and old phones: the picture never shrinks so far that the words in the water cannot be read (they were about 6 px) */
+html.android-reader:root #welcome .jump-art { width: min(100%, 280px) !important; }
+html.android-reader:root #welcome .jump-art .water-quote { font-size: max(11px, 4.3cqw) !important; line-height: 1.6 !important; left: 4cqw !important; right: 4cqw !important; bottom: 3cqw !important; }
+/* the five category tiles always fit: on a narrow screen smaller icons, smaller words, less space between */
+html.android-reader:root .settabs button { min-width: 0 !important; overflow: hidden; }
+@media (max-width: 400px) {
+  html.android-reader:root .settabs { gap: 5px !important; }
+  html.android-reader:root .settabs button { font-size: 11.5px !important; padding: 8px 2px 6px !important; min-height: 80px; }
+  html.android-reader:root #setTabs .tab-ic { width: 30px; height: 30px; border-radius: 8px; }
+  html.android-reader:root #setTabs .tab-ic svg { width: 19px; height: 19px; }
+}
+/* a small phone held sideways: the «open» button keeps its own size, the reading bar is not shrunk */
+@media (orientation: landscape) and (max-height: 520px) {
+  html.android-reader:root .bar #openFileBtn { flex: 0 0 auto !important; width: auto !important; max-width: 320px; }
+}
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 799px) {
+  html.android-reader:root body.has-doc .dock { zoom: 1 !important; }
+}
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 680px) {
+  html.android-reader:root body.has-doc .dock .mobile-dock-button { min-width: 60px; min-height: 52px; font-size: 13px; }
+}
+/* wider screens have page and speed on the reading bar itself: the menu does not offer them again */
+@media (min-width: 681px) { html.android-reader:root #readingToolsBtn { display: none !important; } }

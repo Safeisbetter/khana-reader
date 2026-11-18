@@ -22,7 +22,7 @@ async function api(path, opts = {}) {
     return res;
   } catch (err) {
     if (err instanceof TypeError) {
-      throw new Error("خطا در اتصال. لطفاً اتصال اینترنتی را بررسی کنید.");
+      throw new Error("خطا در ارتباط با بخش داخلی خوانا. برنامه را ببندید و دوباره باز کنید.");
     }
     throw err;
   }
@@ -122,6 +122,13 @@ function restartReading() {
   if (!reader.active) return;
   restartT = setTimeout(async () => {
     if (!reader.active) return;
+    dropOldSpeech();
+    reader.restarting = gen;
+    try { await restartNow(gen); } finally { if (reader.restarting === gen) reader.restarting = 0; }
+  }, 400);
+}
+async function restartNow(gen) {
+  {
     const now = actx ? actx.currentTime : 0;
     const piece = reader.playing.find(u => now < u.t1) || reader.playing[reader.playing.length - 1];
     const wasPaused = reader.paused;
@@ -133,7 +140,11 @@ function restartReading() {
       if (next && next.p >= 0 && next.page === S.page) {
         const run = reader.run;
         try {
-          const warm = piecesFor(S.page, S.paras, next.p, next.start).slice(0, 2).map(q => speechBuffer(q.text, run).catch(() => {}));
+          const warm = piecesFor(S.page, S.paras, next.p, next.start).slice(0, 2).reverse().map(q => {
+            const w = speechBuffer(q.text, run, true);
+            if (w.owner) w.owner.keep = true;
+            return w.catch(() => {});
+          });
           await Promise.race([Promise.all(warm), sleep(Math.max(0, (piece.t1 - now) * 1000))]);
           if (!reader.active || reader.run !== run || reader.paused || gen !== restartGen) return;
           const wait = piece.t1 - actx.currentTime;
@@ -147,7 +158,7 @@ function restartReading() {
     if (piece && piece.page !== S.page) showPage(piece.page, reader.pageParas[piece.page], !reader.partial[piece.page]);
     if (piece && piece.p >= 0) readFrom(piece.p, piece.start); else readFrom(0);
     if (wasPaused) { actx.suspend(); reader.paused = true; setPlayButton(); }
-  }, 400);
+  }
 }
 $("voice").onchange = e => { setSetting("voice", e.target.value); $("dockVoice").value = e.target.value; ttsCache.clear(); restartReading(); };
 $("dockVoice").onchange = e => { $("voice").value = e.target.value; setSetting("voice", e.target.value); ttsCache.clear(); restartReading(); };
@@ -1204,11 +1215,30 @@ const bufCache = new Map();  // voice|speed|text -> Promise<AudioBuffer>
 const speechConcurrency = /Android/.test(navigator.userAgent) ? Math.max(1, Math.min(3, Math.floor((navigator.hardwareConcurrency || 2) / 2))) : 1;
 const speechTasks = [];
 let speechRunning = 0;
-function queueSpeech(make) {
+// (urgent: the sentences after a change of voice or speed go before everything already waiting)
+function queueSpeech(make, urgent, key) {
   return new Promise((resolve, reject) => {
-    speechTasks.push({ make, resolve, reject });
+    speechTasks[urgent ? "unshift" : "push"]({ make, resolve, reject, key });
     pumpSpeech();
   });
+}
+// What makes a reading sentence sound different: a change of any of these makes every sentence prepared before useless.
+const speechPrefix = () => S.settings.voice + "|" + S.settings.speed + "|" + (S.settings.naturalTone !== false) + "|" + (S.settings.commaPause || "short") + "|";
+// A new voice or speed: sentences still waiting in the old one are dropped here, and the phone stops making the ones it has begun
+// (each was a few seconds of work; a reading keeps up to 30 seconds ahead, so the new voice used to wait about half a minute).
+// (counted from the clock, so a page opened again never sends a count lower than one the phone has seen)
+let speechGen = Date.now(), speechGenPrefix = "";
+const isDropped = e => /^(skipped|cancelled)$/.test(String(e && e.message));
+function dropOldSpeech() {
+  const now = speechPrefix();
+  if (!speechGenPrefix) { speechGenPrefix = now; return; }
+  if (now === speechGenPrefix) return;
+  speechGenPrefix = now; speechGen = Math.max(speechGen + 1, Date.now());
+  for (let k = speechTasks.length - 1; k >= 0; k--) {
+    const t = speechTasks[k];
+    if (t.key && !t.key.startsWith(now)) { speechTasks.splice(k, 1); bufCache.delete(t.key); t.reject(new Error("skipped")); }
+  }
+  jpost("/api/tts_gen", { gen: speechGen }).catch(() => {});
 }
 function pumpSpeech() {
   while (speechRunning < speechConcurrency && speechTasks.length) {
@@ -1220,17 +1250,19 @@ function pumpSpeech() {
     });
   }
 }
-function speechBuffer(text, run) {
-  const key = S.settings.voice + "|" + S.settings.speed + "|" + (S.settings.naturalTone !== false) + "|" + (S.settings.commaPause || "short") + "|" + text;
+function speechBuffer(text, run, urgent) {
+  if (!speechGenPrefix) speechGenPrefix = speechPrefix();
+  const key = speechPrefix() + text;
   if (!bufCache.has(key)) {
-    const body = JSON.stringify({ text, voice: S.settings.voice, speed: S.settings.speed });
+    // (gen: the phone drops this sentence when the voice or speed changes while it is being made)
+    const body = JSON.stringify({ text, voice: S.settings.voice, speed: S.settings.speed, gen: speechGen });
     // a piece queued for reading that was stopped or jumped away from is skipped, so the new
     // position does not wait behind sentences nobody will hear
     const owner = { run };
     const p = queueSpeech(() => {
-      if (owner.run !== undefined && reader.run !== owner.run) throw new Error("skipped");
+      if (owner.run !== undefined && reader.run !== owner.run && !owner.keep) throw new Error("skipped");
       return api("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body });
-    })
+    }, urgent, key)
       // (a text with nothing to say comes back as a sound with no samples, which WebKit refuses with
       // «Decoding failed»: a moment's silence, and the reading goes on)
       .then(r => r.arrayBuffer()).then(b => b.byteLength <= 44 ? ensureAudio().createBuffer(1, 1, 22050) : ensureAudio().decodeAudioData(b));
@@ -1405,11 +1437,14 @@ async function readFrom(i, fromOff = 0) {
       }
       // stay well ahead of what is being heard, so a sentence the voice has to make again
       // (a retry takes a few seconds) never leaves a gap; prepare the following pieces too
-      if (reader.lastEnd - actx.currentTime > 30) { await sleep(250); continue; }
+      // (and nothing new is asked for while a change of voice waits for its first sentences: they go first)
+      if (reader.lastEnd - actx.currentTime > 30 || reader.restarting) { await sleep(250); continue; }
       const piece = reader.queue[reader.next];
       const bufP = speechBuffer(piece.text, run);
       for (let k = 1; k <= 3; k++) if (reader.queue[reader.next + k]) speechBuffer(reader.queue[reader.next + k].text, run).catch(() => {});
-      const buf = await bufP;
+      let buf;
+      // (a sentence dropped because the voice changed is asked for again, in the new voice)
+      try { buf = await bufP; } catch (e) { if (reader.run === run && isDropped(e)) { await sleep(100); continue; } throw e; }
       if (reader.run !== run) return;
       reader.playing = reader.playing.filter(u => u.t1 > actx.currentTime);
       const src = actx.createBufferSource();
@@ -1665,7 +1700,7 @@ async function poll() {
     $("mp3Pct").textContent = fa(pct) + "%";
     $("mp3Eta").textContent = job.lowBattery ? "" : timeLeft(job.progress);
     $("mp3Text").classList.toggle("hot", job.heat >= 2 || !!job.lowBattery);
-    $("mp3Text").textContent = job.lowBattery ? "باتری کم است (۲۰٪ یا کمتر). کار نگه داشته شده و با وصل کردن شارژر خودش ادامه پیدا می‌کند." : job.heat >= 2 ? (job.heat >= 3 ? "دستگاه خیلی داغ شده است. کار تا خنک شدن آن ایستاده و خودش ادامه پیدا می‌کند." : "دستگاه داغ شده است. برای سلامت آن، کار آهسته‌تر پیش می‌رود.") : pdf ? "در حال ترجمه…" : (pct === 0 ? "در حال آماده کردن نخستین بخش… (ممکن است چند ثانیه تا چند دقیقه طول بکشد)" : `در حال ساختن… تا اینجا ${len} صدا`);
+    $("mp3Text").textContent = job.lowBattery ? "باتری کم است (۲۰٪ یا کمتر). کار متوقف شده است و با وصل کردن شارژر خودش ادامه پیدا می‌کند." : job.heat >= 2 ? (job.heat >= 3 ? "دستگاه خیلی داغ شده است. کار تا خنک شدن آن متوقف شده است و بعد خودش ادامه پیدا می‌کند." : "دستگاه داغ شده است. برای سلامت آن، کار آهسته‌تر پیش می‌رود.") : pdf ? "در حال ترجمه…" : (pct === 0 ? "در حال آماده کردن نخستین بخش… (ممکن است چند ثانیه تا چند دقیقه طول بکشد)" : `در حال ساختن… تا اینجا ${len} صدا`);
     pollT = setTimeout(poll, 700); return;
   }
   $("mp3Start").disabled = false; $("mp3Cancel").hidden = true;
@@ -1696,6 +1731,12 @@ async function libShow() {
   const list = $("libList");
   list.textContent = "";
   $("libEmpty").hidden = r.files.length > 0;
+  // (the only thing Khana keeps that grows with use: the saved sound files. Their total is shown, and above 1 GB a reminder to
+  // delete the ones already heard; nothing is deleted on its own, they are the reader's files)
+  const total = r.files.reduce((n, f) => n + (f.bytes || 0), 0), mb = total / 1048576;
+  $("libTotal").hidden = !r.files.length;
+  $("libTotal").textContent = fa(r.files.length) + " فایل، روی هم " + (mb >= 1024 ? fa((mb / 1024).toFixed(1)) + " گیگابایت" : fa(Math.max(1, Math.round(mb))) + " مگابایت") + " از حافظه‌ی دستگاه."
+    + (mb >= 1024 ? " فایل‌هایی را که دیگر لازم ندارید حذف کنید تا گوشی جا داشته باشد." : "");
   for (const f of r.files) {
     const row = document.createElement("div"); row.className = "librow";
     const name = document.createElement("div"); name.className = "name"; name.textContent = f.name;
