@@ -27,7 +27,7 @@ permissions:
 env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: v1.27
+  MODELS_RELEASE: v1.28
 
 jobs:
   build:
@@ -55,7 +55,7 @@ jobs:
           $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader.apk" } else { "KhanaReader-lite.apk" }
           gh release download $env:MODELS_RELEASE --repo $env:GITHUB_REPOSITORY -p $apk -D apk
           if ($LASTEXITCODE -ne 0) { throw "Model package download failed" }
-          $expected = if ("${{ matrix.edition }}" -eq "full") { "9936a5be85e543d685ca67ca14e4fad99cc54aeb9eae79088073b6086c5110b8" } else { "27f1abfa19f41575cac8d2b696684b0b27319b3015c0f1176f608ec5c0369d58" }
+          $expected = if ("${{ matrix.edition }}" -eq "full") { "24cd833e265caf40812a1e0965d1458095f83d3724a3d8b0b4bf13e6770e12c3" } else { "0a3734bc0f4b2701f3a2d6db0d06efc00aab9e3ab92a2884ec256880213d142f" }
           if ((Get-FileHash "apk/$apk" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Model package checksum mismatch" }
           Move-Item "apk/$apk" apk/models.zip
           Expand-Archive apk/models.zip -DestinationPath apk/x
