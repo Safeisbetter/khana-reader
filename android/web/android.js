@@ -121,7 +121,7 @@ if (window.KHANA_NO_MIC) {
   const box = document.querySelector(".myvoice");
   if (box) {
     const say = box.querySelector(".say"); if (say) say.hidden = true;
-    const hint = box.querySelector(".hint"); if (hint) hint.textContent = "خوانا می‌تواند با صدای خود شما بخواند. یک فایل صوتی کوتاه از صدای خودتان (۱۰ تا ۳۰ ثانیه، بی‌نویز) انتخاب کنید.";
+    const hint = box.querySelector(".hint"); if (hint) hint.textContent = "خوانا می‌تواند با صدای خود شما بخواند. یک فایل صوتی کوتاه از صدای خودتان (۱۰ تا ۳۰ ثانیه، بدون سر و صدا) انتخاب کنید.";
   }
 }
 
@@ -155,7 +155,7 @@ if (window.KHANA_NO_MIC) {
    player or depends on background JavaScript timers. Only foreground highlighting is polled. */
 (function () {
   const pageStop = stopReading;
-  let control = Promise.resolve(), timer = null, polling = false, lastPosition = null;
+  let control = Promise.resolve(), timer = null, polling = false, lastPosition = null, finishing = false;
   const command = (path, body = {}) => (control = control.catch(() => {}).then(() => jpost(path, body)));
   stopReading = function () {
     pageStop(); clearTimeout(timer); lastPosition = null; reader.nativePosition = null;
@@ -207,7 +207,10 @@ if (window.KHANA_NO_MIC) {
     if (reader.run === run && reader.active) timer = setTimeout(() => poll(run), 250);
   }
   readFrom = async function (para, offset = 0) {
-    stopReading(); if (!S.doc) return;
+    // (finishing: a new voice or speed: the phone ends the sentence being heard by itself, so it is not stopped here)
+    const exact = finishing; finishing = false;
+    if (exact) { pageStop(); clearTimeout(timer); lastPosition = null; reader.nativePosition = null; } else stopReading();
+    if (!S.doc) return;
     const run = reader.run, doc = S.doc, settings = { ...S.settings }, first = S.page;
     reader.active = true; reader.paused = false; setPlayButton();
     try {
@@ -228,7 +231,7 @@ if (window.KHANA_NO_MIC) {
       if (reader.run !== run) return;
       const request = { doc: doc.id, pages: doc.pages, page: first, para, start: offset,
         voice: settings.voice, speed: Number(settings.speed) || 1, tr: !!(doc.canTranslate && settings.translate),
-        rev: !!settings.reversed, yeh: !!settings.persianYeh, autoNext: settings.autoNext !== false, announceEnd: !doc.isTyped, announceTitle };
+        rev: !!settings.reversed, yeh: !!settings.persianYeh, autoNext: settings.autoNext !== false, announceEnd: !doc.isTyped, announceTitle, exact };
       control = control.catch(() => {}).then(() => reader.run === run ? jpost('/api/read_start', request) : null);
       await control;
       if (reader.run === run) poll(run);
@@ -250,7 +253,11 @@ if (window.KHANA_NO_MIC) {
     restartT = setTimeout(async () => {
       if (!reader.active) return;
       const pos = lastPosition, paused = reader.paused;
-      await readFrom(pos && pos.para >= 0 ? pos.para : 0, pos && pos.para >= 0 ? pos.start : 0);
+      // A new voice or speed: the sentence being heard is finished in the old one while the next is made in the new one, and the
+      // reading goes on right after it (before, it was cut and the same sentence made again from nothing: a long silence).
+      const finish = !paused && pos && pos.para >= 0 && pos.page === S.page && pos.end > pos.start;
+      finishing = !!finish;
+      await readFrom(pos && pos.para >= 0 ? pos.para : 0, pos && pos.para >= 0 ? (finish ? pos.end : pos.start) : 0);
       if (paused && reader.active) await pause(true);
     }, 400);
   };

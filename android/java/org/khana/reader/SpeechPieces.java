@@ -33,6 +33,23 @@ final class SpeechPieces {
         if (first < text.length()) add(out, text, first, text.length());
         return out;
     }
+    /** The first piece of a reading, cut at its first comma when it is long: the short part is made in a few seconds, so the voice
+     *  starts sooner after play or after a change of voice, and the rest is made while it is heard. */
+    static List<Piece> head(String text, Piece p) {
+        List<Piece> out = new ArrayList<>();
+        if (p.end - p.start > 60) {
+            for (int i = p.start + 15; i < p.end - 15; i++) {
+                if ("،,؛;:".indexOf(text.charAt(i)) < 0) continue;
+                int cut = i + 1;
+                while (cut < p.end && Character.isWhitespace(text.charAt(cut))) cut++;
+                out.add(new Piece(text, p.start, cut));
+                out.add(new Piece(text, cut, p.end));
+                return out;
+            }
+        }
+        out.add(p);
+        return out;
+    }
     private static boolean asciiLetter(char c) { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'; }
     private static void add(List<Piece> out, String text, int first, int end) {
         // Bound generation latency on an unusually long sentence without dropping letters.

@@ -123,7 +123,7 @@ final class Exporter {
             asking = false;
         }
         if (u == null) {
-            Toast.makeText(ctx, s.kind.equals("pdf") ? "فایل ذخیره نشد. با «ذخیره / بازکردن» دوباره می‌توانید." : "رونوشتی ذخیره نشد. فایل در «فایل‌های من» می‌ماند.", Toast.LENGTH_LONG).show();
+            Toast.makeText(ctx, s.kind.equals("pdf") ? "فایل ذخیره نشد. با «ذخیره / باز کردن» دوباره امتحان کنید." : "رونوشت ذخیره نشد. فایل در «فایل‌های من» می‌ماند.", Toast.LENGTH_LONG).show();
             return;
         }
         Context app = ctx.getApplicationContext();

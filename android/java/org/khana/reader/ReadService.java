@@ -41,7 +41,7 @@ public final class ReadService extends Service {
             if (r != null && !r.cancelled) {
                 out.put("session", r.id).put("doc", r.request.getString("doc")).put("paused", r.paused)
                     .put("page", r.page).put("para", r.para).put("start", r.start).put("end", r.end)
-                    .put("duration", r.duration);
+                    .put("duration", r.duration).put("stalls", r.stalls).put("stalled", r.stalled);
                 long head = r.track == null ? r.baseFrame : Integer.toUnsignedLong(r.track.getPlaybackHeadPosition());
                 out.put("elapsed", Math.max(0, (head - r.baseFrame) / (double) RATE - r.gap));
             }
@@ -55,6 +55,14 @@ public final class ReadService extends Service {
         boolean endOfBook;
         void wipe() { if (pcm != null) Arrays.fill(pcm, (byte) 0); pcm = null; }
     }
+    private static long lastGen;
+    private static synchronized long nextGen() { lastGen = Math.max(lastGen + 1, System.currentTimeMillis()); return lastGen; }
+    /** Tells the core that sentences asked for by readings before this number are no longer wanted. */
+    private static void dropBefore(long gen) {
+        new Thread(() -> {
+            try { call("POST", "/api/tts_gen", "", Native.utf8("{\"gen\":" + gen + "}")); } catch (Exception ignored) { }
+        }, "khana-read-drop").start();
+    }
     private static final class Run {
         final String id = UUID.randomUUID().toString();
         final JSONObject request;
@@ -62,12 +70,19 @@ public final class ReadService extends Service {
         final ArrayBlockingQueue<Future<Sound>> queue = new ArrayBlockingQueue<>(4);
         final List<Future<Sound>> pending = Collections.synchronizedList(new ArrayList<>());
         volatile boolean cancelled, paused;
+        // (finishing: a new reading has taken over, but the sentence being heard is said to its end first; previous: that reading)
+        volatile boolean finishing;
+        volatile Run previous;
         volatile int page, para = -1, start, end;
         volatile double duration, gap;
         volatile long baseFrame;
+        // (how often, and for how long in all, the voice had to wait for its next sentence: the measure of a smooth reading)
+        volatile int stalls; volatile long stalled;
         volatile AudioTrack track;
         Thread feeder, player;
-        Run(JSONObject request) { this.request = request; page = request.optInt("page", 1); }
+        // (this reading's number: the core drops a sentence of an older reading, so a new voice or place does not wait behind it)
+        final long gen = nextGen();
+        Run(JSONObject request) { this.request = request; page = request.optInt("page", 1); para = request.optInt("para", -1); start = request.optInt("start"); end = start; }
     }
     @Override public void onCreate() {
         super.onCreate(); live = this;
@@ -146,11 +161,13 @@ public final class ReadService extends Service {
         Native.Reply r = call("GET", path, query, null);
         try { return new JSONObject(Native.text(r.body)); } finally { Arrays.fill(r.body, (byte) 0); }
     }
-    private void submit(Run r, String text, int page, int para, SpeechPieces.Piece piece, double gap) throws Exception {
+    private void submit(Run r, String text, int page, int para, SpeechPieces.Piece piece, double gap, boolean quick) throws Exception {
         if (r.cancelled) throw new InterruptedException();
         Future<Sound> future = r.workers.submit(() -> {
             if (r.cancelled) throw new InterruptedException();
-            JSONObject body = new JSONObject().put("text", text).put("voice", r.request.getString("voice")).put("speed", r.request.getDouble("speed"));
+            JSONObject body = new JSONObject().put("text", text).put("voice", r.request.getString("voice")).put("speed", r.request.getDouble("speed")).put("gen", r.gen);
+            // (the first sentence of a reading is made quickly: it is what the reader waits for after pressing play or changing voice)
+            if (quick) body.put("quick", true);
             byte[] request = Native.utf8(body.toString());
             Native.Reply reply;
             try { reply = call("POST", "/api/tts", "", request); } finally { Arrays.fill(request, (byte) 0); }
@@ -177,6 +194,7 @@ public final class ReadService extends Service {
             String doc = java.net.URLEncoder.encode(q.getString("doc"), "UTF-8");
             String options = "doc=" + doc + "&rev=" + q.optBoolean("rev") + "&yeh=" + q.optBoolean("yeh", true) + "&tr=" + q.optBoolean("tr");
             int first = q.getInt("page"), pages = q.getInt("pages"), firstPara = q.optInt("para"), offset = q.optInt("start");
+            boolean exact = q.optBoolean("exact");
             boolean beginning = true;
             int lastPage = first - 1;
             for (int page = first; page <= pages && !r.cancelled; page++) {
@@ -185,17 +203,25 @@ public final class ReadService extends Service {
                 JSONArray paras = result.getJSONArray("paragraphs");
                 for (int p = page == first ? firstPara : 0; p < paras.length() && !r.cancelled; p++) {
                     boolean paragraphStart = true;
-                    for (SpeechPieces.Piece piece : SpeechPieces.split(paras.getString(p))) {
-                        if (page == first && p == firstPara && piece.end <= offset) continue;
-                        submit(r, piece.text, page, p, piece, beginning ? 0 : paragraphStart ? 0.9 : 0.45);
-                        beginning = false; paragraphStart = false;
+                    String text = paras.getString(p);
+                    for (SpeechPieces.Piece whole : SpeechPieces.split(text)) {
+                        if (page == first && p == firstPara && whole.end <= offset) continue;
+                        // (exact: the reading goes on right after the part just heard, which may end at a comma inside the sentence)
+                        if (exact && page == first && p == firstPara && whole.start < offset) whole = new SpeechPieces.Piece(text, offset, whole.end);
+                        // (the reading's first sentence: its first part is made alone and quickly, see SpeechPieces.head)
+                        List<SpeechPieces.Piece> parts = beginning ? SpeechPieces.head(text, whole) : Collections.singletonList(whole);
+                        for (int k = 0; k < parts.size(); k++) {
+                            SpeechPieces.Piece piece = parts.get(k);
+                            submit(r, piece.text, page, p, piece, k > 0 ? 0.2 : beginning ? 0 : paragraphStart ? 0.9 : 0.45, beginning);
+                            beginning = false; paragraphStart = false;
+                        }
                     }
                 }
                 lastPage = page;
                 if (!q.optBoolean("autoNext", true)) break;
             }
             if (!r.cancelled) {
-                if (lastPage == pages && q.optBoolean("announceEnd", true)) submit(r, "پایان متن.", pages, -1, null, 1.2);
+                if (lastPage == pages && q.optBoolean("announceEnd", true)) submit(r, "پایان متن.", pages, -1, null, 1.2, false);
                 FutureTask<Sound> end = new FutureTask<>(() -> { Sound s = new Sound(); s.endOfBook = true; return s; }); end.run();
                 while (!r.cancelled && !r.queue.offer(end, 200, TimeUnit.MILLISECONDS)) { }
             }
@@ -204,36 +230,50 @@ public final class ReadService extends Service {
     private void play(Run r) {
         long frames = 0;
         try {
+            // (the reading before this one is finishing its sentence: this one's voice starts when it ends)
+            Run before = r.previous;
+            if (before != null && before.player != null) before.player.join(20000);
+            r.previous = null;
             int min = AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
             r.track = new AudioTrack.Builder().setAudioAttributes(attributes()).setAudioFormat(new AudioFormat.Builder().setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
                 .setBufferSizeInBytes(Math.max(min * 2, RATE)).setTransferMode(AudioTrack.MODE_STREAM).build();
             if (r.cancelled) return;
             r.track.play();
+            boolean first = true;
+            long waitFrom = SystemClock.elapsedRealtime();
             while (!r.cancelled) {
                 Future<Sound> next = r.queue.poll(200, TimeUnit.MILLISECONDS); if (next == null) continue;
                 Sound sound = next.get(); r.pending.remove(next);
+                long waited = SystemClock.elapsedRealtime() - waitFrom;
+                if (!first && !r.paused && waited > 300) { r.stalls++; r.stalled += waited; }
+                first = false;
                 try {
                     if (r.cancelled) break;
                     if (sound.endOfBook) { ui.post(() -> { if (run == r) stopSelf(); }); break; }
                     r.page = sound.page; r.para = sound.para; r.start = sound.start; r.end = sound.end;
                     r.duration = sound.duration; r.gap = sound.gap; r.baseFrame = frames;
-                    for (int at = 0; at < sound.pcm.length && !r.cancelled;) {
+                    for (int at = 0; at < sound.pcm.length && !(r.cancelled && !r.finishing);) {
                         if (r.paused) { Thread.sleep(50); continue; }
                         int wrote = r.track.write(sound.pcm, at, Math.min(4096, sound.pcm.length - at), AudioTrack.WRITE_NON_BLOCKING);
                         if (wrote < 0) throw new Exception("Audio output stopped");
                         if (wrote == 0) Thread.sleep(10); else { at += wrote; frames += wrote / 2; }
                     }
-                    while (!r.cancelled && Integer.toUnsignedLong(r.track.getPlaybackHeadPosition()) < frames) Thread.sleep(20);
-                } finally { sound.wipe(); }
+                    while (!(r.cancelled && !r.finishing) && Integer.toUnsignedLong(r.track.getPlaybackHeadPosition()) < frames) Thread.sleep(20);
+                } finally { sound.wipe(); waitFrom = SystemClock.elapsedRealtime(); }
             }
         } catch (InterruptedException ignored) { } catch (Exception e) { if (!r.cancelled) fail(r); }
         finally { AudioTrack track = r.track; r.track = null; if (track != null) try { track.release(); } catch (RuntimeException ignored) { } }
     }
     private void fail(Run r) { ui.post(() -> { if (run == r) { lastError = "خواندن متوقف شد. صفحه را دوباره باز کنید و تلاش کنید."; stopSelf(); } }); }
-    private void cancel() {
-        Run r = run; run = null; if (r == null) return;
+    private void cancel() { cancel(false); }
+    /** Ends the reading; finish: a new one takes over, and the sentence being heard is said to its end (not when paused). */
+    private Run cancel(boolean finish) {
+        Run r = run; run = null; if (r == null) return null;
+        boolean soft = finish && !r.paused && r.track != null && r.player != null;
+        r.finishing = soft;
         r.cancelled = true;
-        if (r.feeder != null) r.feeder.interrupt(); if (r.player != null) r.player.interrupt();
+        dropBefore(nextGen());
+        if (r.feeder != null) r.feeder.interrupt(); if (r.player != null && !soft) r.player.interrupt();
         r.workers.shutdownNow();
         synchronized (r.pending) {
             for (Future<Sound> f : r.pending) {
@@ -243,20 +283,24 @@ public final class ReadService extends Service {
             r.pending.clear();
         }
         r.queue.clear();
+        if (soft) return r;
         AudioTrack track = r.track; if (track != null) try { track.pause(); track.flush(); } catch (RuntimeException ignored) { }
         if (wake != null && wake.isHeld()) wake.release();
         manager.abandonAudioFocusRequest(focus);
+        return null;
     }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? "stop" : intent.getAction();
         if ("pause".equals(action)) setPaused(true);
         else if ("resume".equals(action)) setPaused(false);
         else if ("start".equals(action)) {
-            cancel(); lastError = "";
+            JSONObject q0 = null;
+            try { q0 = new JSONObject(intent.getStringExtra("request")); } catch (Exception ignored) { }
+            Run finishing = cancel(q0 != null && q0.optBoolean("exact")); lastError = "";
             try {
-                JSONObject q = new JSONObject(intent.getStringExtra("request"));
+                JSONObject q = q0; if (q == null) throw new Exception("Invalid reading request");
                 if (q.getString("doc").length() > 128 || q.getInt("page") < 1 || q.getInt("page") > q.getInt("pages") || q.getInt("pages") > 1000000 || q.optInt("para") < 0 || q.optInt("start") < 0 || !Double.isFinite(q.getDouble("speed")) || q.getDouble("speed") < 0.5 || q.getDouble("speed") > 2.0) throw new Exception("Invalid reading request");
-                Run r = new Run(q); run = r;
+                Run r = new Run(q); r.previous = finishing; run = r;
                 if (manager.requestAudioFocus(focus) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) throw new Exception("Audio focus unavailable");
                 setPaused(false);
                 r.feeder = new Thread(() -> feed(r), "khana-read-feed"); r.player = new Thread(() -> play(r), "khana-read-play");

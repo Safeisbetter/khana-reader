@@ -137,7 +137,7 @@ fn say(text: &str, out: &str, voice: &str) {
     eng.g2p.set_lexicon(&[]);
     let wav = if models.join("voices").join(voice).is_file() { models.join("voices").join(voice) } else { models.join("parsigo/voices").join(voice) };
     let t0 = std::time::Instant::now();
-    let a = eng.synthesize_text(&khana::tts::speech_clean(text), voice, &wav, 5, &|| false).unwrap();
+    let a = eng.synthesize_text(&khana::tts::speech_clean(text), voice, &wav, 5, false, &|| false).unwrap();
     let secs = a.len() as f64 / 24000.0;
     eprintln!("{secs:.1} s of speech in {:.1} s ({:.2}x real time)", t0.elapsed().as_secs_f64(), secs / t0.elapsed().as_secs_f64());
     std::fs::write(out, khana::audio::wav_bytes(&a, 24000)).unwrap();

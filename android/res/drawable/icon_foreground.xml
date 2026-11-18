@@ -1,8 +1,8 @@
+<!-- Khana's icon (1.27.1): an open book with sound bars rising from it, a book read aloud. Drawn in the 108 x 108 adaptive-icon
+     space and scaled to 90 % around the centre, so every part stays inside the 66 dp circle any launcher's mask keeps. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-  <group android:scaleX="0.75" android:scaleY="0.75" android:translateX="13.5" android:translateY="18">
-    <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFF" android:strokeWidth="5" android:strokeLineCap="round" android:pathData="M30,46 A24,24 0 0 1 78,46" />
-    <path android:fillColor="#FFFFFF" android:pathData="M28,44 H29 A5,5 0 0 1 34,49 V59 A5,5 0 0 1 29,64 H28 A5,5 0 0 1 23,59 V49 A5,5 0 0 1 28,44 Z M79,44 H80 A5,5 0 0 1 85,49 V59 A5,5 0 0 1 80,64 H79 A5,5 0 0 1 74,59 V49 A5,5 0 0 1 79,44 Z" />
-    <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFF" android:strokeWidth="4" android:strokeLineJoin="round" android:pathData="M54,82 C45,74 33,74 19,78 V54 C33,50 45,50 54,58 Z M54,82 C63,74 75,74 89,78 V54 C75,50 63,50 54,58" />
-    <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFF" android:strokeWidth="3" android:pathData="M54,58 V82" />
+  <group android:scaleX="0.9" android:scaleY="0.9" android:translateX="5.4" android:translateY="5.4">
+    <path android:fillColor="#FFFFFF" android:pathData="M52.5,80 C45,74 36,73 26,75 V51 C36,49 45,50 52.5,56 Z M55.5,80 C63,74 72,73 82,75 V51 C72,49 63,50 55.5,56 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFF" android:strokeWidth="4.5" android:strokeLineCap="round" android:pathData="M40,34 V39 M47,29 V43 M54,24 V47 M61,29 V43 M68,34 V39" />
   </group>
 </vector>

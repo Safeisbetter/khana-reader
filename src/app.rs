@@ -149,6 +149,8 @@ fn lexicon_pairs(s: &Map<String, Value>) -> Vec<(String, String)> {
 }
 
 
+static TTS_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 pub struct Speech {
     engine: Mutex<Option<Arc<Engine>>>,
     busy: (Mutex<usize>, std::sync::Condvar),
@@ -173,7 +175,7 @@ impl Speech {
         *self.last_play.lock().unwrap() = Some(Instant::now());
     }
 
-    pub fn synthesize(&self, text: &str, voice_id: &str, speed: f64, cancel: &(dyn Fn() -> bool + Sync)) -> Result<(Vec<f32>, usize), String> {
+    pub fn synthesize(&self, text: &str, voice_id: &str, speed: f64, quick: bool, cancel: &(dyn Fn() -> bool + Sync)) -> Result<(Vec<f32>, usize), String> {
         let all = voices();
         let (id, wav, tempo) = if voice_id == "mine" && my_voice().is_file() {
             ("mine".to_string(), my_voice(), 1.0)
@@ -193,7 +195,7 @@ impl Speech {
         let recent = self.last_play.lock().unwrap().map_or(false, |t| t.elapsed() < Duration::from_secs(30));
         let workers = if recent { 3 } else { 5 };
         let workers = std::env::var("KHANA_WORKERS").ok().and_then(|v| v.parse::<usize>().ok()).filter(|n| (1..=8).contains(n)).unwrap_or(workers);
-        let mut a = eng.synthesize_text(&text, &id, &wav, workers, cancel)?;
+        let mut a = eng.synthesize_text(&text, &id, &wav, workers, quick, cancel)?;
         if (speed - 1.0).abs() >= 0.008 && !a.is_empty() {
             a = crate::stretch::stretch(&a, speed, tts::RATE);
         }
@@ -500,7 +502,7 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
             for (index, text) in groups.into_iter().enumerate() {
                 tts::wait_for_power(&cancel);
                 if cancel() { interrupted = true; break 'pages; }
-                let (mut pcm, rate) = match speech().synthesize(&text, &r.voice, r.speed, &cancel) {
+                let (mut pcm, rate) = match speech().synthesize(&text, &r.voice, r.speed, false, &cancel) {
                     Ok(audio) => audio,
                     Err(_) if cancel() => { interrupted = true; break 'pages; }
                     Err(error) => return Err(error),
@@ -635,7 +637,7 @@ fn run_pdf_job(job: Arc<Job>, doc: Arc<Document>, first: usize, last: usize, opt
     let res = (|| -> Result<(), String> {
         *job.total_chars.lock().unwrap() = last + 1 - first;
         let title = doc.spoken_title(opts);
-        let sub = format!("ترجمه\u{200c}ی ماشینی (روی همین کامپیوتر) از «{}»، صفحه\u{200c}های {} تا {}", doc.name, fa_digits(first), fa_digits(last));
+        let sub = format!("ترجمه\u{200c}ی ماشینی (روی همین دستگاه) از «{}»، صفحه\u{200c}های {} تا {}", doc.name, fa_digits(first), fa_digits(last));
         let mut pages: Vec<(String, Vec<String>)> = Vec::new();
         for n in first..=last {
             if job.cancelled.load(Ordering::SeqCst) {
@@ -1313,11 +1315,23 @@ impl App {
                 let voice = req.get("voice").and_then(|v| v.as_str()).filter(|v| !v.is_empty()).map(|v| v.to_string())
                     .unwrap_or_else(|| s["voice"].as_str().unwrap_or("").to_string());
                 let speed = req.get("speed").and_then(|v| v.as_f64()).unwrap_or(1.0);
+                let asked_gen = req.get("gen").and_then(|v| v.as_u64()).unwrap_or(0);
+                let quick = req.get("quick").and_then(|v| v.as_bool()).unwrap_or(false);
+                let dropped = move || asked_gen > 0 && asked_gen < TTS_GEN.load(Ordering::Relaxed);
                 speech().mark_play();
                 adapt_to_device_speed();
-                let (a, rate) = speech().synthesize(&text, &voice, speed, &|| false).map_err(ApiError::Internal)?;
+                let (a, rate) = match speech().synthesize(&text, &voice, speed, quick, &dropped) {
+                    Ok(r) => r,
+                    Err(_) if dropped() => return Err(bad("cancelled")),
+                    Err(e) => return Err(ApiError::Internal(e)),
+                };
                 speech().mark_play();
                 Ok(Reply { status: 200, ctype: "audio/wav", body: audio::wav_bytes(&a, rate as u32), headers: Vec::new() })
+            }
+            "tts_gen_post" => {
+                let new_gen = body_json()?.get("gen").and_then(|v| v.as_u64()).unwrap_or(0);
+                TTS_GEN.fetch_max(new_gen, Ordering::Relaxed);
+                Ok(reply_json(&json!({"gen": TTS_GEN.load(Ordering::Relaxed)})))
             }
             "mp3fast_post" => {
                 let fast = body_json()?.get("fast").and_then(|v| v.as_bool()).unwrap_or(false);
