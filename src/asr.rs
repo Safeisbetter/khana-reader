@@ -98,14 +98,22 @@ pub fn heard_score(phonemes: &str, speech: &[f32], rate: usize) -> (Option<f64>,
         }
         let mean = h.iter().filter(|x| **x).count() as f64 / n as f64;
         if n >= 2 && mean < 0.34 {
-            problems.push(format!("-{w}{}", if k == words.len() - 1 { "$" } else { "" }));
+            problems.push(format!("-{w}{}", if k == words.len() - 1 { "$" } else if k == 0 { "^" } else { "" }));
         } else if n >= 3 && (h.iter().filter(|x| !**x).count() >= 2 || !h[0]) {
             problems.push(format!("~{w}"));
+        }
+    }
+    if let Some((w0, unchecked)) = pairs.first() {
+        if !*unchecked && len(w0) == 1 && !hit[0] && !problems.iter().any(|p| p.ends_with('^')) {
+            problems.push(format!("-{w0}^"));
         }
     }
     let extra: usize = sm.get_opcodes().iter().filter(|o| o.0 == Op::Insert).map(|o| o.4 - o.3).sum();
     if extra >= 4 {
         problems.push(format!("+{extra}"));
+    }
+    if sm.get_opcodes().iter().any(|o| o.0 == Op::Insert && o.1 == 0 && o.4 - o.3 >= 2) {
+        problems.push("+^".into());
     }
     let mut said: HashMap<&str, usize> = HashMap::new();
     for w in &words {
@@ -134,10 +142,15 @@ pub fn heard_ok(heard: Option<f64>, problems: &[String]) -> bool {
     h >= HEARD_MIN
         && problems.len() == missing.len()
         && missing.len() < 2
-        && !missing.iter().any(|p| len(strip_chars(p, "-~$")) >= 3 || p.ends_with('$'))
+        && !missing.iter().any(|p| len(strip_chars(p, "-~$^")) >= 3 || p.ends_with('$') || p.ends_with('^'))
+}
+
+pub fn heard_clear_fault(heard: Option<f64>, problems: &[String]) -> bool {
+    let Some(h) = heard else { return false };
+    h < 0.6 || problems.iter().any(|p| p.ends_with('^')) || problems.iter().filter(|p| p.starts_with('-')).count() >= 2
 }
 
 pub fn heard_bad(heard: Option<f64>, problems: &[String]) -> bool {
     let Some(h) = heard else { return false };
-    h < 0.6 || problems.iter().any(|p| p.starts_with('+') || p.ends_with('$')) || problems.iter().filter(|p| p.starts_with('-')).count() >= 2
+    h < 0.6 || problems.iter().any(|p| p.starts_with('+') || p.ends_with('$') || p.ends_with('^')) || problems.iter().filter(|p| p.starts_with('-')).count() >= 2
 }

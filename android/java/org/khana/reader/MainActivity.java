@@ -187,8 +187,11 @@ public final class MainActivity extends Activity implements Exporter.Asker {
             }
             final String fail = err;
             runOnUiThread(() -> {
+                // (1.29 deep check: a window closed meanwhile builds nothing; and «save as» is ready at once, not only after the
+                // window was left and opened again)
+                if (isDestroyed()) return;
                 if (fail != null) wait.setText("خوانا باز نشد:\n" + fail);
-                else showPage();
+                else { showPage(); if (!isFinishing()) Exporter.setAsker(this); }
             });
         }, "khana-start").start();
     }
@@ -221,7 +224,10 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         File files = getFilesDir();
         PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
         File app = new File(files, "app");
-        Assets.unpack(this, app, (Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : pi.versionCode) + "-" + pi.lastUpdateTime);
+        // (1.29 deep check: one unpacking at a time; a second window opened during the first start unpacked into the same folder)
+        synchronized (MainActivity.class) {
+            if (server == null) Assets.unpack(this, app, (Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : pi.versionCode) + "-" + pi.lastUpdateTime);
+        }
         File data = new File(files, "data"), out = new File(files, "saved");
         //noinspection ResultOfMethodCallIgnored
         data.mkdirs();

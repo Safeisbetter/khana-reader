@@ -198,8 +198,9 @@ impl Document {
             {
                 let _g = self.ocr_lock.lock().unwrap();
                 if self.st.lock().unwrap().scanned.contains(&n) {
+                    let picture = if self.pdfjs && self.engines.ocr.is_some() { self.given.lock().unwrap().remove(&n) } else { None };
                     let mut paras = match &self.engines.ocr {
-                        Some(ocr) if self.pdfjs => match self.given.lock().unwrap().remove(&n) {
+                        Some(ocr) if self.pdfjs => match picture {
                             Some((gray, w, h)) => ocr(&gray, w, h),
                             None => return Vec::new(),
                         },
@@ -228,8 +229,7 @@ impl Document {
 
     pub fn title(&self) -> String {
         let base = self.name.rsplit('/').next().unwrap_or(&self.name);
-        let ext = ext_of(base);
-        let stem = &base[..base.len() - ext.len()];
+        let stem = if ext_of(base).is_empty() { base } else { base.rfind('.').map_or(base, |i| &base[..i]) };
         split_ws(&sub(r"[-_]+", " ", stem)).join(" ")
     }
 
@@ -302,7 +302,17 @@ impl Document {
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
+        struct Unmark<'a>(&'a Mutex<State>, usize, bool);
+        impl Drop for Unmark<'_> {
+            fn drop(&mut self) {
+                if !self.2 { self.0.lock().unwrap_or_else(|e| e.into_inner()).partial.remove(&self.1); }
+            }
+        }
+        let mut unmark = Unmark(&self.st, n, false);
         let paras = self.raw(n, true);
+        if paras.is_empty() && self.pdfjs && self.st.lock().unwrap().scanned.contains(&n) {
+            return Vec::new();
+        }
         let mut done: Vec<String> = Vec::with_capacity(paras.len());
         let mut i = 0;
         while i < paras.len() {
@@ -315,7 +325,7 @@ impl Document {
                 }
             }
             let out = {
-                let _g = self.mt_lock.lock().unwrap();
+                let _g = self.mt_lock.lock().unwrap_or_else(|e| e.into_inner());
                 (self.engines.translate.as_ref().unwrap())(&paras[i..j], self.lang())
             };
             done.extend(out);
@@ -327,6 +337,7 @@ impl Document {
             st.partial.remove(&n);
             st.translated.insert(n, done.clone());
         }
+        unmark.2 = true;
         done
     }
 

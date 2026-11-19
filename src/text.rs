@@ -1143,8 +1143,14 @@ pub fn skip_notes_hinted(notes: &mut NotesState, n: usize, paras: &[String], hin
     let labels = hints.labels;
     let mut state = if n > 1 { *notes.get(&(n - 1)).unwrap_or(&false) } else { false };
     if n > 1 && !notes.contains_key(&(n - 1)) {
-        let (prev, prev_hints) = prev_page(n - 1);
-        skip_notes_hinted(notes, n - 1, &prev, prev_hints, prev_page);
+        let mut k = n - 1;
+        while k > 1 && !notes.contains_key(&(k - 1)) {
+            k -= 1;
+        }
+        for m in k..n {
+            let (prev, prev_hints) = prev_page(m);
+            skip_notes_hinted(notes, m, &prev, prev_hints, prev_page);
+        }
         state = *notes.get(&(n - 1)).unwrap_or(&false);
     }
     let paras: Vec<&String> = paras.iter().filter(|p| !strip(p).is_empty()).collect();

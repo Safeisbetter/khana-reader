@@ -12,6 +12,15 @@ final class Closed {
     static synchronized void endSoon() {
         if (ending) return;
         ending = true;
-        new Handler(Looper.getMainLooper()).postDelayed(() -> android.os.Process.killProcess(android.os.Process.myPid()), 400);
+        // (1.29 deep check: a copy being written to a place the reader chose is finished first, up to a minute, so it is not left
+        // cut short)
+        Handler h = new Handler(Looper.getMainLooper());
+        Runnable[] end = new Runnable[1];
+        long until = android.os.SystemClock.uptimeMillis() + 60_000;
+        end[0] = () -> {
+            if (Exporter.WRITING.get() > 0 && android.os.SystemClock.uptimeMillis() < until) h.postDelayed(end[0], 200);
+            else android.os.Process.killProcess(android.os.Process.myPid());
+        };
+        h.postDelayed(end[0], 400);
     }
 }

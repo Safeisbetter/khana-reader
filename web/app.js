@@ -41,10 +41,9 @@ function applySettings() {
   const uiScale = [1, 1.15, 1.3].includes(Number(s.uiScale)) ? Number(s.uiScale) : 1;
   document.documentElement.style.setProperty("--ui-scale", String(uiScale));
   document.documentElement.dataset.lowvision = s.lowVision ? "1" : "0";
-  for (const id of ["visionBtn", "lowVisionBtn", "lowVisionTop"]) $(id).setAttribute("aria-pressed", String(!!s.lowVision));
-  $("lowVisionTitle").textContent = s.lowVision ? "بازگشت به نمایش معمولی" : "نمایش درشت و پررنگ";
+  for (const id of ["visionBtn", "lowVisionTop"]) $(id).setAttribute("aria-pressed", String(!!s.lowVision));
   $("lowVisionSwitch").checked = !!s.lowVision;
-  $("lowVisionSub").textContent = s.lowVision ? "روشن است؛ با یک لمس، تنظیمات قبلی شما برمی‌گردد" : "با یک لمس: نوشته و دکمه‌های بزرگ، زرد روی سیاه";
+  document.querySelectorAll("input[name=lvColor]").forEach(r => r.checked = r.value === (s.lowVisionColor === "white" ? "white" : "yellow"));
   document.body.classList.toggle("focus-reading", !!s.focusMode);
   $("focusBtn").textContent = s.focusMode ? "همه‌ی ابزارها" : "نمای خلوت";
   $("focusBtn").setAttribute("aria-pressed", String(!!s.focusMode));
@@ -79,8 +78,10 @@ function applySettings() {
   document.querySelectorAll("input[name=comma]").forEach(r => r.checked = r.value === (s.commaPause || "short"));
   document.querySelectorAll("input[name=sentence]").forEach(r => r.checked = r.value === (s.sentencePause || "normal"));
   document.querySelectorAll("input[name=theme]").forEach(r => r.checked = r.value === (THEMES.includes(chosenTheme) ? chosenTheme : "auto"));
-  const ACCENTS = ["blue", "green", "orange", "pink", "purple", "teal", "red"];
-  const accent = ACCENTS.includes(s.accent) ? s.accent : "blue";
+  const ACCENTS = ["khana", "blue", "green", "orange", "pink", "purple", "teal", "red"];
+  // (1.29: «آبی» had no colour of its own and showed the theme's own colour; a saved «آبی» from before is that colour, «رنگ پوسته»)
+  if (s.accent === "blue" && !s.accentFixed) { s.accent = "khana"; s.accentFixed = true; }
+  const accent = ACCENTS.includes(s.accent) ? s.accent : "khana";
   document.documentElement.dataset.accent = accent;
   document.querySelectorAll("input[name=accent]").forEach(r => r.checked = r.value === accent);
   const iconStyle = ["flat", "line", "ios", "glossy"].includes(s.iconStyle) ? s.iconStyle : (document.documentElement.classList.contains("android-reader") ? "ios" : "glossy"); // (the phone's own look: iPhone-style tiles)
@@ -92,7 +93,7 @@ function applySettings() {
   $("startSound").checked = s.startSound !== false;
   document.documentElement.dataset.text3d = s.text3d ? "1" : "0";
   $("text3d").checked = !!s.text3d;
-  const chosenFont = ["vazir", "naskh"].includes(s.font) ? s.font : "vazir";
+  const chosenFont = ["vazir", "vazirbold", "vazirlight", "naskh", "system"].includes(s.font) ? s.font : "vazir";
   document.documentElement.dataset.font = chosenFont;
   document.querySelectorAll("input[name=font]").forEach(r => r.checked = r.value === chosenFont);
   document.querySelectorAll("[data-speed]").forEach(b => b.classList.toggle("on", Number(b.dataset.speed) === Number(s.speed) && b.id !== "speedReset"));
@@ -141,8 +142,11 @@ function restartReading() {
 async function restartNow(gen) {
   {
     const now = actx ? actx.currentTime : 0;
-    const piece = reader.playing.find(u => now < u.t1) || reader.playing[reader.playing.length - 1];
+    // (1.29 deep check: before the first sentence is heard nothing is playing yet; the next piece of the queue is where reading
+    // started, not the top of the page)
+    const piece = reader.playing.find(u => now < u.t1) || reader.playing[reader.playing.length - 1] || reader.queue[reader.next] || reader.queue[reader.queue.length - 1];
     const wasPaused = reader.paused;
+    if (piece && piece.p < 0) return;  // (the closing «پایان متن.»: nothing is left to read again)
     // A new voice (or speed, or pause): the sentence being said is finished first, while the next two are already made in the
     // new way; then the reading goes on with them at once. (Before: the sound was cut and the first new sentence made from
     // nothing, a silence of several seconds. If the sentences are not ready in time, it goes on as before.)
@@ -157,10 +161,15 @@ async function restartNow(gen) {
             return w.catch(() => {});
           });
           await Promise.race([Promise.all(warm), sleep(Math.max(0, (piece.t1 - now) * 1000))]);
-          if (!reader.active || reader.run !== run || reader.paused || gen !== restartGen) return;
-          const wait = piece.t1 - actx.currentTime;
-          if (wait > 0.05) await sleep(wait * 1000);
-          if (!reader.active || reader.run !== run || reader.paused || gen !== restartGen) return;
+          if (!reader.active || reader.run !== run || gen !== restartGen) return;
+          // (1.29 deep check: paused meanwhile: the full restart below, which keeps the pause; before, the change was lost and
+          // up to 30 s of old speech stayed queued)
+          if (!reader.paused) {
+            const wait = piece.t1 - actx.currentTime;
+            if (wait > 0.05) await sleep(wait * 1000);
+            if (!reader.active || reader.run !== run || gen !== restartGen) return;
+          }
+          if (reader.paused) { readFrom(next.p, next.start); actx.suspend(); reader.paused = true; setPlayButton(); return; }
           readFrom(next.p, next.start);
           return;
         } catch (e) { if (!reader.active || reader.run !== run || gen !== restartGen) return; }
@@ -224,7 +233,7 @@ document.querySelectorAll("input[name=comma]").forEach(r => r.onchange = () => {
 document.querySelectorAll("input[name=sentence]").forEach(r => r.onchange = () => { setSetting("sentencePause", r.value); restartReading(); });
 document.querySelectorAll("input[name=theme]").forEach(r => r.onchange = () => setSetting("theme", r.value));
 document.querySelectorAll("input[name=font]").forEach(r => r.onchange = () => setSetting("font", r.value));
-document.querySelectorAll("input[name=accent]").forEach(r => r.onchange = () => setSetting("accent", r.value));
+document.querySelectorAll("input[name=accent]").forEach(r => r.onchange = () => { S.settings.accentFixed = true; setSetting("accent", r.value); });
 document.querySelectorAll("input[name=iconStyle]").forEach(r => r.onchange = () => setSetting("iconStyle", r.value));
 document.querySelectorAll("input[name=corners]").forEach(r => r.onchange = () => setSetting("corners", r.value));
 $("startSound").onchange = e => setSetting("startSound", e.target.checked);
@@ -367,16 +376,21 @@ async function stopRecording(save) {
   if ((Date.now() - r.t0) < 4000) { $("myStatus").textContent = "ضبط خیلی کوتاه بود. دست‌کم ۵ ثانیه صحبت کنید."; return; }
   useMyVoice(wavBlob(r.chunks, r.ctx.sampleRate), "recording.wav");
 }
+let recAsking = false;  // (1.29 deep check: a second tap while the microphone is being asked for opened a second recording)
 $("recBtn").onclick = async () => {
   if (rec) return stopRecording(true);
+  if (recAsking) return;
   stopReading();
   let stream;
+  recAsking = true;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: true } });
   } catch (e) {
+    recAsking = false;
     $("myStatus").textContent = "خوانا به میکروفون دسترسی ندارد. در System Settings › Privacy & Security › Microphone اجازه بدهید، یا با برنامه‌ی Voice Memos ضبط کنید و «انتخاب فایل صدا» را بزنید.";
     return;
   }
+  recAsking = false;
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(4096, 1, 1);
   const chunks = [];
@@ -611,12 +625,19 @@ addEventListener("keydown", e => {
 });
 $("settingsBtn").onclick = () => openPanel("settings");
 $("visionBtn").onclick = () => toggleLowVision();
-$("lowVisionBtn").onclick = () => toggleLowVision();
+$("aboutBtn").onclick = () => openPanel("aboutPanel");  // (1.29: Khana's logo opens «درباره‌ی خوانا»)
 $("lowVisionTop").onclick = () => toggleLowVision();
 $("lowVisionSwitch").onchange = e => { if (e.target.checked !== !!S.settings.lowVision) toggleLowVision(); };
 // (1.29) «نمایش درشت و پررنگ», the low-vision mode: one touch makes everything large and strong (yellow on black, large text and buttons, a large
 // cursor, one sentence per line); a second touch brings back exactly what was set before
 const LOW_VISION = { theme: "blackyellow", fontSize: 34, lineHeight: 2.6, uiScale: 1.3, cursor: "large", sentenceLines: true };
+// (1.29: yellow on black, or white on black, as the reader chooses)
+const lowVisionTheme = () => S.settings.lowVisionColor === "white" ? "black" : "blackyellow";
+document.querySelectorAll("input[name=lvColor]").forEach(r => r.onchange = () => {
+  S.settings.lowVisionColor = r.value;
+  if (S.settings.lowVision) S.settings.theme = lowVisionTheme();
+  setSetting("lowVisionColor", r.value);
+});
 function toggleLowVision() {
   const s = S.settings;
   if (!s.lowVision) {
@@ -624,6 +645,7 @@ function toggleLowVision() {
     for (const k of Object.keys(LOW_VISION)) prev[k] = s[k];
     s.lowVisionPrev = prev;
     for (const [k, v] of Object.entries(LOW_VISION)) s[k] = k === "fontSize" ? Math.max(v, Number(s.fontSize) || 0) : v;
+    s.theme = lowVisionTheme();
     s.lowVision = true;
     toast("نمایش درشت و پررنگ روشن شد. برای بازگشت، همین دکمه یا چشم بالای صفحه را دوباره بزنید.");
   } else {
@@ -646,7 +668,7 @@ $("moreTools").addEventListener('keydown', e => {
   if (e.key === 'Escape' && $("moreTools").open) { e.preventDefault(); $("moreTools").open = false; $("moreTools").querySelector('summary').focus(); }
 });
 $("helpBtn").onclick = $("welcomeHelp").onclick = () => openPanel("helpPanel");
-$("helpSettings").onclick = () => { $("helpPanel").hidden = true; openPanel("settings"); };
+if ($("helpSettings")) $("helpSettings").onclick = () => { $("helpPanel").hidden = true; openPanel("settings"); };
 $("openFileBtn").onclick = $("welcomeOpen").onclick = () => $("fileInput").click();
 // a soft bell when the start page opens: three rising notes, made here (no sound file). Browsers may hold it back until the first tap.
 function startChime() {
@@ -672,6 +694,16 @@ function startChime() {
 // the fish in the water: a press shows or hides the quotation in the water
 {
   const jump = $("jumpArt");
+  // (1.29: the band's visible part of the scene: as wide as the band is, from 240 up to the 560 the scene is drawn; its middle
+  // stays where it was)
+  const scene = jump && jump.querySelector("svg.water-scene");
+  const fitScene = () => {
+    const r = jump.getBoundingClientRect();
+    if (!scene || !r.width || !r.height) return;
+    const w = Math.max(240, Math.min(560, 176 * r.width / r.height));
+    scene.setAttribute("viewBox", `${(120 - w / 2).toFixed(1)} 0 ${w.toFixed(1)} 176`);
+  };
+  if (scene) { fitScene(); if (window.ResizeObserver) new ResizeObserver(fitScene).observe(jump); else addEventListener("resize", fitScene); }
   const toggleQuote = () => {
     const open = jump.classList.toggle("show-quote");
     jump.setAttribute("aria-expanded", String(open));
@@ -847,7 +879,9 @@ async function pdfCall(msg, transfer) {
   await pdfjsFrame();
   return new Promise((ok, no) => {
     const id = ++pdfSeq;
-    pdfWait.set(id, { ok, no });
+    // (1.29 deep check: a PDF that makes pdf.js hang no longer blocks every later file: after 3 minutes the call fails)
+    const t = setTimeout(() => { if (pdfWait.delete(id)) no(new Error("PDF باز نشد: پاسخی نیامد.")); }, 180000);
+    pdfWait.set(id, { ok: v => { clearTimeout(t); ok(v); }, no: e => { clearTimeout(t); no(e); } });
     pdfFrame.contentWindow.postMessage({ ...msg, id }, "*", transfer || []);
   });
 }
@@ -891,7 +925,8 @@ async function loadPdfBookmarks() {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = bm.title + " (صفحه‌ی " + fa(bm.page) + ")";
-      btn.onclick = () => { showPage(bm.page, S.doc.paras[bm.page], true); closePanel("bookmarkPanel"); };
+      // (1.29 deep check: was showPage with a field that does not exist and an undefined closePanel, so no bookmark worked)
+      btn.onclick = () => { $("bookmarkPanel").hidden = true; if (S.doc) loadPage(Math.min(Math.max(1, bm.page | 0), S.doc.pages)); };
       li.appendChild(btn);
       ul.appendChild(li);
     }
@@ -1686,6 +1721,11 @@ $("mp3Start").onclick = async () => {
   let first = S.page, last = S.page;
   if (scope === "all") { first = 1; last = S.doc.pages; }
   if (scope === "range") { first = numOf($("from").value); last = numOf($("to").value); }
+  // (1.29 deep check: an empty or reversed range is put right instead of being sent as it is)
+  if (!(first >= 1)) first = 1;
+  if (!(last >= 1)) last = first;
+  if (last < first) [first, last] = [last, first];
+  first = Math.min(first, S.doc.pages); last = Math.min(last, S.doc.pages);
   try {
     if (S.doc.engine === "pdfjs") {
       // (the app cannot draw a pdf.js document's scanned pages itself: they are drawn here first)
@@ -1858,11 +1898,12 @@ async function sendEdit(body, keep) {
       lastFound = r.found;
       toast(r.found ? `در ${fa(r.found)} جای کتاب عوض شد.` : "کلمه پیدا نشد. املای آن را بررسی کنید.");
     }
-    const y = window.scrollY;
+    // (1.29 deep check: the page shown now, which may be a later one if «بعدی» was pressed while this edit was saved)
+    const y = window.scrollY, here = S.page;
     pageCache.clear(); stopReading();
-    await loadPage(page);
+    await loadPage(here);
     if (!S.doc || S.doc.id !== doc) return false;
-    window.scrollTo(0, y);
+    if (here === page) window.scrollTo(0, y);
     $("edInfo").textContent = r.edits ? `${fa(r.edits)} ویرایش در این کتاب` : "";
     $("edUndo").disabled = !r.canUndo;
     return true;

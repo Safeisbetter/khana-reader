@@ -933,6 +933,7 @@ button:active:not(:disabled) { transform: none; }
 :root[data-theme="modern"] .more-tools > summary { border-radius: 50%; }
 /* the start page in another Persian face (Noto Naskh Arabic, SIL Open Font License; bundled, works offline); the rest of the page keeps Vazirmatn */
 @font-face { font-family: "KhanaNaskh"; src: url("NotoNaskhArabic-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "KhanaNaskh"; src: url("NotoNaskhArabic-Bold.ttf") format("truetype"); font-weight: 700; font-display: swap; }
 :root[data-theme="modern"] .welcome, :root[data-theme="modern"] .welcome h1, :root[data-theme="modern"] .welcome p, :root[data-theme="modern"] .welcome-badge {
   font-family: var(--font);
 }
@@ -1097,10 +1098,10 @@ html:root[data-accent="purple"] { --lapis: #7E57C2; --reading: color-mix(in srgb
 html:root[data-accent="teal"] { --lapis: #0E9AA7; --reading: color-mix(in srgb, #0E9AA7 16%, var(--paper)); }
 html:root[data-accent="red"] { --lapis: #D32F2F; --reading: color-mix(in srgb, #D32F2F 16%, var(--paper)); }
 /* the plain tiles follow the chosen colour (the grey gear and the coloured ones keep theirs) */
-html:root[data-accent]:not([data-accent="blue"]) svg.ui-icon:not([class*="ic-"]) {
+html:root[data-accent]:not([data-accent="khana"]) svg.ui-icon:not([class*="ic-"]) {
   background: linear-gradient(180deg, color-mix(in srgb, var(--lapis) 72%, #fff) 0%, var(--lapis) 55%, color-mix(in srgb, var(--lapis) 78%, #000) 100%);
 }
-html:root[data-accent]:not([data-accent="blue"]) .primary svg.ui-icon { background: linear-gradient(180deg, #FFFFFF 0%, #E3ECFB 100%); }
+html:root[data-accent]:not([data-accent="khana"]) .primary svg.ui-icon { background: linear-gradient(180deg, #FFFFFF 0%, #E3ECFB 100%); }
 /* flat icons: one colour, no gloss and no shadow */
 html:root[data-icons="flat"] svg.ui-icon { background-image: none; background-color: var(--lapis); box-shadow: none; }
 html:root[data-icons="flat"] .primary svg.ui-icon { background-color: #FFFFFF; }
@@ -1114,14 +1115,14 @@ html:root[data-icons="flat"] svg.ui-icon.ic-teal { background-color: #1FB5C4; }
 html:root[data-corners="soft"] :is(button:not(#settingsBtn):not(.top-save), .btn, .primary, .welcome, .panel-body > .field, .more-menu, .dock, .confirm-box, .formats span, input:not([type=radio]):not([type=checkbox]):not([type=range]), select, textarea) { border-radius: 12px !important; }
 html:root[data-corners="sharp"] :is(button:not(#settingsBtn):not(.top-save), .btn, .primary, .welcome, .panel-body > .field, .more-menu, .dock, .confirm-box, .formats span, input:not([type=radio]):not([type=checkbox]):not([type=range]), select, textarea) { border-radius: 3px !important; }
 /* the grey gear tile keeps its grey with any app colour; flat icons are flat with any app colour too */
-html:root[data-accent]:not([data-accent="blue"]) #settingsBtn svg.ui-icon,
-html:root[data-accent]:not([data-accent="blue"]) .more-tools > summary svg.ui-icon {
+html:root[data-accent]:not([data-accent="khana"]) #settingsBtn svg.ui-icon,
+html:root[data-accent]:not([data-accent="khana"]) .more-tools > summary svg.ui-icon {
   background: linear-gradient(180deg, #A8A8AE 0%, #8E8E93 55%, #6E6E73 100%);
 }
-html:root[data-icons="flat"][data-accent]:not([data-accent="blue"]) svg.ui-icon:not([class*="ic-"]) { background-image: none; background-color: var(--lapis); }
-html:root[data-icons="flat"][data-accent]:not([data-accent="blue"]) #settingsBtn svg.ui-icon,
-html:root[data-icons="flat"][data-accent]:not([data-accent="blue"]) .more-tools > summary svg.ui-icon { background-image: none; background-color: #8E8E93; }
-html:root[data-icons="flat"][data-accent]:not([data-accent="blue"]) .primary svg.ui-icon { background-image: none; background-color: #FFFFFF; }
+html:root[data-icons="flat"][data-accent]:not([data-accent="khana"]) svg.ui-icon:not([class*="ic-"]) { background-image: none; background-color: var(--lapis); }
+html:root[data-icons="flat"][data-accent]:not([data-accent="khana"]) #settingsBtn svg.ui-icon,
+html:root[data-icons="flat"][data-accent]:not([data-accent="khana"]) .more-tools > summary svg.ui-icon { background-image: none; background-color: #8E8E93; }
+html:root[data-icons="flat"][data-accent]:not([data-accent="khana"]) .primary svg.ui-icon { background-image: none; background-color: #FFFFFF; }
 /* Settings in groups: a row of tabs under the search box, one group of settings at a time */
 .settabs { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 4px; scrollbar-width: none; }
 .settabs::-webkit-scrollbar { display: none; }
@@ -1689,12 +1690,12 @@ html:root:not(#k1):not(#k2) .lowvision-btn .lv-text > span, html:root:not(#k1):n
 /* «نوشته‌ی سه‌بعدی»: titles and buttons get a soft depth (a light edge above, a short shadow below); the book's own text stays
    flat, so it stays easy to read. Only shadows: nothing moves and nothing is blurred over the page, so old phones stay fast */
 html[data-text3d="1"] :is(h1, h2, h3, .panel-head h2, button, .btn, summary, .lbl, .settabs button, #welcome h1.welcome-badge) {
-  text-shadow: 0 -1px 0 rgba(255, 255, 255, .28), 0 1px 0 rgba(0, 0, 0, .22), 0 2px 0 rgba(0, 0, 0, .16), 0 3px 4px rgba(0, 0, 0, .22);
+  text-shadow: 0 1px 1.5px rgba(0, 0, 0, .28);  /* (1.29: one soft shadow; four hard ones smeared the joined Persian letters) */
 }
 html[data-text3d="1"]:is([data-theme="dark"], [data-theme="black"], [data-theme="blackyellow"], [data-theme="night"], [data-theme="glassdark"], [data-theme="depthdark"]) :is(h1, h2, h3, .panel-head h2, button, .btn, summary, .lbl, .settabs button, #welcome h1.welcome-badge) {
-  text-shadow: 0 1px 0 rgba(0, 0, 0, .6), 0 2px 0 rgba(0, 0, 0, .45), 0 3px 5px rgba(0, 0, 0, .55);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .75);
 }
-html[data-text3d="1"] #welcome .jump-art .water-quote { text-shadow: 0 1px 0 rgba(0, 0, 0, .55), 0 2px 0 rgba(0, 0, 0, .4), 0 3px 6px rgba(0, 0, 0, .5) !important; }
+html[data-text3d="1"] #welcome .jump-art .water-quote { text-shadow: 0 1px 2px rgba(0, 0, 0, .6) !important; }
 /* a small phone with «نمایش درشت و پررنگ» on: «▶ خواندن» keeps room inside its frame (its words came within 2 px of the edge) */
 @media (max-width: 600px) {
   html[data-lowvision="1"]:root:not(#k1):not(#k2) .dock #play { padding-inline: 12px !important; font-size: calc(14px * var(--ui-scale)) !important; white-space: nowrap; }
@@ -1738,8 +1739,8 @@ html:root:is([data-theme="dark"],[data-theme="black"],[data-theme="night"],[data
 }
 @media (prefers-reduced-motion: no-preference) { .water-scene .reeds.near { animation-duration: 6s; } }
 /* In the dark themes the light accent colours carry dark words (white on them is under 2.5:1). */
-html:root:not(#k1):not(#k2):is([data-theme="dark"],[data-theme="glassdark"],[data-theme="depthdark"])[data-accent]:not([data-accent="blue"]) .panel-body label:has(> input[type="radio"]:checked),
-html:root:not(#k1):not(#k2):is([data-theme="dark"],[data-theme="glassdark"],[data-theme="depthdark"])[data-accent]:not([data-accent="blue"]) .panel-body label:has(> input[type="radio"]:checked) :not([class*="sw"]) { color: #000 !important; }
+html:root:not(#k1):not(#k2):is([data-theme="dark"],[data-theme="glassdark"],[data-theme="depthdark"]) .panel-body label:has(> input[type="radio"]:checked),
+html:root:not(#k1):not(#k2):is([data-theme="dark"],[data-theme="glassdark"],[data-theme="depthdark"]) .panel-body label:has(> input[type="radio"]:checked) :not([class*="sw"]) { color: #000 !important; }
 /* The colour chips keep their own word colour, even when chosen. */
 html:root:not(#k1):not(#k2) .panel-body label .sw-yellow, html:root:not(#k1):not(#k2) .panel-body label .sw-green,
 html:root:not(#k1):not(#k2) .panel-body label .sw-cyan, html:root:not(#k1):not(#k2) .panel-body label .sw-white { color: #000 !important; }
@@ -1859,7 +1860,7 @@ html:root:not(#k1):not(#k2) .more-tools :is(#visionBtn, #settingsBtn) svg.ui-ico
 .water-scene .bird .fly, .water-scene .ring-up, .water-scene .drops-up { transform-box: fill-box; transform-origin: 50% 50%; }
 .water-scene .ring-up, .water-scene .drops-up { opacity: 0; }
 @keyframes wing-flap { 0%, 100% { d: path("M-6 0q3-3 6 0q3-3 6 0"); } 50% { d: path("M-6 -1q3 2.2 6 1q3 -1.2 6 -1"); } }
-@keyframes bird-cross { from { transform: translateX(-120px); } to { transform: translateX(360px); } }
+@keyframes bird-cross { from { transform: translateX(-260px); } to { transform: translateX(480px); } }
 @keyframes ring-rise { 0%, 9% { transform: scale(.3); opacity: 0; } 11% { transform: scale(.3); opacity: .9; } 30%, 100% { transform: scale(1.7); opacity: 0; } }
 @keyframes drops-rise { 0%, 9% { transform: translateY(2px); opacity: 0; } 12% { opacity: 1; transform: translateY(-3px); } 22%, 100% { transform: translateY(7px); opacity: 0; } }
 @media (prefers-reduced-motion: no-preference) {
@@ -1884,3 +1885,126 @@ html:root:not(#k1):not(#k2) .more-tools :is(#visionBtn, #settingsBtn) svg.ui-ico
   html[data-lowvision="1"]:root:not(#k1):not(#k2) body.has-doc .bar .top .brand { flex: 0 0 auto; min-width: 0; }
   html[data-lowvision="1"]:root:not(#k1):not(#k2) body.has-doc .bar .top .brand :is(.file, .logo) { display: none !important; }
 }
+
+/* 1.29: «آبی» is blue at last (it had no rule and showed the theme's own crimson); that crimson is its own choice, «رنگ خوانا» */
+html:root:not(#k1):not(#k2) .sw-a-khana { background: linear-gradient(135deg, #A71930 0%, #A71930 34%, #0062CC 34%, #0062CC 67%, #8A5A00 67%); color: #fff; }
+/* («مدرن»'s own blue, a shade darker: white words on it pass 4.5:1) */
+html:root[data-theme="modern"][data-accent="khana"]:not(.x) { --lapis: #0062CC; }
+@media (prefers-color-scheme: dark) { html:root[data-theme="modern"][data-accent="khana"]:not(.x) { --lapis: #0A84FF; --lapis-ink: #000; } }
+html:root[data-accent="blue"] { --lapis: #0062CC; --reading: color-mix(in srgb, #0062CC 14%, var(--paper)); }
+html:root:is([data-theme="dark"],[data-theme="black"],[data-theme="night"],[data-theme="blackyellow"],[data-theme="glassdark"],[data-theme="depthdark"])[data-accent="blue"] { --lapis: #7FB6FF; --lapis-ink: #000; }
+
+/* 1.29: more text fonts, all already in the app or on the device: Vazirmatn in a strong and a light weight (it holds every weight),
+   the Naskh book face, and the device's own Persian font. The book's text takes the weight; buttons keep theirs. */
+.f-vazirbold { font-family: "Vazirmatn", sans-serif; font-weight: 700; }
+.f-vazirlight { font-family: "Vazirmatn", sans-serif; font-weight: 220; }
+.f-system { font-family: system-ui, -apple-system, "Segoe UI", Tahoma, "Noto Sans Arabic", sans-serif; }
+:root[data-font="vazirbold"] { --font: "Vazirmatn", sans-serif; --book-weight: 700; }
+:root[data-font="vazirlight"] { --font: "Vazirmatn", sans-serif; --book-weight: 220; }
+:root[data-font="system"] { --font: system-ui, -apple-system, "Segoe UI", Tahoma, "Noto Sans Arabic", sans-serif; }
+html:root .text p, html:root #textView p, html:root #typeText { font-weight: var(--book-weight, 400); }
+
+/* 1.29: the top bar. Khana's logo is the «درباره‌ی خوانا» button (a plain mark, no frame); «باز کردن» is outlined in the app's colour
+   instead of a second solid red shape beside the red logo, so the row is calm: logo · open | (save) · big view · settings. */
+html:root:not(#k1):not(#k2) .brand-about { all: unset; display: inline-grid; place-items: center; cursor: pointer; border-radius: 14px; flex: none; }
+html:root:not(#k1):not(#k2) .brand-about:focus-visible { outline: 3px solid var(--lapis); outline-offset: 3px; }
+html:root:not(#k1):not(#k2) .brand-about:active { transform: scale(.96); }
+html:root:not(#k1):not(#k2) .bar .top #openFileBtn { background: linear-gradient(180deg, #F6D77E 0%, #DDAA3E 100%) !important; color: #2B1D00 !important; border: 1px solid #B98A2C !important; box-shadow: 0 1px 0 rgba(255, 255, 255, .45) inset, 0 2px 6px rgba(120, 84, 10, .28) !important; font-weight: 700; }
+html:root:not(#k1):not(#k2) .bar .top #openFileBtn svg.ui-icon { color: #8A5A00 !important; }
+html[data-lowvision="1"]:root:not(#k1):not(#k2) .bar .top #openFileBtn { background: #000 !important; color: #FFD60A !important; border-color: #FFD60A !important; }
+html[data-lowvision="1"]:root:not(#k1):not(#k2) .bar .top #openFileBtn svg.ui-icon { color: #FFD60A !important; }
+
+/* 1.29: «سفید روی سیاه» for the low-vision mode; its swatch, and the open button in the reader's own colour of words */
+html:root:not(#k1):not(#k2) .sw-lvwhite { background: #000; color: #FFF; border: 2px solid #FFF; }
+html[data-lowvision="1"][data-theme="black"]:root:not(#k1):not(#k2) .bar .top #openFileBtn { color: #FFF !important; border-color: #FFF !important; }
+html[data-lowvision="1"][data-theme="black"]:root:not(#k1):not(#k2) .bar .top #openFileBtn svg.ui-icon { color: #FFF !important; }
+
+/* 1.29: the guide reads like a well-made booklet: its words in the Naskh book face, a little larger and airier, the headings in
+   the app's colour, lists with room, the closing promise set apart */
+html:root:not(#k1):not(#k2) #helpPanel .guide-card p, html:root:not(#k1):not(#k2) #helpPanel .guide-card li,
+html:root:not(#k1):not(#k2) #aboutPanel .guide-card p { font-family: "KhanaNaskh", "Vazirmatn", serif; font-size: calc(17.5px * var(--ui-scale, 1)); line-height: 2.05; word-spacing: .06em; }
+html:root:not(#k1):not(#k2) #helpPanel .guide-card h3, html:root:not(#k1):not(#k2) #aboutPanel h2 { color: var(--lapis); font-weight: 800; }
+html:root:not(#k1):not(#k2) #helpPanel .guide-card ul { margin: 6px 0 4px; padding-inline-start: 22px; }
+html:root:not(#k1):not(#k2) #helpPanel .guide-card li { margin: 4px 0; }
+html:root:not(#k1):not(#k2) #helpPanel .safety-card { border-inline-start: 4px solid var(--lapis); }
+html:root:not(#k1):not(#k2) #helpPanel .guide-promise { margin: 18px 6px 6px; padding: 14px 16px; border-radius: 14px; background: color-mix(in srgb, var(--lapis) 10%, var(--surface)); color: var(--ink); font-family: "KhanaNaskh", serif; font-size: calc(17px * var(--ui-scale, 1)); line-height: 2; text-align: center; }
+html:root:not(#k1):not(#k2) #helpPanel code { font-size: .85em; }
+
+/* 1.29: the start picture is a band across the whole width of the screen, never a small card with empty space beside it. Its
+   height follows the screen; a wider band shows more of the scene's sea, sky and hills at its sides (they are drawn from -160 to
+   400; app.js sets the visible part), so nothing important is cut. */
+html, body { overflow-x: clip; }
+html:root:not(#k1):not(#k2) #welcome .jump-art { width: 100vw !important; max-width: none !important; aspect-ratio: auto !important; height: clamp(190px, min(73vw, 46vh), 470px) !important; justify-self: start; margin: -8px calc((100% - 100vw) / 2) 4px !important; padding: 0 !important; border-radius: 0 !important; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); background: #4E4682; }
+html:root:not(#k1):not(#k2) .welcome .jump-art svg.water-scene { width: 100%; height: 100%; }
+/* (the words in the water: sized by the band's height, so four lines always fit in the water, below the people on the shore;
+   a soft dark panel keeps them readable over the waves; never wider than a comfortable line) */
+html:root:not(#k1):not(#k2) #welcome .jump-art { container-type: size !important; }
+html:root:not(#k1):not(#k2) #welcome .jump-art .water-quote { font-size: clamp(11px, 6.2cqh, 21px) !important; line-height: 1.6 !important;
+  left: 50% !important; right: auto !important; width: min(calc(100% - 24px), 25em); margin-left: calc(min(calc(100% - 24px), 25em) / -2) !important;
+  top: auto !important; bottom: 3.5cqh !important; padding: .45em .9em !important; border-radius: 14px;
+  background: rgba(12, 18, 40, .58) !important; box-sizing: border-box; text-align: center; }
+html:root:not(#k1):not(#k2) #welcome .jump-art .water-quote br { display: block; }
+/* (1.29: a file name or a command inside Persian text keeps its own left-to-right order: «.apk», not «apk.») */
+html:root code, html:root kbd, html:root .guide-card code { unicode-bidi: isolate; direction: ltr; }
+
+/* 1.29: «خودکار» and «مدرن» in the device's dark mode take the light version of each colour, as the dark themes do */
+@media (prefers-color-scheme: dark) {
+  html:root:is([data-theme="auto"],[data-theme="modern"])[data-accent="blue"] { --lapis: #7FB6FF; --lapis-ink: #000; }
+  html:root:is([data-theme="auto"],[data-theme="modern"])[data-accent="green"] { --lapis: #4CD98A; --lapis-ink: #000; }
+  html:root:is([data-theme="auto"],[data-theme="modern"])[data-accent="orange"] { --lapis: #FFA552; --lapis-ink: #000; }
+  html:root:is([data-theme="auto"],[data-theme="modern"])[data-accent="pink"] { --lapis: #FF7AB8; --lapis-ink: #000; }
+  html:root:is([data-theme="auto"],[data-theme="modern"])[data-accent="purple"] { --lapis: #B79CFF; --lapis-ink: #000; }
+  html:root:is([data-theme="auto"],[data-theme="modern"])[data-accent="teal"] { --lapis: #3FD3DE; --lapis-ink: #000; }
+  html:root:is([data-theme="auto"],[data-theme="modern"])[data-accent="red"] { --lapis: #FF7B72; --lapis-ink: #000; }
+}
+
+/* 1.29: the list of backgrounds keeps one shape in every theme: a fixed grid of equal cells (two on a phone, three when there is
+   room), each option the same height and padding with a frame that is only coloured, never added; choosing another theme no longer
+   moves the rows */
+html:root:not(#k1):not(#k2) #themePick { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
+@media (min-width: 520px) { html:root:not(#k1):not(#k2) #themePick { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; } }
+html:root:not(#k1):not(#k2) #themePick > label { display: flex !important; align-items: center; gap: 8px; min-height: calc(48px * var(--ui-scale, 1)); margin: 0 !important;
+  padding: 8px 10px !important; box-sizing: border-box; border: 2px solid transparent !important; border-radius: 12px !important; font-size: calc(14.5px * var(--ui-scale, 1)) !important;
+  font-weight: 600 !important; line-height: 1.4 !important; width: auto !important; }
+html:root:not(#k1):not(#k2) #themePick > label > span { min-width: 0; overflow-wrap: anywhere; white-space: normal !important; font-size: inherit !important; }
+html:root:not(#k1):not(#k2) #themePick > label:has(> input:checked) { border-color: var(--ink) !important; }
+
+/* 1.29: the start page is one calm surface from edge to edge, like the picture above it: no card frame, no dashed line, no rounded
+   corners and no empty strips at the sides; its words and buttons stay in a comfortable centred column */
+html:root:not(#k1):not(#k2) #welcome { width: 100vw !important; max-width: none !important; box-sizing: border-box;
+  margin-inline: calc((100% - 100vw) / 2) !important; margin-top: 0 !important; padding: 0 16px 28px !important;
+  border: 0 !important; outline: 0 !important; border-radius: 0 !important; box-shadow: none !important; background: var(--surface) !important; }
+html:root:not(#k1):not(#k2) #welcome > :not(.jump-art) { width: 100%; max-width: 760px; box-sizing: border-box; }
+html:root:not(#k1):not(#k2) #welcome .jump-art { margin-top: 0 !important; margin-bottom: 10px !important; box-shadow: none !important; }
+
+/* 1.29: the reading page is edge to edge too, like the start page: the text lies on one surface across the screen, without a
+   card frame or strips beside it; its column keeps the width of «پهنای متن» (centred) and the margins of «حاشیه‌ی متن». The note
+   above it is a quiet strip of the same width, and nothing shows between the top bar and the page. */
+html:root:not(#k1):not(#k2) #mainContent { padding-top: 0 !important; margin-top: 0 !important; }
+html:root:not(#k1):not(#k2) #mainContent > .sheet { margin-top: 0 !important; padding-top: 0 !important; }
+html:root:not(#k1):not(#k2) #textView.text { width: 100vw !important; max-width: none !important; box-sizing: border-box;
+  margin-inline: calc((100% - 100vw) / 2) !important; margin-top: 0 !important; border: 0 !important; outline: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+  padding-inline: max(calc(clamp(18px, 6vw, 84px) * var(--pm, 1)), calc((100vw - var(--pw, 46em)) / 2)) !important; }
+html:root:not(#k1):not(#k2) #note.note { width: 100vw !important; max-width: none !important; box-sizing: border-box; margin: 0 !important;
+  margin-inline: calc((100% - 100vw) / 2) !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+  border-bottom: 1px solid var(--line) !important; padding-inline: max(16px, calc((100vw - var(--pw, 46em)) / 2)) !important; }
+/* (the start page's surface reaches the bottom of the screen; the edit bar is a full-width strip like the note) */
+html:root:not(#k1):not(#k2) body:not(.has-doc), html:root:not(#k1):not(#k2) body:not(.has-doc) main { background: var(--surface) !important; }
+html:root:not(#k1):not(#k2) #editBar:not([hidden]) { width: 100vw !important; max-width: none !important; box-sizing: border-box; margin: 0 !important;
+  margin-inline: calc((100% - 100vw) / 2) !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+  border-bottom: 1px solid var(--line) !important; padding-inline: max(12px, calc((100vw - var(--pw, 46em)) / 2)) !important; }
+
+/* 1.30: the guide's long text in the plain face (an eye-tracking study with readers with dyslexia found plain upright faces read
+   faster than decorated or italic ones); its headings keep the Naskh book face, so the guide still reads like a booklet */
+html:root:not(#k1):not(#k2) #helpPanel .guide-card p, html:root:not(#k1):not(#k2) #helpPanel .guide-card li,
+html:root:not(#k1):not(#k2) #aboutPanel .guide-card p, html:root:not(#k1):not(#k2) #helpPanel .guide-promise { font-family: "Vazirmatn", sans-serif !important; font-size: calc(16.5px * var(--ui-scale, 1)); line-height: 2; word-spacing: .08em; }
+html:root:not(#k1):not(#k2) #helpPanel .guide-card h3, html:root:not(#k1):not(#k2) #aboutPanel h2 { font-family: "KhanaNaskh", "Vazirmatn", serif !important; font-size: calc(21px * var(--ui-scale, 1)); font-weight: 700; }
+
+/* 1.30 brand word */
+html:root:not(#k1):not(#k2) .top .brand .logo { font-family: "KhanaNaskh", "Vazirmatn", serif; font-weight: 700; font-size: calc(var(--ic, 40px) * .86); text-shadow: 0 1px 0 light-dark(#FFFFFF, #00000080); line-height: 1.25; letter-spacing: 0; padding-block-end: 3px; color: light-dark(#9A1A33, #F2C56B); background: linear-gradient(90deg, transparent, #E2AE45 22%, #E2AE45 78%, transparent) bottom / 100% 2px no-repeat; }
+html[data-theme="blackyellow"]:root:not(#k1):not(#k2) .top .brand .logo { color: #FFE600; }
+html:root:not(#k1):not(#k2) .brand-icon { filter: drop-shadow(0 2px 3px #5A0A1C40); }
+html:root:not(#k1):not(#k2) .top .brand { gap: 3px; }
+/* 1.30: the settings tile as large as the eye button beside it */
+html:root:not(#k1):not(#k2) .bar .top > .more-tools > summary { width: calc(52px * var(--ui-scale, 1)); height: calc(52px * var(--ui-scale, 1)); min-width: 0; min-height: 0; padding: 0; margin-inline: 6px; border: 0; background: transparent; box-shadow: none; }
+html:root:not(#k1):not(#k2) .bar .top > .more-tools > summary svg.ui-icon { width: 100%; height: 100%; flex: none; }

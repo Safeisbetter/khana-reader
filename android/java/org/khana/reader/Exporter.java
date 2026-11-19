@@ -23,6 +23,9 @@ import java.util.Map;
  * it is saved; until then (cancelled, or the app was closed) it is offered again.
  */
 final class Exporter {
+    /** 1.29 deep check: copies being written to a place the reader chose; closing the app waits for them (Closed). */
+    static final java.util.concurrent.atomic.AtomicInteger WRITING = new java.util.concurrent.atomic.AtomicInteger();
+
     /** a file the core made, and where it was saved (null: not yet) */
     static final class Saved {
         final File file;
@@ -129,6 +132,7 @@ final class Exporter {
         Context app = ctx.getApplicationContext();
         new Thread(() -> {
             String msg;
+            WRITING.incrementAndGet();
             try {
                 write(app, s, u);
                 if (s.kind.equals("pdf")) {
@@ -146,6 +150,7 @@ final class Exporter {
                 Log.w("Khana", "saving failed: " + e.getClass().getSimpleName()); // (not the message: it can hold the file's name)
                 msg = "ذخیره نشد: " + e.getMessage();
             }
+            WRITING.decrementAndGet();
             final String m = msg;
             main.post(() -> {
                 Toast.makeText(app, m, Toast.LENGTH_LONG).show();

@@ -4,7 +4,7 @@ use crate::asr;
 use crate::audio::{self, median, rms};
 use crate::lexicon::LexiconG2P;
 use crate::onnx;
-use crate::planner::{self, Chunker, CHUNK_GAP, PHRASE_GAP, SENTENCE_GAP};
+use crate::planner::{self, Chunker, CHUNK_GAP, SENTENCE_GAP};
 use crate::pyre::*;
 use crate::spm::SentencePiece;
 use ort::{Session, Tensor};
@@ -90,6 +90,7 @@ fn comma_pause() -> f64 {
 }
 
 pub static LISTEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+pub static LISTEN_LIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 
 struct Slots {
@@ -97,7 +98,7 @@ struct Slots {
     turn: std::sync::Condvar,
 }
 static SLOTS: Slots = Slots { state: Mutex::new((0, Vec::new())), turn: std::sync::Condvar::new() };
-static TICKETS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static TICKETS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1 << 62);
 fn slot_count() -> usize {
     (std::thread::available_parallelism().map_or(4, |n| n.get()).saturating_sub(2)).clamp(2, 12)
 }
@@ -375,6 +376,9 @@ impl Engine {
             }
         }
         let (mut a, sr) = audio::read_wav(wav)?;
+        if !(4000..=192_000).contains(&(sr as usize)) {
+            return Err(format!("unusable sample rate {sr}"));
+        }
         if sr as usize != RATE {
             let g = gcd(sr as usize, RATE);
             a = audio::resample_poly(&a, RATE / g, sr as usize / g);
@@ -705,7 +709,7 @@ impl Engine {
             let t = std::time::Instant::now();
             let (heard, missing) = if loud_ok && !voice.quick && LISTEN.load(std::sync::atomic::Ordering::Relaxed) { asr::heard_score(chunk, &speech, RATE) } else { (None, Vec::new()) };
             lap(3, t);
-            let words_ok = asr::heard_ok(heard, &missing);
+            let words_ok = if LISTEN_LIGHT.load(std::sync::atomic::Ordering::Relaxed) { !asr::heard_clear_fault(heard, &missing) } else { asr::heard_ok(heard, &missing) };
             let b = |x: bool| if x { 1.0 } else { 0.0 };
             let key = [b(loud_ok), b(same_voice), b(words_ok), b(dur_ok), b(pace_ok), -(missing.len() as f64), heard.unwrap_or(1.0),
                        -(1.0 - ratio).abs(), if dead <= 0.35 { 0.0 } else { -dead }];
@@ -828,13 +832,7 @@ impl Engine {
 
     #[allow(clippy::too_many_arguments)]
     pub fn synthesize_text_in_order(&self, text: &str, voice_id: &str, wav: &Path, workers: usize, quick: bool, order: Option<u64>, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Vec<f32>, String> {
-        let sentences = if text.chars().any(|c| ('\u{0600}'..='\u{06ff}').contains(&c)) {
-            self.plan_text_kinds(text)
-        } else if strip(text).is_empty() {
-            Vec::new()
-        } else {
-            vec![(0.0, vec![(strip(text).to_string(), PHRASE_GAP)], prosody::kind_of(text))]
-        };
+        let sentences = if strip(text).is_empty() { Vec::new() } else { self.plan_text_kinds(text) };
         if sentences.is_empty() {
             return Ok(Vec::new());
         }

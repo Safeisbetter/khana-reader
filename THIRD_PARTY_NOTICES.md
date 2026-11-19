@@ -81,8 +81,8 @@ download carries exactly these files. Model files are data (numbers and tables);
 The speech model's makers forbid copying anyone's voice without their explicit, lawful consent, and any use meant to deceive.
 «صدای من» is for your own voice only.
 
-## Noto Naskh Arabic (web/NotoNaskhArabic-Regular.ttf)
+## Noto Naskh Arabic (web/NotoNaskhArabic-Regular.ttf, web/NotoNaskhArabic-Bold.ttf)
 
-Used for the start page of the app. Copyright 2022 The Noto Project Authors (https://github.com/notofonts/arabic).
+Used for the start page, the guide and the name in the top bar. Copyright 2014 Google Inc.; 2022 The Noto Project Authors (https://github.com/notofonts/arabic).
 Licensed under the SIL Open Font License, Version 1.1 (https://openfontlicense.org). The font may be used, copied and
 distributed with the app; it may not be sold by itself.

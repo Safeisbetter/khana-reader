@@ -155,7 +155,7 @@ if (window.KHANA_NO_MIC) {
    player or depends on background JavaScript timers. Only foreground highlighting is polled. */
 (function () {
   const pageStop = stopReading;
-  let control = Promise.resolve(), timer = null, polling = false, lastPosition = null, finishing = false;
+  let control = Promise.resolve(), timer = null, polling = false, lastPosition = null, finishing = false, startAt = null;
   const command = (path, body = {}) => (control = control.catch(() => {}).then(() => jpost(path, body)));
   stopReading = function () {
     pageStop(); clearTimeout(timer); lastPosition = null; reader.nativePosition = null;
@@ -212,6 +212,7 @@ if (window.KHANA_NO_MIC) {
     if (exact) { pageStop(); clearTimeout(timer); lastPosition = null; reader.nativePosition = null; } else stopReading();
     if (!S.doc) return;
     const run = reader.run, doc = S.doc, settings = { ...S.settings }, first = S.page;
+    startAt = { page: first, para, start: offset, end: offset };
     reader.active = true; reader.paused = false; setPlayButton();
     try {
       // The sandboxed PDF renderer needs a visible page to prepare scans. OCR them once before
@@ -252,7 +253,9 @@ if (window.KHANA_NO_MIC) {
     if (!reader.active) return;
     restartT = setTimeout(async () => {
       if (!reader.active) return;
-      const pos = lastPosition, paused = reader.paused;
+      // (1.29 deep check: before the phone reports a position, where this reading was started, not the top of the page)
+      const pos = lastPosition || (startAt && startAt.page === S.page ? startAt : null), paused = reader.paused;
+      if (pos && pos.para < 0) return;  // (the closing «پایان متن.»: nothing is left to read again)
       // A new voice or speed: the sentence being heard is finished in the old one while the next is made in the new one, and the
       // reading goes on right after it (before, it was cut and the same sentence made again from nothing: a long silence).
       const finish = !paused && pos && pos.para >= 0 && pos.page === S.page && pos.end > pos.start;
