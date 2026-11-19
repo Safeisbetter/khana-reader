@@ -187,7 +187,8 @@ label:has(> input[type="radio"]), label:has(> input[type="checkbox"]), .check { 
 .hint, .count, .scale, .file, .editnote, .privacy, .formats span, .offline { font-size: 14px; }
 .note { font-size: 15px; }
 :focus-visible { outline: 3px solid var(--lapis); outline-offset: 3px; }
-button[aria-pressed="true"], .on { text-decoration: underline; }
+/* (1.29: a button that is on shows it with its colour or frame and bold words; the underline it used to get looked like a stray line) */
+button[aria-pressed="true"], .on { text-decoration: none; font-weight: 800; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
 /* the tools (buttons, menus, fields, labels, messages) in Arial, with more space between words (extra space between the letters would break the joined Farsi letters), for people who see badly; the book text keeps its own font */
@@ -1555,4 +1556,331 @@ html:root .settabs button { min-width: 0 !important; overflow: hidden; }
   html:root .settabs button { font-size: 11.5px !important; padding: 8px 2px 6px !important; min-height: 80px; }
   html:root #setTabs .tab-ic { width: 30px; height: 30px; border-radius: 8px; }
   html:root #setTabs .tab-ic svg { width: 19px; height: 19px; }
+}
+
+/* ===== 1.29: the start page's water scene: sky, sun, clouds, far shore, moving water, reeds and a splash (simple shapes only:
+   no blur, so it stays light on old phones; still when «reduce motion» is on) */
+html:root .jump-art, html:root #welcome .jump-art { padding: 0 !important; background: linear-gradient(180deg, #86C3EA 0%, #FBE2BA 50%, #1D6BAE 50%, #08345F 100%); -webkit-tap-highlight-color: transparent; }
+html:root .jump-art:focus:not(:focus-visible) { outline: none; }
+.water-scene .wave, .water-scene .cloud, .water-scene .ring, .water-scene .drops, .water-scene .reeds { transform-box: view-box; }
+.water-scene .sea-shade { opacity: 0; transition: opacity .8s ease; }
+.jump-art.show-quote .water-scene .sea-shade { opacity: .42; }
+.water-scene .reeds { transform-origin: 14px 98px; }
+@keyframes water-flow { from { transform: translateX(0); } to { transform: translateX(-120px); } }
+@keyframes cloud-drift { from { transform: translateX(-8px); } to { transform: translateX(14px); } }
+@keyframes glitter { 0%, 100% { opacity: .85; } 50% { opacity: .35; } }
+@keyframes reed-sway { from { transform: rotate(-1.6deg); } to { transform: rotate(1.6deg); } }
+@keyframes ring-out { 0% { transform: scale(.4); opacity: .9; } 100% { transform: scale(1.5); opacity: 0; } }
+@keyframes drops-fall { 0% { transform: translateY(-3px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(8px); opacity: 0; } }
+@keyframes bubble-up { 0% { transform: translateY(0); opacity: 0; } 25% { opacity: .85; } 100% { transform: translateY(-40px); opacity: 0; } }
+@media (prefers-reduced-motion: no-preference) {
+  .water-scene .w1 { animation: water-flow 7s linear infinite; }
+  .water-scene .w2 { animation: water-flow 11s linear infinite reverse; }
+  .water-scene .w3 { animation: water-flow 16s linear infinite; }
+  .water-scene .c1 { animation: cloud-drift 26s ease-in-out infinite alternate; }
+  .water-scene .c2 { animation: cloud-drift 34s ease-in-out infinite alternate-reverse; }
+  .water-scene .glitter { animation: glitter 3.2s ease-in-out infinite; }
+  .water-scene .reeds { animation: reed-sway 4.5s ease-in-out infinite alternate; }
+  .water-scene .ring { transform-origin: 152px 88px; animation: ring-out 2.6s ease-out infinite; }
+  .water-scene .ring.r2 { animation-delay: 1.3s; }
+  .water-scene .drops { animation: drops-fall 2.6s ease-in infinite; }
+  .water-scene .fish-bubble { animation: bubble-up 4.2s ease-in infinite; }
+}
+
+/* 1.29: «نوشتن متن» opens at the full width of the screen (it was 72%, which left a dark strip of the page beside it on a tablet);
+   the grip on its edge can still make it narrower, and a width chosen with it is remembered */
+html:root #typePanel .panel-body { width: 100%; max-width: 100%; }
+
+/* 1.29: the scene fills its card from edge to edge. A phone keeps its card's shape (the middle of the picture); a wider card
+   (tablet, Mac, Windows) is wider than it is tall and shows more water and sky to the left and right */
+html:root .jump-art, html:root #welcome .jump-art { aspect-ratio: 240 / 176; }
+html:root .jump-art .water-scene { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; }
+@media (min-width: 700px) {
+  html:root .jump-art, html:root #welcome .jump-art { width: min(100%, 980px) !important; aspect-ratio: 400 / 176; }
+  html:root .jump-art .water-quote, html:root #welcome .jump-art .water-quote { left: 18%; right: 18%; bottom: 3cqw; font-size: clamp(12px, 2.2cqw, 22px); }
+}
+.water-scene .reeds.far { transform-origin: 0 98px; }
+
+/* ===== 1.29: text inside its frames, a clearer reading bar, the low-vision mode (all systems, every theme) ===== */
+/* (two «:not(#…)» give these rules the weight of two ids, so they hold against the theme layers' long selectors) */
+/* the five category tiles: room inside, the label centred and allowed two lines, never touching the tile's edge */
+html:root:not(#k1):not(#k2) .settabs button { padding: 10px 8px 9px !important; box-sizing: border-box; font-size: calc(14px * var(--ui-scale)) !important; line-height: 1.3 !important; white-space: normal !important; text-align: center !important; overflow-wrap: anywhere; }
+@media (max-width: 520px) { html:root:not(#k1):not(#k2) .settabs button { font-size: calc(12px * var(--ui-scale)) !important; padding-inline: 4px !important; } }
+/* the choices (font, colours, pauses): room inside every pill, space between them */
+html:root:not(#k1):not(#k2) .hlpick { display: flex; flex-wrap: wrap; gap: 10px !important; }
+html:root:not(#k1):not(#k2) .hlpick label { box-sizing: border-box; min-width: 0; max-width: 100%; gap: 10px !important; padding: 8px 14px !important; }
+html:root:not(#k1):not(#k2) .hlpick.grid2 label, html:root:not(#k1):not(#k2) .hlpick.segmented label { padding: 10px 14px !important; }
+html:root:not(#k1):not(#k2) .hlpick .sw { padding: 3px 12px; border-radius: 8px; }
+html:root:not(#k1):not(#k2) .hlpick .font-sample { padding-inline: 2px 6px; overflow-wrap: anywhere; }
+html:root:not(#k1):not(#k2) .panel-body .field { padding-inline: 18px; }
+html:root:not(#k1):not(#k2) .panel-body .scale { padding-inline: 4px; }
+
+/* the reading bar: a large page number in a clear frame, thick arrows, a large speed */
+html:root:not(#k1):not(#k2) .dock .pager { align-items: center; gap: 8px; }
+html:root:not(#k1):not(#k2) .dock .pager button { min-width: calc(54px * var(--ui-scale)) !important; min-height: calc(54px * var(--ui-scale)) !important; display: inline-flex; align-items: center; justify-content: center; padding: 0 !important; border-radius: 14px !important; }
+html:root:not(#k1):not(#k2) .dock .pager .pg-ic { width: calc(26px * var(--ui-scale)); height: calc(26px * var(--ui-scale)); }
+html:root:not(#k1):not(#k2) .dock .pager button.edge .pg-ic { width: calc(22px * var(--ui-scale)); height: calc(22px * var(--ui-scale)); opacity: .85; }
+html:root:not(#k1):not(#k2) .dock #pageInput { width: calc(84px * var(--ui-scale)) !important; min-height: calc(54px * var(--ui-scale)) !important; font-size: calc(26px * var(--ui-scale)) !important; font-weight: 800 !important; text-align: center; border: 2.5px solid var(--ink) !important; border-radius: 14px !important; background: var(--paper) !important; color: var(--ink) !important; font-variant-numeric: tabular-nums; }
+html:root:not(#k1):not(#k2) .dock .pg-of { font-size: calc(19px * var(--ui-scale)) !important; font-weight: 700; color: var(--ink) !important; white-space: nowrap; }
+html:root:not(#k1):not(#k2) .dock .speedctl { align-items: center; gap: 6px; }
+html:root:not(#k1):not(#k2) .dock .speedctl button { min-height: calc(54px * var(--ui-scale)) !important; min-width: calc(54px * var(--ui-scale)) !important; font-size: calc(28px * var(--ui-scale)) !important; font-weight: 800 !important; border-radius: 14px !important; }
+html:root:not(#k1):not(#k2) .dock #speedChip { min-width: calc(92px * var(--ui-scale)) !important; font-size: calc(22px * var(--ui-scale)) !important; border: 2.5px solid var(--ink) !important; background: var(--paper) !important; color: var(--ink) !important; font-variant-numeric: tabular-nums; }
+/* the phone's two small buttons «صفحه» and «سرعت»: their numbers large and bold */
+html:root:not(#k1):not(#k2) .dock #quickPageNumber, html:root:not(#k1):not(#k2) .dock #quickSpeedValue { font-size: calc(20px * var(--ui-scale)) !important; font-weight: 800 !important; line-height: 1.15; }
+
+/* the low-vision button on the start page: large, framed, easy to find */
+.lowvision-btn { display: flex; align-items: center; gap: 14px; width: 100%; max-width: 760px; margin: 14px auto 4px; padding: 14px 18px; min-height: 72px; border-radius: 18px; border: 3px solid #FFD60A; background: #111111; color: #FFD60A; text-align: start; cursor: pointer; }
+.lowvision-btn .ui-icon { flex: none; width: 40px; height: 40px; background: none !important; color: #FFD60A; }
+.lowvision-btn .lv-text { display: flex; flex-direction: column; gap: 2px; }
+.lowvision-btn b { font-size: calc(20px * var(--ui-scale)); }
+.lowvision-btn .lv-text > span { font-size: calc(15px * var(--ui-scale)); color: #FFFFFF; }
+.lowvision-btn[aria-pressed="true"] { background: #FFD60A; color: #000000; border-color: #FFFFFF; }
+.lowvision-btn[aria-pressed="true"] .ui-icon, .lowvision-btn[aria-pressed="true"] .lv-text > span { color: #000000; }
+/* the eye in the top bar is always there, and lit while the mode is on */
+html:root:not(#k1):not(#k2) #visionBtn { display: inline-flex !important; align-items: center; justify-content: center; }
+html:root:not(#k1):not(#k2) #visionBtn[aria-pressed="true"] { background: #FFD60A !important; color: #000000 !important; border-color: #FFFFFF !important; }
+/* while the mode is on: the reading bar and its numbers larger still, every frame thick */
+html[data-lowvision="1"]:root:not(#k1):not(#k2) .dock #pageInput, html[data-lowvision="1"]:root:not(#k1):not(#k2) .dock #speedChip { border-width: 3.5px !important; }
+html[data-lowvision="1"]:root:not(#k1):not(#k2) .dock button { border: 2.5px solid var(--ink) !important; }
+html[data-lowvision="1"]:root:not(#k1):not(#k2) .text p { letter-spacing: .01em; }
+/* the water scene fills the start card on a tablet or a computer (an older phone rule kept it at 280 px) */
+@media (min-width: 700px) { html:root:not(#k1):not(#k2) #welcome .jump-art { width: 100% !important; max-width: 980px; } }
+
+/* the eye in the top bar, outside the menu: one touch turns the low-vision mode on or off */
+html:root:not(#k1):not(#k2) .lowvision-top { display: inline-flex !important; align-items: center; justify-content: center; width: calc(52px * var(--ui-scale)); height: calc(52px * var(--ui-scale)); min-height: 0 !important; padding: 0 !important; margin-inline: 6px; border-radius: 14px !important; border: 2.5px solid #FFD60A !important; background: #111111 !important; color: #FFD60A !important; }
+html:root:not(#k1):not(#k2) .lowvision-top svg { width: 30px; height: 30px; }
+html:root:not(#k1):not(#k2) .lowvision-top[aria-pressed="true"] { background: #FFD60A !important; color: #000000 !important; border-color: #FFFFFF !important; }
+/* a wide card: the picture a little flatter, so the buttons stay on the first screen */
+@media (min-width: 700px) { html:root:not(#k1):not(#k2) #welcome .jump-art { aspect-ratio: 480 / 176 !important; } }
+
+/* «نمایش درشت و پررنگ»: its buttons keep their own colours in every theme (the yellow-on-black theme painted the start-page
+   button black under black words, and it looked like an empty frame) */
+html:root:not(#k1):not(#k2) .lowvision-btn { background: #111111 !important; color: #FFD60A !important; border: 3px solid #FFD60A !important; box-shadow: none !important; outline-offset: 3px; }
+html:root:not(#k1):not(#k2) .lowvision-btn b { color: #FFD60A !important; }
+html:root:not(#k1):not(#k2) .lowvision-btn .lv-text > span { color: #FFFFFF !important; }
+html:root:not(#k1):not(#k2) .lowvision-btn .ui-icon { color: #FFD60A !important; background: none !important; box-shadow: none !important; }
+html:root:not(#k1):not(#k2) .lowvision-btn[aria-pressed="true"] { background: #FFD60A !important; border-color: #FFD60A !important; }
+html:root:not(#k1):not(#k2) .lowvision-btn[aria-pressed="true"] :is(b, .lv-text > span, .ui-icon) { color: #000000 !important; }
+/* the eye: no white border when it is on (it showed in the corners), and «دید بهتر» in the menu without an underline */
+html:root:not(#k1):not(#k2) .lowvision-top[aria-pressed="true"], html:root:not(#k1):not(#k2) #visionBtn[aria-pressed="true"] { border-color: #FFD60A !important; }
+html:root:not(#k1):not(#k2) #visionBtn, html:root:not(#k1):not(#k2) #visionBtn * { text-decoration: none !important; }
+html:root:not(#k1):not(#k2) .more-menu #visionBtn[aria-pressed="true"] { background: transparent !important; color: var(--ink) !important; border: 3px solid #FFD60A !important; }
+/* the words in the water on a wide card: an older phone rule made them 4.3% of the card's width (some 42 px on a tablet),
+   and the four lines climbed out of the water over the sky and the fish. They stay inside the water, under the shore */
+@media (min-width: 700px) {
+  html:root:not(#k1):not(#k2) #welcome .jump-art .water-quote { font-size: clamp(12px, 2.05cqw, 22px) !important; line-height: 1.65 !important; left: 20% !important; right: 20% !important; bottom: 3.2cqw !important; top: auto !important; }
+}
+
+/* 1.29: the start page's words in balance: «پول و وقت خواندن ندارید؟» about 1.3 times the text under it (an older rule made it
+   3% of the screen's width, some 38 px on a tablet, more than twice the text), «شما تنها نیستید.» smaller, one size for the text */
+html:root:not(#k1):not(#k2) #welcome h1.welcome-badge { font-size: calc(22px * var(--ui-scale)) !important; line-height: 1.55 !important; font-weight: 800; margin: 14px 0 2px; }
+html:root:not(#k1):not(#k2) #welcome h1.welcome-badge .welcome-sub { font-size: .68em !important; font-weight: 500; margin-top: 4px; }
+html:root:not(#k1):not(#k2) #welcome > p:not(.type-hint):not(.drop-hint) { font-size: calc(17px * var(--ui-scale)) !important; line-height: 1.85 !important; }
+@media (max-width: 600px) {
+  html:root:not(#k1):not(#k2) #welcome h1.welcome-badge { font-size: calc(19px * var(--ui-scale)) !important; }
+  html:root:not(#k1):not(#k2) #welcome > p:not(.type-hint):not(.drop-hint) { font-size: calc(15.5px * var(--ui-scale)) !important; }
+}
+
+/* the low-vision button: its second line wraps inside the button on a narrow phone (it ran past the button's edge) */
+html:root:not(#k1):not(#k2) .lowvision-btn .lv-text { flex: 1 1 auto; min-width: 0; }
+html:root:not(#k1):not(#k2) .lowvision-btn .lv-text > span, html:root:not(#k1):not(#k2) .lowvision-btn b { white-space: normal !important; overflow-wrap: anywhere; line-height: 1.5; }
+@media (max-width: 600px) { html:root:not(#k1):not(#k2) .lowvision-btn { padding: 12px 14px; gap: 10px; } html:root:not(#k1):not(#k2) .lowvision-btn .lv-text > span { font-size: calc(13.5px * var(--ui-scale)) !important; } html:root:not(#k1):not(#k2) .lowvision-btn .ui-icon { width: 32px; height: 32px; } }
+
+/* «نوشته‌ی سه‌بعدی»: titles and buttons get a soft depth (a light edge above, a short shadow below); the book's own text stays
+   flat, so it stays easy to read. Only shadows: nothing moves and nothing is blurred over the page, so old phones stay fast */
+html[data-text3d="1"] :is(h1, h2, h3, .panel-head h2, button, .btn, summary, .lbl, .settabs button, #welcome h1.welcome-badge) {
+  text-shadow: 0 -1px 0 rgba(255, 255, 255, .28), 0 1px 0 rgba(0, 0, 0, .22), 0 2px 0 rgba(0, 0, 0, .16), 0 3px 4px rgba(0, 0, 0, .22);
+}
+html[data-text3d="1"]:is([data-theme="dark"], [data-theme="black"], [data-theme="blackyellow"], [data-theme="night"], [data-theme="glassdark"], [data-theme="depthdark"]) :is(h1, h2, h3, .panel-head h2, button, .btn, summary, .lbl, .settabs button, #welcome h1.welcome-badge) {
+  text-shadow: 0 1px 0 rgba(0, 0, 0, .6), 0 2px 0 rgba(0, 0, 0, .45), 0 3px 5px rgba(0, 0, 0, .55);
+}
+html[data-text3d="1"] #welcome .jump-art .water-quote { text-shadow: 0 1px 0 rgba(0, 0, 0, .55), 0 2px 0 rgba(0, 0, 0, .4), 0 3px 6px rgba(0, 0, 0, .5) !important; }
+/* a small phone with «نمایش درشت و پررنگ» on: «▶ خواندن» keeps room inside its frame (its words came within 2 px of the edge) */
+@media (max-width: 600px) {
+  html[data-lowvision="1"]:root:not(#k1):not(#k2) .dock #play { padding-inline: 12px !important; font-size: calc(14px * var(--ui-scale)) !important; white-space: nowrap; }
+}
+
+/* «فاصله‌ی کلمه‌ها»: the space between the words of the book and of the typed text (letters are never spaced: Persian letters join) */
+html:root .text p, html:root #textView p, html:root #typeText { word-spacing: var(--word-gap, normal); }
+
+/* 1.29: WCAG contrast. Accent colours dark enough for white words in light themes (at least 4.5:1), and a light version of each
+   in the dark themes, where words on accent buttons are dark and accent-coloured words sit on a dark page. */
+html:root:not(#k1):not(#k2) .sw-a-blue { background: #0062CC; color: #fff; }
+html:root:not(#k1):not(#k2) .sw-a-green { background: #16794A; color: #fff; }
+html:root:not(#k1):not(#k2) .sw-a-orange { background: #B35300; color: #fff; }
+html:root:not(#k1):not(#k2) .sw-a-pink { background: #C0256F; color: #fff; }
+html:root:not(#k1):not(#k2) .sw-a-purple { background: #6F47B8; color: #fff; }
+html:root:not(#k1):not(#k2) .sw-a-teal { background: #0A7782; color: #fff; }
+html:root:not(#k1):not(#k2) .sw-a-red { background: #C62828; color: #fff; }
+html:root:not(#k1):not(#k2) .sw-yellow, html:root:not(#k1):not(#k2) .sw-green, html:root:not(#k1):not(#k2) .sw-cyan,
+html:root:not(#k1):not(#k2) .sw-white { color: #000; }
+html:root:not(#k1):not(#k2) .sw-black { color: #FFE600; }
+html:root[data-accent="green"]:not([data-theme="dark"],[data-theme="black"],[data-theme="night"],[data-theme="blackyellow"],[data-theme="glassdark"],[data-theme="depthdark"]) { --lapis: #16794A; }
+html:root[data-accent="orange"]:not([data-theme="dark"],[data-theme="black"],[data-theme="night"],[data-theme="blackyellow"],[data-theme="glassdark"],[data-theme="depthdark"]) { --lapis: #B35300; }
+html:root[data-accent="pink"]:not([data-theme="dark"],[data-theme="black"],[data-theme="night"],[data-theme="blackyellow"],[data-theme="glassdark"],[data-theme="depthdark"]) { --lapis: #C0256F; }
+html:root[data-accent="purple"]:not([data-theme="dark"],[data-theme="black"],[data-theme="night"],[data-theme="blackyellow"],[data-theme="glassdark"],[data-theme="depthdark"]) { --lapis: #6F47B8; }
+html:root[data-accent="teal"]:not([data-theme="dark"],[data-theme="black"],[data-theme="night"],[data-theme="blackyellow"],[data-theme="glassdark"],[data-theme="depthdark"]) { --lapis: #0A7782; }
+html:root[data-accent="red"]:not([data-theme="dark"],[data-theme="black"],[data-theme="night"],[data-theme="blackyellow"],[data-theme="glassdark"],[data-theme="depthdark"]) { --lapis: #C62828; }
+html:root:is([data-theme="dark"],[data-theme="black"],[data-theme="night"],[data-theme="blackyellow"],[data-theme="glassdark"],[data-theme="depthdark"])[data-accent="green"] { --lapis: #4CD98A; --lapis-ink: #000; }
+html:root:is([data-theme="dark"],[data-theme="black"],[data-theme="night"],[data-theme="blackyellow"],[data-theme="glassdark"],[data-theme="depthdark"])[data-accent="orange"] { --lapis: #FFA552; --lapis-ink: #000; }
+html:root:is([data-theme="dark"],[data-theme="black"],[data-theme="night"],[data-theme="blackyellow"],[data-theme="glassdark"],[data-theme="depthdark"])[data-accent="pink"] { --lapis: #FF7AB8; --lapis-ink: #000; }
+html:root:is([data-theme="dark"],[data-theme="black"],[data-theme="night"],[data-theme="blackyellow"],[data-theme="glassdark"],[data-theme="depthdark"])[data-accent="purple"] { --lapis: #B79CFF; --lapis-ink: #000; }
+html:root:is([data-theme="dark"],[data-theme="black"],[data-theme="night"],[data-theme="blackyellow"],[data-theme="glassdark"],[data-theme="depthdark"])[data-accent="teal"] { --lapis: #3FD3DE; --lapis-ink: #000; }
+html:root:is([data-theme="dark"],[data-theme="black"],[data-theme="night"],[data-theme="blackyellow"],[data-theme="glassdark"],[data-theme="depthdark"])[data-accent="red"] { --lapis: #FF7B72; --lapis-ink: #000; }
+
+/* 1.29: depth in the water scene. Tall reeds in the front corners sway from their roots; on wide screens the front reeds move
+   further out, so they never stand behind the words in the water. */
+.water-scene .reeds.near { transform-box: fill-box; transform-origin: 50% 100%; }
+.water-scene .near-reeds.outer { display: none; }
+@media (min-width: 700px) {
+  .water-scene .near-reeds.inner { display: none; }
+  .water-scene .near-reeds.outer { display: inline; }
+}
+@media (prefers-reduced-motion: no-preference) { .water-scene .reeds.near { animation-duration: 6s; } }
+/* In the dark themes the light accent colours carry dark words (white on them is under 2.5:1). */
+html:root:not(#k1):not(#k2):is([data-theme="dark"],[data-theme="glassdark"],[data-theme="depthdark"])[data-accent]:not([data-accent="blue"]) .panel-body label:has(> input[type="radio"]:checked),
+html:root:not(#k1):not(#k2):is([data-theme="dark"],[data-theme="glassdark"],[data-theme="depthdark"])[data-accent]:not([data-accent="blue"]) .panel-body label:has(> input[type="radio"]:checked) :not([class*="sw"]) { color: #000 !important; }
+/* The colour chips keep their own word colour, even when chosen. */
+html:root:not(#k1):not(#k2) .panel-body label .sw-yellow, html:root:not(#k1):not(#k2) .panel-body label .sw-green,
+html:root:not(#k1):not(#k2) .panel-body label .sw-cyan, html:root:not(#k1):not(#k2) .panel-body label .sw-white { color: #000 !important; }
+html:root:not(#k1):not(#k2) .panel-body label .sw-black { color: #FFE600 !important; }
+html:root:not(#k1):not(#k2) .panel-body label [class*="sw-a-"] { color: #fff !important; }
+html:root:not(#k1):not(#k2) .panel-body label .sw-fc-yellow { color: #FFD600 !important; background: #000; }
+
+/* 1.29: «دید بهتر» in the gear menu lines up with the other rows (start-aligned, same icon size and height). */
+html:root:not(#k1):not(#k2) .more-tools #visionBtn { justify-content: flex-start; min-height: 0; height: auto; padding: 8px 12px; gap: 12px; }
+html:root:not(#k1):not(#k2) .more-tools :is(#visionBtn, #settingsBtn) svg.ui-icon { width: 34px; height: 34px; flex: 0 0 34px; }
+
+/* 1.29: three small people stroll along the far shore, right to left, towards the old adobe city; legs and arms swing,
+   the body bobs a little. Without motion (reduce motion) they simply stand on the shore. */
+.water-scene .walker { transform-box: view-box; }
+.water-scene .wk1 { transform: translate(150px, 82.6px); }
+.water-scene .wk2 { transform: translate(158px, 82.6px); }
+.water-scene .wk3 { transform: translate(176px, 82.6px); }
+.water-scene .walker .leg, .water-scene .walker .arm { transform-box: fill-box; transform-origin: 50% 0; }
+@keyframes walk-shore { 0% { transform: translate(204px, 82.6px); opacity: 0; } 6% { opacity: 1; } 92% { opacity: 1; }
+  100% { transform: translate(98px, 82.6px); opacity: 0; } }
+@keyframes leg-swing { from { transform: rotate(24deg); } to { transform: rotate(-24deg); } }
+@keyframes walk-bob { from { transform: translateY(0); } to { transform: translateY(-.35px); } }
+@media (prefers-reduced-motion: no-preference) {
+  .water-scene .wk1 { animation: walk-shore 46s linear infinite; }
+  .water-scene .wk2 { animation: walk-shore 46s linear infinite -4s; }
+  .water-scene .wk3 { animation: walk-shore 58s linear infinite -27s; }
+  .water-scene .walker .l1, .water-scene .walker .a1 { animation: leg-swing .55s ease-in-out infinite alternate; }
+  .water-scene .walker .l2 { animation: leg-swing .55s ease-in-out infinite alternate-reverse; }
+  .water-scene .walker .walk-bob { animation: walk-bob .275s ease-in-out infinite alternate; }
+}
+/* On narrow phones in large-and-bold mode the top bar stays on one line: «باز کردن» gives up its extra width. */
+@media (max-width: 440px) {
+  html[data-lowvision="1"]:root:not(#k1):not(#k2) .bar .top { flex-wrap: nowrap; }
+  html[data-lowvision="1"]:root:not(#k1):not(#k2) .bar .top #openFileBtn { flex: 1 1 auto; min-width: 0; width: auto; padding-inline: 10px; gap: 6px; }
+  html[data-lowvision="1"]:root:not(#k1):not(#k2) .bar .top > :not(#openFileBtn) { flex-shrink: 0; }
+}
+
+/* 1.29: the family and the couple stroll along the shore (a slow walk back and forth, steps and a small bob; the child reading
+   keeps reading), and three small fish far out at sea jump now and then. Nothing moves with «reduce motion». */
+.water-scene .stroll, .water-scene .step, .water-scene .far-fish .jump, .water-scene .far-ring { transform-box: fill-box; }
+.water-scene .stroll .leg { transform-box: fill-box; transform-origin: 50% 0; }
+.water-scene .far-fish .jump { transform-origin: 50% 50%; opacity: 0; }
+.water-scene .far-ring { transform-origin: 50% 50%; opacity: 0; }
+@keyframes stroll-a { 0%, 6%, 100% { transform: translateX(0); } 50%, 56% { transform: translateX(-20px); } }
+@keyframes stroll-b { 0%, 6%, 100% { transform: translateX(0); } 50%, 56% { transform: translateX(35px); } }
+@keyframes step-bob { from { transform: translateY(0); } to { transform: translateY(-.3px); } }
+@keyframes far-jump {
+  0%, 84% { opacity: 0; transform: translate(0, 4px) rotate(-40deg); }
+  86% { opacity: 1; transform: translate(-3px, -6px) rotate(-25deg); }
+  90% { opacity: 1; transform: translate(-7px, -9px) rotate(5deg); }
+  94% { opacity: 1; transform: translate(-11px, -3px) rotate(35deg); }
+  96%, 100% { opacity: 0; transform: translate(-13px, 4px) rotate(45deg); }
+}
+@keyframes far-ring { 0%, 95% { opacity: 0; transform: scale(.3); } 97% { opacity: .7; } 100% { opacity: 0; transform: scale(1.6); } }
+@media (prefers-reduced-motion: no-preference) {
+  .water-scene .s1 { animation: stroll-a 22s ease-in-out infinite; }
+  .water-scene .s2 { animation: stroll-b 30s ease-in-out infinite -6s; }
+  .water-scene .step { animation: step-bob .45s ease-in-out infinite alternate; }
+  .water-scene .stroll .l1 { animation: leg-swing .45s ease-in-out infinite alternate; }
+  .water-scene .stroll .l2 { animation: leg-swing .45s ease-in-out infinite alternate-reverse; }
+  .water-scene .ff1 .jump, .water-scene .ff1 .far-ring { animation: far-jump 11s ease-in-out infinite -3s; }
+  .water-scene .ff1 .far-ring { animation-name: far-ring; }
+  .water-scene .ff2 .jump, .water-scene .ff2 .far-ring { animation: far-jump 14s ease-in-out infinite -9s; }
+  .water-scene .ff2 .far-ring { animation-name: far-ring; }
+  .water-scene .ff3 .jump, .water-scene .ff3 .far-ring { animation: far-jump 17s ease-in-out infinite -1s; }
+  .water-scene .ff3 .far-ring { animation-name: far-ring; }
+}
+/* 1.29: large-and-bold mode on a phone held sideways (and other screens up to 1100 px wide): the reading bar takes two rows
+   (play, stop and speed on the first, pages and voice on the second) instead of running off both ends. */
+@media (max-width: 1100px) {
+  html[data-lowvision="1"]:root:not(#k1):not(#k2) .dock { flex-wrap: wrap !important; justify-content: center; row-gap: 8px; width: auto !important; max-width: calc(100% - 16px) !important; inset-inline: 8px !important; }
+  html[data-lowvision="1"]:root:not(#k1):not(#k2) .dock .transport { order: -1; flex: 1 1 100%; justify-content: center; }
+  html[data-lowvision="1"]:root:not(#k1):not(#k2) .dock .reading-context { flex: 0 1 auto; min-width: 0; }
+}
+/* (and on a small phone «باز کردن» keeps room beside its words: a smaller icon) */
+@media (max-width: 440px) {
+  html[data-lowvision="1"]:root:not(#k1):not(#k2) .bar .top #openFileBtn svg.ui-icon { width: 26px; height: 26px; flex: 0 0 26px; }
+  html[data-lowvision="1"]:root:not(#k1):not(#k2) .bar .top #openFileBtn { padding-inline: 12px; }
+}
+
+/* 1.29: the big fish leaps: it rises out of the water on the left, reaches its jump pose at the top, dives back in on the right
+   (the rings and drops come with the dive), stays under for a while and leaps again. Under the surface it is cut off, so it goes
+   into the sea. With «reduce motion» it keeps its jump pose, as before. */
+.water-scene .fish-leap { transform-box: view-box; transform-origin: 118px 44px; }
+@keyframes fish-leap {
+  /* (a real arc: evenly from right to left, up and down as gravity would; the body turns with its path (60 % of the
+     slope, as a leaping fish does); out of the water on the right, head first; under the water on the left, hidden whole) */
+  0%, 6% { transform: translate(42px, 72px) rotate(74.7deg); }
+  9.0% { transform: translate(35.0px, 48.8px) rotate(73.0deg); }
+  12.0% { transform: translate(28.0px, 29.8px) rotate(70.5deg); }
+  15.0% { transform: translate(21.0px, 15.0px) rotate(66.6deg); }
+  18.0% { transform: translate(14.0px, 4.4px) rotate(60.2deg); }
+  21.0% { transform: translate(7.0px, -1.9px) rotate(48.7deg); }
+  24.0% { transform: translate(0.0px, -4.0px) rotate(30.0deg); }
+  27.0% { transform: translate(-7.0px, -1.9px) rotate(11.3deg); }
+  30.0% { transform: translate(-14.0px, 4.4px) rotate(-0.2deg); }
+  33.0% { transform: translate(-21.0px, 15.0px) rotate(-6.6deg); }
+  36.0% { transform: translate(-28.0px, 29.8px) rotate(-10.5deg); }
+  39.0% { transform: translate(-35.0px, 48.8px) rotate(-13.0deg); }
+  42.0% { transform: translate(-42.0px, 72.0px) rotate(-14.7deg); }
+  46%, 100% { transform: translate(-48px, 116px) rotate(-20.7deg); }
+}
+
+
+@keyframes fish-shadow-leap { 0%, 10% { opacity: 0; } 16%, 32% { opacity: .38; } 38%, 100% { opacity: 0; } }
+@keyframes ring-dive { 0%, 36% { transform: scale(.4); opacity: 0; } 38% { transform: scale(.4); opacity: .9; } 62%, 100% { transform: scale(1.6); opacity: 0; } }
+@keyframes drops-dive { 0%, 36% { transform: translateY(-3px); opacity: 0; } 39% { opacity: 1; } 52%, 100% { transform: translateY(8px); opacity: 0; } }
+@media (prefers-reduced-motion: no-preference) {
+  .water-scene .fish-leap { animation: fish-leap 9s linear infinite; }
+  .water-scene .fish-shadow { animation: fish-shadow-leap 9s linear infinite; }
+  .water-scene .ring { animation: ring-rise 9s ease-out infinite; }
+  .water-scene .drops { animation: drops-rise 9s ease-out infinite; }
+}
+
+/* 1.29: birds flap their wings and fly slowly across the sky; the fish's leap throws up a ring and drops where it leaves the water,
+   as where it dives back in. */
+.water-scene .bird .fly, .water-scene .ring-up, .water-scene .drops-up { transform-box: fill-box; transform-origin: 50% 50%; }
+.water-scene .ring-up, .water-scene .drops-up { opacity: 0; }
+@keyframes wing-flap { 0%, 100% { d: path("M-6 0q3-3 6 0q3-3 6 0"); } 50% { d: path("M-6 -1q3 2.2 6 1q3 -1.2 6 -1"); } }
+@keyframes bird-cross { from { transform: translateX(-120px); } to { transform: translateX(360px); } }
+@keyframes ring-rise { 0%, 9% { transform: scale(.3); opacity: 0; } 11% { transform: scale(.3); opacity: .9; } 30%, 100% { transform: scale(1.7); opacity: 0; } }
+@keyframes drops-rise { 0%, 9% { transform: translateY(2px); opacity: 0; } 12% { opacity: 1; transform: translateY(-3px); } 22%, 100% { transform: translateY(7px); opacity: 0; } }
+@media (prefers-reduced-motion: no-preference) {
+  .water-scene .bird .wing { animation: wing-flap .7s ease-in-out infinite; }
+  .water-scene .bd2 .wing { animation-duration: .55s; }
+  .water-scene .bd3 .wing { animation-duration: .8s; animation-delay: -.3s; }
+  .water-scene .bird .fly { transform-box: view-box; animation: bird-cross 48s linear infinite; }
+  .water-scene .bd2 .fly { animation-duration: 64s; animation-delay: -20s; }
+  .water-scene .bd3 .fly { animation-duration: 80s; animation-delay: -50s; }
+  .water-scene .ring-up { animation: ring-dive 9s ease-out infinite; transform-origin: 50% 50%; }
+  .water-scene .drops-up { animation: drops-dive 9s ease-in infinite; }
+}
+
+/* 1.29: the sun's soft rays turn very slowly. */
+.water-scene .rays-turn { transform-box: view-box; transform-origin: 0 0; }
+@keyframes rays-turn { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
+@media (prefers-reduced-motion: no-preference) { .water-scene .rays-turn { animation: rays-turn 40s ease-in-out infinite alternate; } }
+/* 1.29: a small phone in the low-vision mode with a book open has five things in the top bar: «باز کردن» shows only its icon there
+   (its name stays for screen readers), so the logo never covers it */
+@media (max-width: 440px) {
+  html[data-lowvision="1"]:root:not(#k1):not(#k2) body.has-doc .bar .top #openFileBtn { flex: 0 0 auto; font-size: 0 !important; gap: 0; padding-inline: 12px; }
+  html[data-lowvision="1"]:root:not(#k1):not(#k2) body.has-doc .bar .top .brand { flex: 0 0 auto; min-width: 0; }
+  html[data-lowvision="1"]:root:not(#k1):not(#k2) body.has-doc .bar .top .brand :is(.file, .logo) { display: none !important; }
 }

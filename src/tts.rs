@@ -92,6 +92,40 @@ fn comma_pause() -> f64 {
 pub static LISTEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 
+struct Slots {
+    state: Mutex<(usize, Vec<u64>)>,
+    turn: std::sync::Condvar,
+}
+static SLOTS: Slots = Slots { state: Mutex::new((0, Vec::new())), turn: std::sync::Condvar::new() };
+static TICKETS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+fn slot_count() -> usize {
+    (std::thread::available_parallelism().map_or(4, |n| n.get()).saturating_sub(2)).clamp(2, 12)
+}
+struct Slot;
+impl Slot {
+    fn take(ticket: u64) -> Slot {
+        let mut st = SLOTS.state.lock().unwrap_or_else(|e| e.into_inner());
+        st.1.push(ticket);
+        while !(st.0 < slot_count() && st.1.iter().min() == Some(&ticket)) {
+            st = SLOTS.turn.wait(st).unwrap_or_else(|e| e.into_inner());
+        }
+        if let Some(i) = st.1.iter().position(|t| *t == ticket) {
+            st.1.swap_remove(i);
+        }
+        st.0 += 1;
+        drop(st);
+        SLOTS.turn.notify_all();
+        Slot
+    }
+}
+impl Drop for Slot {
+    fn drop(&mut self) {
+        SLOTS.state.lock().unwrap_or_else(|e| e.into_inner()).0 -= 1;
+        SLOTS.turn.notify_all();
+    }
+}
+
+
 #[derive(Clone)]
 pub enum Arr {
     F32(Vec<usize>, Vec<f32>),
@@ -789,6 +823,11 @@ impl Engine {
     }
 
     pub fn synthesize_text(&self, text: &str, voice_id: &str, wav: &Path, workers: usize, quick: bool, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Vec<f32>, String> {
+        self.synthesize_text_in_order(text, voice_id, wav, workers, quick, None, cancel)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn synthesize_text_in_order(&self, text: &str, voice_id: &str, wav: &Path, workers: usize, quick: bool, order: Option<u64>, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Vec<f32>, String> {
         let sentences = if text.chars().any(|c| ('\u{0600}'..='\u{06ff}').contains(&c)) {
             self.plan_text_kinds(text)
         } else if strip(text).is_empty() {
@@ -817,13 +856,15 @@ impl Engine {
         };
         let results: Vec<Mutex<Option<Result<Vec<f32>, String>>>> = (0..jobs.len()).map(|_| Mutex::new(None)).collect();
         let next = std::sync::atomic::AtomicUsize::new(0);
+        let ticket = order.unwrap_or_else(|| TICKETS.fetch_add(1, std::sync::atomic::Ordering::SeqCst));
         std::thread::scope(|s| {
-            for _ in 0..workers.max(1).min(jobs.len().max(1)) {
+            for _ in 0..workers.max(slot_count()).max(1).min(jobs.len().max(1)) {
                 s.spawn(|| loop {
                     let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     if i >= jobs.len() {
                         break;
                     }
+                    let _slot = if cancel() { None } else { Some(Slot::take(ticket)) };
                     let r = if cancel() {
                         Err("cancelled".to_string())
                     } else {

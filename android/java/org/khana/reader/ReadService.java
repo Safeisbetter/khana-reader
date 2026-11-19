@@ -67,7 +67,10 @@ public final class ReadService extends Service {
         final String id = UUID.randomUUID().toString();
         final JSONObject request;
         final ExecutorService workers = Executors.newFixedThreadPool(3);
-        final ArrayBlockingQueue<Future<Sound>> queue = new ArrayBlockingQueue<>(4);
+        // (1.29: how many sentences are made ahead of the voice. It was 4: after a few short sentences that was only some eight seconds of
+        // speech, less than a long sentence takes to make on a tablet or an older phone that has grown warm, and the voice stopped after
+        // «…است.» or a number. Twelve are half a minute or more of speech; a sound waiting here is a few hundred kilobytes)
+        final ArrayBlockingQueue<Future<Sound>> queue = new ArrayBlockingQueue<>(12);
         final List<Future<Sound>> pending = Collections.synchronizedList(new ArrayList<>());
         volatile boolean cancelled, paused;
         // (finishing: a new reading has taken over, but the sentence being heard is said to its end first; previous: that reading)
@@ -161,11 +164,14 @@ public final class ReadService extends Service {
         Native.Reply r = call("GET", path, query, null);
         try { return new JSONObject(Native.text(r.body)); } finally { Arrays.fill(r.body, (byte) 0); }
     }
+    /** 1.29: each sentence asked for gets the next number: the core makes the lowest first when the cores are busy. */
+    private static final java.util.concurrent.atomic.AtomicLong ORDER = new java.util.concurrent.atomic.AtomicLong();
     private void submit(Run r, String text, int page, int para, SpeechPieces.Piece piece, double gap, boolean quick) throws Exception {
         if (r.cancelled) throw new InterruptedException();
+        final long order = ORDER.incrementAndGet();
         Future<Sound> future = r.workers.submit(() -> {
             if (r.cancelled) throw new InterruptedException();
-            JSONObject body = new JSONObject().put("text", text).put("voice", r.request.getString("voice")).put("speed", r.request.getDouble("speed")).put("gen", r.gen);
+            JSONObject body = new JSONObject().put("text", text).put("voice", r.request.getString("voice")).put("speed", r.request.getDouble("speed")).put("gen", r.gen).put("order", order);
             // (the first sentence of a reading is made quickly: it is what the reader waits for after pressing play or changing voice)
             if (quick) body.put("quick", true);
             byte[] request = Native.utf8(body.toString());
@@ -316,6 +322,12 @@ public final class ReadService extends Service {
         if (media != null) media.release();
         stopForeground(STOP_FOREGROUND_REMOVE);
         super.onDestroy();
+    }
+    /** 1.29: Khana closed by the owner (swiped away in the app overview): the reading stops and nothing goes on in the background.
+     *  Leaving the app (Home, screen off) keeps reading, as before. */
+    @Override public void onTaskRemoved(Intent root) {
+        stopSelf();
+        Closed.endSoon();
     }
     @Override public IBinder onBind(Intent intent) { return null; }
 }

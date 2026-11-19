@@ -79,6 +79,129 @@ fn lookup<'a>(m: &'a [(&str, &str)], k: &str) -> Option<&'a str> {
 }
 
 const GENERAL_LEXICON: &[(&str, &str)] = &[
+    ("نماگرفت", "nemAgereft"),
+    ("نمایه", "nemAye"),
+    ("نماهنگ", "nemAhang"),
+    ("نماپاد", "nemApAd"),
+    ("فرانما", "farAnemA"),
+    ("گپ", "gap"),
+    ("رایانک", "rAyAnak"),
+    ("تارنگاشت", "tArnegASt"),
+    ("تصدانه", "tasdAne"),
+    ("چندرسانهای", "Candresane?i"),
+    ("چندرسانه‌ای", "Candresane?i"),
+    ("پیام چندرسانه‌ای", "payAme Candresane?i"),
+    ("پیام چندرسانهای", "payAme Candresane?i"),
+    ("نمایه‌ها", "nemAyehA"),
+    ("نمایهها", "nemAyehA"),
+    ("نماگرفت‌ها", "nemAgerefthA"),
+    ("نماگرفتها", "nemAgerefthA"),
+    ("گوگل", "gugel"),
+    ("اینستاگرام", "?instAgerAm"),
+    ("کامنت", "kAment"),
+    ("فالوور", "fAlover"),
+    ("هشتگ", "haStag"),
+    ("اندروید", "?andoroyd"),
+    ("اکانت", "?akAnt"),
+    ("پسورد", "pasvord"),
+    ("یوزرنیم", "yuzernim"),
+    ("هکر", "haker"),
+    ("وی پی ان", "vipiyen"),
+    ("ویپیان", "vipiyen"),
+    ("وی‌پی‌ان", "vipiyen"),
+    ("بلوتوث", "bolutus"),
+    ("بارکد", "bArkod"),
+    ("کیوآرکد", "kiyuArkod"),
+    ("اکسل", "?eksel"),
+    ("نوتیفیکیشن", "notifikeySen"),
+    ("تارنگار", "tArnegAr"),
+    ("بارگذاری", "bArgozAri"),
+    ("صفحهکلید", "safheklid"),
+    ("صفحه‌کلید", "safheklid"),
+    ("صفحه کلید", "safheklid"),
+    ("رایانش", "rAyAneS"),
+    ("رایانش ابری", "rAyAneSe ?abri"),
+    ("بروم", "beravam"),
+    ("بروی", "beravi"),
+    ("یک و نیم", "yeko nim"),
+    ("دو و نیم", "do?o nim"),
+    ("سه و نیم", "se?o nim"),
+    ("چهار و نیم", "cAhAro nim"),
+    ("پنج و نیم", "panjo nim"),
+    ("شش و نیم", "SiSo nim"),
+    ("هفت و نیم", "hafto nim"),
+    ("هشت و نیم", "haSto nim"),
+    ("نه و نیم", "noho nim"),
+    ("ده و نیم", "daho nim"),
+    ("یازده و نیم", "yAzdaho nim"),
+    ("دوازده و نیم", "davAzdaho nim"),
+    ("کلاه بردار", "kolAhbardAr"),
+    ("پی آمد", "piyAmad"),
+    ("پی آمدها", "piyAmadhA"),
+    ("پی آمدهای", "piyAmadhAye"),
+    ("آن لاین", "?Anlayn"),
+    ("پر قو", "pare qu"),
+    ("ضرب مثل", "zarbe masal"),
+    ("کش و قوس", "keS ?o qos"),
+    ("جهان بینی", "jahAnbini"),
+    ("شی", "Sey"),
+    ("از کل", "?az koll"),
+    ("بخشی از کل", "baxSi ?az koll"),
+    ("اشکال جدید", "?aSkAle jadid"),
+    ("اشکال جدیدی", "?aSkAle jadidi"),
+    ("اشکال خارجی", "?aSkAle xAreji"),
+    ("اشکال مختلف", "?aSkAle moxtalef"),
+    ("اشکال دیگر", "?aSkAle digar"),
+    ("سپتامبر", "septAmbr"),
+    ("اکتبر", "?oktobr"),
+    ("نوامبر", "novAmbr"),
+    ("دسامبر", "desAmbr"),
+    ("تحت تاثیر", "tahte ta?sire"),
+    ("تحت تأثیر", "tahte ta?sire"),
+    ("هفته نامه", "haftenAme"),
+    ("ویژه نامه", "vi;enAme"),
+    ("گام جلوتر", "gAm jelotar"),
+    ("دار و دسته", "dAr o daste"),
+    ("هرج و مرج", "harj o marj"),
+    ("با فرض اینکه", "bA farze ?inke"),
+    ("فرض اینکه", "farze ?inke"),
+    ("گو اینکه", "gu ?inke"),
+    ("مبتنی بر", "mabtani bar"),
+    ("چاره را", "CAre rA"),
+    ("مورد ترحّم", "morede tarahhom"),
+    ("مورد ترحم", "morede tarahhom"),
+    ("مرد یا زن", "mard yA zan"),
+    ("زن یا مرد", "zan yA mard"),
+    ("اتنیک", "?etnik"),
+    ("اتنیکی", "?etniki"),
+    ("مترسکی", "matarsaki"),
+    ("مترسک‌ها", "matarsakhA"),
+    ("مترسکها", "matarsakhA"),
+    ("رأی", "ra?y"),
+    ("رأی‌ها", "ra?yhA"),
+    ("رأیها", "ra?yhA"),
+    ("مسئولان", "mas?ulAn"),
+    ("مسئولین", "mas?ulin"),
+    ("مسوولان", "mas?ulAn"),
+    ("مسوولین", "mas?ulin"),
+    ("علیکم", "?aleykom"),
+    ("السلام علیکم", "?assalAmo ?aleykom"),
+    ("سلام علیکم", "salAmo ?aleykom"),
+    ("علیکم السلام", "?aleykomossalAm"),
+    ("رایانهای", "rAyAne?i"),
+    ("رایانه‌ای", "rAyAne?i"),
+    ("رایانه ای", "rAyAne?i"),
+    ("خودنگاره", "xodnegAre"),
+    ("دورنگار", "durnegAr"),
+    ("الگوریتم", "?algoritm"),
+    ("استوری", "?estori"),
+    ("دانلود", "dAnlod"),
+    ("آپلود", "?Aplod"),
+    ("اینستاگرامی", "?instAgerAmi"),
+    ("دانلودها", "dAnlodhA"),
+    ("الگوریتم ها", "?algoritmhA"),
+    ("الگوریتم‌ها", "?algoritmhA"),
+    ("الگوریتمها", "?algoritmhA"),
     ("قویا", "qaviyyan"),
     ("کلاهبردار", "kolAhbardAr"),
     ("آنلاین", "?Anlayn"),
@@ -298,7 +421,7 @@ impl LexiconG2P {
                     parts.push(self.phonemise_marked(seg, keep_ezafe)?);
                 }
             }
-            parts.push(ph);
+            parts.push(self.listed_ezafe(&text, start, end, ph, keep_ezafe)?);
             pos = end;
         }
         let tail = &text[pos..];
@@ -316,6 +439,39 @@ impl LexiconG2P {
             }
         }
         Ok(parts.into_iter().filter(|p| !p.is_empty()).collect::<Vec<_>>().join(" "))
+    }
+
+    fn listed_ezafe(&self, text: &str, start: usize, end: usize, ph: String, keep_ezafe: bool) -> R {
+        let span = &text[start..end];
+        let Some(last) = split_ws(&ph).last().map(|s| s.to_string()) else { return Ok(ph) };
+        if !search(&format!("[{FA_LETTER}]"), span) || last.ends_with('1') {
+            return Ok(ph);
+        }
+        let rest = &text[end..];
+        if !search(&format!(r"^[ \t]+[{FA_LETTER}]"), rest) {
+            return Ok(ph);
+        }
+        let next: Vec<&str> = split_ws(rest).into_iter().take(2).collect();
+        if next.is_empty() || EZAFE_STOP.contains(&core(next[0]).as_str()) {
+            return Ok(ph);
+        }
+        let n = split_ws(span).iter().filter(|w| search(r"\w", w)).count().max(1);
+        let probe = split_ws(&self.phonemise_marked(&format!("{span} {}", next.join(" ")), true)?).iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let Some(with) = probe.get(n - 1) else { return Ok(ph) };
+        let alone = split_ws(&self.phonemise_marked(span, true)?).last().map(|s| s.trim_end_matches('1').to_string()).unwrap_or_default();
+        let w = with.trim_end_matches('1');
+        let grew = !alone.is_empty() && (w == format!("{alone}e") || w == format!("{alone}ye"));
+        if last.ends_with('e') && !span.trim_end().ends_with(['ه', 'ۀ', 'ة']) {
+            return Ok(ph);
+        }
+        if !(with.ends_with('1') && !alone.ends_with('e')) && !grew {
+            return Ok(ph);
+        }
+        let add = if ends_any(&last, &["A", "u", "i", "o", "e"]) { "ye" } else { "e" };
+        let mut words: Vec<String> = split_ws(&ph).iter().map(|s| s.to_string()).collect();
+        let k = words.len() - 1;
+        words[k] = format!("{last}{add}{}", if keep_ezafe { "1" } else { "" });
+        Ok(words.join(" "))
     }
 
     fn base_checked(&self, text: &str) -> R {
@@ -412,6 +568,18 @@ impl LexiconG2P {
         ph = split_ws(&ph).iter().map(|w| sub(r"^(.+e)\?(aS|at|am)$", r"\1\2", &sub(r"^(.+e)\?i$", r"\1yi", w))).collect::<Vec<_>>().join(" ");
         ph = split_ws(&ph).iter().map(|w| ezafe_after_ain(w)).collect::<Vec<_>>().join(" ");
         ph = sub(r"(?<=[^\s?])allAh(?=e?1?\b)", "ollAh", &ph);
+        if text.contains("شها") || text.contains("ش\u{200c}ها") {
+            let ws: Vec<String> = split_ws(text).into_iter().filter(|w| search(&format!("[{FA_LETTER}]"), w)).map(|s| s.to_string()).collect();
+            let mut pw: Vec<String> = split_ws(&ph).iter().map(|s| s.to_string()).collect();
+            for (i, j) in align_words(&ws, &pw) {
+                if search("ش\u{200c}?ها", &ws[i]) && !pw[j].contains("ShA") {
+                    if let Some(k) = pw[j].rfind("SA") {
+                        pw[j].replace_range(k..k + 2, "ShA");
+                    }
+                }
+            }
+            ph = pw.join(" ");
+        }
         if !text.replace('\u{200c}', "").contains("سه") {
             ph = ph.replace("sh", "S");
         }
