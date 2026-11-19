@@ -86,6 +86,13 @@ public final class JobService extends Service {
         return START_NOT_STICKY;
     }
 
+    /** 1.29: Khana closed by the owner (swiped away): the file being made is not finished in the background (the owner's wish). */
+    @Override
+    public void onTaskRemoved(Intent root) {
+        stopSelf();
+        Closed.endSoon();
+    }
+
     @Override
     public void onDestroy() {
         handler.removeCallbacksAndMessages(null);

@@ -40,6 +40,11 @@ function applySettings() {
   const s = S.settings;
   const uiScale = [1, 1.15, 1.3].includes(Number(s.uiScale)) ? Number(s.uiScale) : 1;
   document.documentElement.style.setProperty("--ui-scale", String(uiScale));
+  document.documentElement.dataset.lowvision = s.lowVision ? "1" : "0";
+  for (const id of ["visionBtn", "lowVisionBtn", "lowVisionTop"]) $(id).setAttribute("aria-pressed", String(!!s.lowVision));
+  $("lowVisionTitle").textContent = s.lowVision ? "بازگشت به نمایش معمولی" : "نمایش درشت و پررنگ";
+  $("lowVisionSwitch").checked = !!s.lowVision;
+  $("lowVisionSub").textContent = s.lowVision ? "روشن است؛ با یک لمس، تنظیمات قبلی شما برمی‌گردد" : "با یک لمس: نوشته و دکمه‌های بزرگ، زرد روی سیاه";
   document.body.classList.toggle("focus-reading", !!s.focusMode);
   $("focusBtn").textContent = s.focusMode ? "همه‌ی ابزارها" : "نمای خلوت";
   $("focusBtn").setAttribute("aria-pressed", String(!!s.focusMode));
@@ -48,6 +53,10 @@ function applySettings() {
   document.documentElement.style.setProperty("--fs", s.fontSize + "px");
   const lineHeight = Math.min(3, Math.max(1.5, Number(s.lineHeight) || 2.2));
   document.documentElement.style.setProperty("--reader-line-height", String(lineHeight));
+  // (1.29) the space between the words of the book: wider helps tired eyes and readers who lose their place in a line
+  const ws = ["normal", "wide", "wider"].includes(s.wordSpacing) ? s.wordSpacing : "normal";
+  document.documentElement.style.setProperty("--word-gap", ws === "wider" ? ".5em" : ws === "wide" ? ".25em" : "normal");
+  document.querySelectorAll("input[name=wordSpacing]").forEach(r => r.checked = r.value === ws);
   $("lineHeight").value = lineHeight;
   $("lineHeightVal").textContent = fa(lineHeight.toFixed(1));
   $("lineHeight").setAttribute("aria-valuetext", fa(lineHeight.toFixed(1)) + " برابر اندازه‌ی قلم");
@@ -81,6 +90,8 @@ function applySettings() {
   document.documentElement.dataset.corners = corners;
   document.querySelectorAll("input[name=corners]").forEach(r => r.checked = r.value === corners);
   $("startSound").checked = s.startSound !== false;
+  document.documentElement.dataset.text3d = s.text3d ? "1" : "0";
+  $("text3d").checked = !!s.text3d;
   const chosenFont = ["vazir", "naskh"].includes(s.font) ? s.font : "vazir";
   document.documentElement.dataset.font = chosenFont;
   document.querySelectorAll("input[name=font]").forEach(r => r.checked = r.value === chosenFont);
@@ -217,6 +228,8 @@ document.querySelectorAll("input[name=accent]").forEach(r => r.onchange = () => 
 document.querySelectorAll("input[name=iconStyle]").forEach(r => r.onchange = () => setSetting("iconStyle", r.value));
 document.querySelectorAll("input[name=corners]").forEach(r => r.onchange = () => setSetting("corners", r.value));
 $("startSound").onchange = e => setSetting("startSound", e.target.checked);
+$("text3d").onchange = e => setSetting("text3d", e.target.checked);
+document.querySelectorAll("input[name=wordSpacing]").forEach(r => r.onchange = () => setSetting("wordSpacing", r.value));
 $("pageWidth").oninput = e => setSetting("pageWidth", Number(e.target.value));
 $("pageMargin").oninput = e => setSetting("pageMargin", Number(e.target.value));
 $("sentenceLines").onchange = e => {
@@ -306,7 +319,7 @@ function fillVoices(voices) {
   S.voices = voices;
   const groups = [["mine", "صدای من"], ["natural", "صدای طبیعی"]];
   $("voice").innerHTML = groups.map(([g, label]) => {
-    const opts = voices.filter(v => v.group === g).map(v => `<option value="${v.id}">${esc(v.name)}</option>`).join("");
+    const opts = voices.filter(v => v.group === g).map(v => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join("");
     return opts ? `<optgroup label="${label}">${opts}</optgroup>` : "";
   }).join("");
   if (!voices.some(v => v.id === S.settings.voice) && voices[0]) S.settings.voice = voices[0].id;
@@ -597,7 +610,31 @@ addEventListener("keydown", e => {
   }
 });
 $("settingsBtn").onclick = () => openPanel("settings");
-$("visionBtn").onclick = () => openPanel("visionPanel");
+$("visionBtn").onclick = () => toggleLowVision();
+$("lowVisionBtn").onclick = () => toggleLowVision();
+$("lowVisionTop").onclick = () => toggleLowVision();
+$("lowVisionSwitch").onchange = e => { if (e.target.checked !== !!S.settings.lowVision) toggleLowVision(); };
+// (1.29) «نمایش درشت و پررنگ», the low-vision mode: one touch makes everything large and strong (yellow on black, large text and buttons, a large
+// cursor, one sentence per line); a second touch brings back exactly what was set before
+const LOW_VISION = { theme: "blackyellow", fontSize: 34, lineHeight: 2.6, uiScale: 1.3, cursor: "large", sentenceLines: true };
+function toggleLowVision() {
+  const s = S.settings;
+  if (!s.lowVision) {
+    const prev = {};
+    for (const k of Object.keys(LOW_VISION)) prev[k] = s[k];
+    s.lowVisionPrev = prev;
+    for (const [k, v] of Object.entries(LOW_VISION)) s[k] = k === "fontSize" ? Math.max(v, Number(s.fontSize) || 0) : v;
+    s.lowVision = true;
+    toast("نمایش درشت و پررنگ روشن شد. برای بازگشت، همین دکمه یا چشم بالای صفحه را دوباره بزنید.");
+  } else {
+    const prev = s.lowVisionPrev && typeof s.lowVisionPrev === "object" ? s.lowVisionPrev : {};
+    const normal = { theme: "modern", fontSize: 21, lineHeight: 2.2, uiScale: 1, cursor: "large", sentenceLines: true };
+    for (const k of Object.keys(LOW_VISION)) s[k] = prev[k] !== undefined && prev[k] !== null ? prev[k] : normal[k];
+    s.lowVision = false; s.lowVisionPrev = {};
+    toast("نمایش معمولی برگشت.");
+  }
+  setSetting("lowVision", s.lowVision);
+}
 $("visionFontDown").onclick = () => setFontSize(Number(S.settings.fontSize) - 2);
 $("visionFontUp").onclick = () => setFontSize(Number(S.settings.fontSize) + 2);
 $("focusBtn").onclick = () => setSetting("focusMode", !S.settings.focusMode);
@@ -1776,7 +1813,12 @@ new MutationObserver(() => { if ($("libPanel").hidden) libStop(); }).observe($("
 
 /* ---------------- misc ---------------- */
 let toastT;
-function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3500); }
+// (1.29) a message stays long enough to be read slowly or through a magnifier: at least 6 seconds and longer for a longer message,
+// twice as long with «نمایش درشت و پررنگ»; a touch closes it sooner (it used to vanish after 3.5 seconds, however long it was)
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT);
+  const ms = Math.max(6000, 2500 + String(msg).length * 70) * (S.settings && S.settings.lowVision ? 2 : 1);
+  t.onclick = () => { clearTimeout(toastT); t.hidden = true; };
+  toastT = setTimeout(() => t.hidden = true, ms); }
 let resizeT; addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => S.doc && S.view === "page" && renderPageImage(), 250); });
 
 async function init() {

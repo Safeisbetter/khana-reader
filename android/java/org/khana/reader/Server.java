@@ -314,9 +314,16 @@ final class Server {
         Map<String, String> h = new HashMap<>();
         h.put("Cache-Control", "no-store");
         h.put("X-Content-Type-Options", "nosniff");
-        // Content-Security-Policy: strict defense-in-depth layer. The app already blocks network loads and has no JS interface,
-        // but CSP prevents any bypasses. 'unsafe-inline' is needed for the page's own CSS; external loads are blocked anyway.
-        h.put("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src 'self'; object-src 'none'");
+        // (the fallback policy of every reply that brings none of its own: nothing at all may run or load in it. The page, pdf.js's
+        // frame and its scripts send their own policies from the core, which replace this one)
+        h.put("Content-Security-Policy", "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+        // (1.29: and no power either, as GrapheneOS's PDF Viewer sends with every reply: no motion, orientation or light sensors,
+        // microphone, camera, location … The page and pdf.js's frame send their own lists from the core, which replace this one)
+        h.put("Permissions-Policy", "accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), bluetooth=(), camera=(), "
+            + "clipboard-read=(), clipboard-write=(), display-capture=(), document-domain=(), encrypted-media=(), fullscreen=(), gamepad=(), "
+            + "geolocation=(), gyroscope=(), hid=(), idle-detection=(), interest-cohort=(), local-fonts=(), magnetometer=(), microphone=(), "
+            + "midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), speaker-selection=(), "
+            + "storage-access=(), sync-xhr=(), usb=(), web-share=(), window-management=(), xr-spatial-tracking=()");
         return h;
     }
 }

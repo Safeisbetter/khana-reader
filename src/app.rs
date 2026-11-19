@@ -30,6 +30,9 @@ pub const VOICES: &[VoiceInfo] = &[
     VoiceInfo { id: "seda4", wav: "donated_imran.wav", name: "مدل صدا ۴", gender: "مرد", group: "natural", extra: false, tempo: 1.12 },
     VoiceInfo { id: "seda5", wav: "donated_taiyo.wav", name: "مدل صدا ۵", gender: "مرد", group: "natural", extra: false, tempo: 1.25 },
     VoiceInfo { id: "seda6", wav: "donated_roscoe.wav", name: "مدل صدا ۶", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
+    VoiceInfo { id: "seda7", wav: "donated_hkl.wav", name: "مدل صدا ۷", gender: "زن", group: "natural", extra: false, tempo: 1.0 },
+    VoiceInfo { id: "seda8", wav: "donated_erihppas.wav", name: "مدل صدا ۸", gender: "زن", group: "natural", extra: false, tempo: 1.0 },
+    VoiceInfo { id: "seda9", wav: "donated_aon.wav", name: "مدل صدا ۹", gender: "زن", group: "natural", extra: false, tempo: 1.12 },
 ];
 
 pub fn data_dir() -> PathBuf {
@@ -93,7 +96,7 @@ fn all_voices() -> Vec<(String, String, String, String)> {
 fn default_settings() -> Map<String, Value> {
     let first = voices().first().map(|v| v.id).unwrap_or("");
     let v = json!({"voice": first, "speed": 1.0, "fontSize": 21, "lineHeight": 2.2, "reversed": false, "persianYeh": true, "autoNext": true,
-                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "font": "vazir", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "normal", "cursor": "large", "accent": "blue", "iconStyle": "glossy", "corners": "round", "startSound": true});
+                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "font": "vazir", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "normal", "cursor": "large", "accent": "blue", "iconStyle": "glossy", "corners": "round", "startSound": true, "uiScale": 1, "lowVision": false, "lowVisionPrev": {}, "text3d": false, "wordSpacing": "normal"});
     v.as_object().unwrap().clone()
 }
 
@@ -176,6 +179,10 @@ impl Speech {
     }
 
     pub fn synthesize(&self, text: &str, voice_id: &str, speed: f64, quick: bool, cancel: &(dyn Fn() -> bool + Sync)) -> Result<(Vec<f32>, usize), String> {
+        self.synthesize_in_order(text, voice_id, speed, quick, None, cancel)
+    }
+
+    pub fn synthesize_in_order(&self, text: &str, voice_id: &str, speed: f64, quick: bool, order: Option<u64>, cancel: &(dyn Fn() -> bool + Sync)) -> Result<(Vec<f32>, usize), String> {
         let all = voices();
         let (id, wav, tempo) = if voice_id == "mine" && my_voice().is_file() {
             ("mine".to_string(), my_voice(), 1.0)
@@ -195,7 +202,7 @@ impl Speech {
         let recent = self.last_play.lock().unwrap().map_or(false, |t| t.elapsed() < Duration::from_secs(30));
         let workers = if recent { 3 } else { 5 };
         let workers = std::env::var("KHANA_WORKERS").ok().and_then(|v| v.parse::<usize>().ok()).filter(|n| (1..=8).contains(n)).unwrap_or(workers);
-        let mut a = eng.synthesize_text(&text, &id, &wav, workers, quick, cancel)?;
+        let mut a = eng.synthesize_text_in_order(&text, &id, &wav, workers, quick, order, cancel)?;
         if (speed - 1.0).abs() >= 0.008 && !a.is_empty() {
             a = crate::stretch::stretch(&a, speed, tts::RATE);
         }
@@ -422,12 +429,15 @@ fn adapt_to_device_speed() {
     }
     let speed = *READ_SPEED.lock().unwrap();
     let listening = tts::LISTEN.load(Ordering::Relaxed);
-    let listen = match speed {
-        None => true,
-        Some(r) => if listening { r >= 1.3 } else { r > 2.6 },
+    let (listen, tries) = match speed {
+        None => if cfg!(any(target_os = "android", target_os = "ios")) { (false, 2) } else { (true, 5) },
+        Some(r) => {
+            let listen = if listening { r >= 2.0 } else { r > 2.6 };
+            (listen, if listen { 5 } else if r >= 1.8 { 3 } else { 2 })
+        }
     };
     tts::LISTEN.store(listen, Ordering::Relaxed);
-    tts::set_max_tries(match speed { Some(r) if !listen && r < 1.0 => 2, _ => 5 });
+    tts::set_max_tries(tries);
 }
 
 fn note_reading_speed(speech_seconds: f64, took: f64) {
@@ -1317,10 +1327,11 @@ impl App {
                 let speed = req.get("speed").and_then(|v| v.as_f64()).unwrap_or(1.0);
                 let asked_gen = req.get("gen").and_then(|v| v.as_u64()).unwrap_or(0);
                 let quick = req.get("quick").and_then(|v| v.as_bool()).unwrap_or(false);
+                let order = req.get("order").and_then(|v| v.as_u64());
                 let dropped = move || asked_gen > 0 && asked_gen < TTS_GEN.load(Ordering::Relaxed);
                 speech().mark_play();
                 adapt_to_device_speed();
-                let (a, rate) = match speech().synthesize(&text, &voice, speed, quick, &dropped) {
+                let (a, rate) = match speech().synthesize_in_order(&text, &voice, speed, quick, order, &dropped) {
                     Ok(r) => r,
                     Err(_) if dropped() => return Err(bad("cancelled")),
                     Err(e) => return Err(ApiError::Internal(e)),

@@ -1,8 +1,0 @@
-<!-- Khana's icon (1.27.1): an open book with sound bars rising from it, a book read aloud. Drawn in the 108 x 108 adaptive-icon
-     space and scaled to 90 % around the centre, so every part stays inside the 66 dp circle any launcher's mask keeps. -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-  <group android:scaleX="0.9" android:scaleY="0.9" android:translateX="5.4" android:translateY="5.4">
-    <path android:fillColor="#FFFFFF" android:pathData="M52.5,80 C45,74 36,73 26,75 V51 C36,49 45,50 52.5,56 Z M55.5,80 C63,74 72,73 82,75 V51 C72,49 63,50 55.5,56 Z" />
-    <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFF" android:strokeWidth="4.5" android:strokeLineCap="round" android:pathData="M40,34 V39 M47,29 V43 M54,24 V47 M61,29 V43 M68,34 V39" />
-  </group>
-</vector>

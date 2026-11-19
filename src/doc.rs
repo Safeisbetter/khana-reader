@@ -554,8 +554,13 @@ pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
         p.descendants().filter(|t| is(t, "t")).map(|t| t.text().unwrap_or("")).collect()
     };
     let mut pages = Vec::new();
+    let mut read_total = 0u64;
     for path in slides {
         let xml = zip_read(&mut z, &path).unwrap_or_default();
+        read_total += xml.len() as u64;
+        if read_total > 200 * 1024 * 1024 {
+            return Err("این فایل پاورپوینت باز نشد. شاید خراب باشد.".into());
+        }
         let Ok(root) = roxmltree::Document::parse_with_options(&xml, crate::ebook::xml_options(false)) else {
             return Err("این فایل پاورپوینت باز نشد. شاید خراب باشد.".into());
         };
