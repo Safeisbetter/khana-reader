@@ -45,14 +45,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # Microsoft's onnxruntime page on GitHub is gone (2026-11-18), so the DLL is taken from Khana's own
-          # v1.27 Windows package, which carries onnxruntime.dll from the size-checked Microsoft 1.19.2 zip.
-          gh release download v1.27 --repo $env:GITHUB_REPOSITORY -p KhanaReader-Windows-light-experimental.zip -D ortpkg
+          # v1.30 Windows package, which carries onnxruntime.dll from the size-checked Microsoft 1.19.2 zip.
+          gh release download v1.30 --repo $env:GITHUB_REPOSITORY -p KhanaReader-Windows-full-experimental.zip -D ortpkg
           if ($LASTEXITCODE -ne 0) { throw "ONNX Runtime package download failed" }
-          if ((Get-FileHash ortpkg/KhanaReader-Windows-light-experimental.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne "5f37dc64a46304a5e318569ba45397141a33445495a629b655eb9ea838cc6105") { throw "ONNX Runtime package checksum mismatch" }
-          Expand-Archive ortpkg/KhanaReader-Windows-light-experimental.zip -DestinationPath ortpkg/x
+          if ((Get-FileHash ortpkg/KhanaReader-Windows-full-experimental.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne "6df163a220814887a2a5c30e4e0405cad851c6e3dab2cc7c50a15f86b3cf1acd") { throw "ONNX Runtime package checksum mismatch" }
+          Expand-Archive ortpkg/KhanaReader-Windows-full-experimental.zip -DestinationPath ortpkg/x
           New-Item -ItemType Directory -Force ort | Out-Null
           $dll = Get-ChildItem -Recurse ortpkg/x -Filter onnxruntime*.dll
-          if (-not $dll) { throw "onnxruntime.dll not found in the v1.27 package" }
+          if (-not $dll) { throw "onnxruntime.dll not found in the v1.30 package" }
           $dll | ForEach-Object { Copy-Item $_.FullName ort/ }
           Remove-Item -Recurse -Force ortpkg
 
