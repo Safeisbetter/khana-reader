@@ -362,3 +362,52 @@ The models and prebuilt libraries are too large for this repository; the credits
 (`KHANA_LITE=1` for the light one). The Windows app is built by GitHub (`.github/workflows/windows.yml`), with every outside step
 pinned to an exact commit. A release of your own needs your own Android signing key. The code has unit tests (`cargo test --lib`)
 and a self-test that runs the real window (`KHANA_SELFTEST=<file>`).
+
+## Making Khana for another language
+
+Khana is open source, and you are welcome to make a reader for your own language from it. Please give it another name and icon,
+so that people can tell the two apps apart, and keep the credits and the non-commercial rule of the models. What is Persian-specific:
+
+| Part | Where | What to change |
+|---|---|---|
+| Words on the screen | `web/index.html`, `web/app.js` | Translate the text; set `lang` and `dir` (`ltr` for left-to-right scripts) on `<html>`. |
+| Cleaning the text | `src/normfa.rs`, `src/text.rs` | Letter forms, digits and spacing rules of your script. |
+| Pronunciation | `src/g2p.rs`, `src/lexicon.rs`, `src/phon.rs` | The rules and word list that turn written words into sounds. A language whose spelling shows all vowels needs far less here than Persian. |
+| Voice | `models/voices`, `src/tts.rs`, `src/voice.rs` | A text-to-speech model trained on your language, and its voice samples. |
+| Listening check | `models/asr`, `src/asr.rs` | A [Vosk](https://alphacephei.com/vosk/models) model for your language, used to catch a misread sentence. |
+| Translation | `models/translate`, `src/translate.rs` | NLLB-200 already covers about 200 languages; set your language's code. |
+| Scanned pages | `models/ocr`, `src/ocr.rs` | A PaddleOCR recogniser for your script. |
+
+### A developer build
+
+1. Install Rust (`rustup`), and for Android the toolchain that `android/build.sh` names (Android SDK, NDK, JDK).
+2. Put the models in `models/` as listed in `MODELS.sha256`, and check them with `shasum -a 256 -c MODELS.sha256`.
+3. Run the tests: `cargo test --lib`.
+4. Build: `tools/make_app.sh` (Mac), `KHANA_LITE=1 android/build.sh` (Android, light version), or the Windows workflow.
+5. Make your **own** Android signing key; never use or ask for someone else's.
+
+The app must stay fully offline: it opens no network connection, and `unsafe` code is kept in `src/ffi` only. Please keep it so.
+
+## Is the code here the real code?
+
+Only this repository and its Releases page are the source. Before installing, compare your download with `SHA256SUMS.txt` of the
+release, and on Android check that the signing certificate matches the one in this README. A copy elsewhere (Telegram, other sites)
+is safe only if its SHA-256 matches. Every change to the code is visible in the history of this repository.
+
+## Donate
+
+Khana is free and asks for nothing. If you want to give, please **donate to the [GrapheneOS](https://grapheneos.org/donate) team**:
+their free, private and secure Android protects people far more than any single app can, and much of Khana's care for safety comes
+from their work.
+
+<div dir="rtl" lang="fa">
+
+### ساختن خوانا برای زبانی دیگر
+
+کد خوانا آزاد است و می‌توانید از آن برنامه‌ای برای زبان خودتان بسازید؛ لطفاً نام و نشانه‌ی دیگری به آن بدهید و قدردانی‌ها و شرط غیرتجاری مدل‌ها را نگه دارید. جدول بالا نشان می‌دهد کدام بخش‌ها مخصوص فارسی‌اند. برنامه باید کاملاً بدون اینترنت بماند.
+
+### کمک مالی
+
+خوانا رایگان است و چیزی نمی‌خواهد. اگر می‌خواهید کمک کنید، لطفاً به [تیم GrapheneOS](https://grapheneos.org/donate) کمک کنید.
+
+</div>

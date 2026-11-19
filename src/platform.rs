@@ -79,7 +79,7 @@ mod imp {
     pub fn to_wav24k(src: &Path, dst: &Path) -> bool {
         let Ok((a, rate)) = crate::audio::read_wav(src) else { return false };
         let rate = rate as usize;
-        if rate == 0 {
+        if !(4000..=192_000).contains(&rate) {
             return false;
         }
         let g = gcd(rate, 24000);
@@ -188,7 +188,7 @@ mod imp {
     pub fn to_wav24k(src: &Path, dst: &Path) -> bool {
         let Ok((a, rate)) = crate::audio::read_wav(src) else { return false };
         let rate = rate as usize;
-        if rate == 0 {
+        if !(4000..=192_000).contains(&rate) {
             return false;
         }
         let g = gcd(rate, 24000);

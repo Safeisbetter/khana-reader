@@ -95,8 +95,8 @@ fn all_voices() -> Vec<(String, String, String, String)> {
 
 fn default_settings() -> Map<String, Value> {
     let first = voices().first().map(|v| v.id).unwrap_or("");
-    let v = json!({"voice": first, "speed": 1.0, "fontSize": 21, "lineHeight": 2.2, "reversed": false, "persianYeh": true, "autoNext": true,
-                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "font": "vazir", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "normal", "cursor": "large", "accent": "blue", "iconStyle": "glossy", "corners": "round", "startSound": true, "uiScale": 1, "lowVision": false, "lowVisionPrev": {}, "text3d": false, "wordSpacing": "normal"});
+    let v = json!({"voice": first, "speed": 1.0, "fontSize": 21, "lineHeight": 2.2, "reversed": false, "persianYeh": true, "autoNext": true, "focusMode": false, "lowVisionColor": "yellow",
+                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "font": "vazir", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "normal", "cursor": "large", "accent": "khana", "accentFixed": true, "iconStyle": "glossy", "corners": "round", "startSound": true, "uiScale": 1, "lowVision": false, "lowVisionPrev": {}, "text3d": false, "wordSpacing": "normal"});
     v.as_object().unwrap().clone()
 }
 
@@ -415,7 +415,7 @@ struct Mp3Req {
     end_word: bool,
 }
 
-static JOB_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static JOBS_RUNNING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static READ_SPEED: Mutex<Option<f64>> = Mutex::new(None);
 
 fn adapt_to_device_speed() {
@@ -424,19 +424,19 @@ fn adapt_to_device_speed() {
         tts::set_max_tries(2);
         return;
     }
-    if JOB_RUNNING.load(Ordering::Relaxed) || std::env::var("KHANA_FIXED_LISTEN").is_ok() {
+    if (JOBS_RUNNING.load(Ordering::Relaxed) > 0) || std::env::var("KHANA_FIXED_LISTEN").is_ok() {
         return;
     }
     let speed = *READ_SPEED.lock().unwrap();
-    let listening = tts::LISTEN.load(Ordering::Relaxed);
-    let (listen, tries) = match speed {
+    let (full, tries) = match speed {
         None => if cfg!(any(target_os = "android", target_os = "ios")) { (false, 2) } else { (true, 5) },
         Some(r) => {
-            let listen = if listening { r >= 2.0 } else { r > 2.6 };
-            (listen, if listen { 5 } else if r >= 1.8 { 3 } else { 2 })
+            let full = if tts::LISTEN_LIGHT.load(Ordering::Relaxed) { r > 2.6 } else { r >= 2.0 };
+            (full, if full { 5 } else if r >= 1.8 { 3 } else { 2 })
         }
     };
-    tts::LISTEN.store(listen, Ordering::Relaxed);
+    tts::LISTEN.store(true, Ordering::Relaxed);
+    tts::LISTEN_LIGHT.store(!full, Ordering::Relaxed);
     tts::set_max_tries(tries);
 }
 
@@ -453,9 +453,10 @@ struct ListenAgain;
 
 impl Drop for ListenAgain {
     fn drop(&mut self) {
-        tts::LISTEN.store(true, Ordering::Relaxed);
-        tts::set_max_tries(5);
-        JOB_RUNNING.store(false, Ordering::Relaxed);
+        if JOBS_RUNNING.fetch_sub(1, Ordering::SeqCst) == 1 {
+            tts::LISTEN.store(true, Ordering::Relaxed);
+            tts::set_max_tries(5);
+        }
     }
 }
 
@@ -479,9 +480,10 @@ fn export_groups(paras: &[String]) -> Vec<String> {
 }
 
 fn run_job(job: Arc<Job>, r: Mp3Req) {
+    JOBS_RUNNING.fetch_add(1, Ordering::SeqCst);
     let _listen = ListenAgain;
-    JOB_RUNNING.store(true, Ordering::Relaxed);
     tts::LISTEN.store(!r.fast, Ordering::Relaxed);
+    tts::LISTEN_LIGHT.store(false, Ordering::Relaxed);
     tts::set_max_tries(if r.fast { 3 } else { 5 });
     let wav = r.format == "wav" || r.format == "m4a";
     let scratch = match crate::private_fs::TempDir::new() {
@@ -673,7 +675,11 @@ fn run_pdf_job(job: Arc<Job>, doc: Arc<Document>, first: usize, last: usize, opt
             blocks.push(Block::Paragraph(END_WORD));
         }
         let font = VAZIRMATN.to_vec();
-        let saved = unique_path(save_dir().join(&job.filename));
+        let mut saved = unique_path(save_dir().join(&job.filename));
+        while std::fs::OpenOptions::new().write(true).create_new(true).open(&saved).is_err() {
+            if !saved.exists() { break; }
+            saved = unique_path(saved);
+        }
         crate::platform::farsi_pdf(&blocks, &font, &saved)?;
         crate::platform::saved(&saved, "pdf");
         *job.saved.lock().unwrap() = Some(saved);
@@ -901,6 +907,12 @@ impl App {
         }
         if method == "GET" && path == "/Vazirmatn.woff2" {
             return Reply { status: 200, ctype: "font/woff2", body: VAZIRMATN.to_vec(), headers: Vec::new() };
+        }
+        if method == "GET" && path == "/NotoNaskhArabic-Regular.ttf" {
+            return Reply { status: 200, ctype: "font/ttf", body: std::fs::read(web.join("NotoNaskhArabic-Regular.ttf")).unwrap_or_default(), headers: Vec::new() };
+        }
+        if method == "GET" && path == "/NotoNaskhArabic-Bold.ttf" {
+            return Reply { status: 200, ctype: "font/ttf", body: std::fs::read(web.join("NotoNaskhArabic-Bold.ttf")).unwrap_or_default(), headers: Vec::new() };
         }
         let authed = token_ok(token, &self.token);
         if !path.starts_with("/api/") || !authed {
@@ -1346,7 +1358,7 @@ impl App {
             }
             "mp3fast_post" => {
                 let fast = body_json()?.get("fast").and_then(|v| v.as_bool()).unwrap_or(false);
-                if JOB_RUNNING.load(Ordering::Relaxed) {
+                if JOBS_RUNNING.load(Ordering::Relaxed) > 0 {
                     tts::LISTEN.store(!fast, Ordering::Relaxed);
                     tts::set_max_tries(if fast { 3 } else { 5 });
                 }

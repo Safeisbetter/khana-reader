@@ -84,10 +84,11 @@ pub fn epub_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
         .filter_map(|n| Some((n.attribute("id")?.to_string(), n.attribute("href")?.to_string())))
         .collect();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let by_id: std::collections::HashMap<&str, &str> = items.iter().rev().map(|i| (i.0.as_str(), i.1.as_str())).collect();
     let mut used: u64 = 0;
     let mut out = Vec::new();
     for r in o.descendants().filter(|n| n.tag_name().name() == "itemref") {
-        let Some(href) = r.attribute("idref").and_then(|id| items.iter().find(|i| i.0 == id)).map(|i| i.1.clone()) else { continue };
+        let Some(href) = r.attribute("idref").and_then(|id| by_id.get(id)).map(|h| h.to_string()) else { continue };
         let mut path: Vec<&str> = Vec::new();
         let full = format!("{base}{}", href.split('#').next().unwrap_or(""));
         for seg in full.split('/') {

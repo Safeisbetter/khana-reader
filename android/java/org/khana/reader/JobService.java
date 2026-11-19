@@ -61,7 +61,8 @@ public final class JobService extends Service {
                 handler.postDelayed(this::check, CHECK_MS);
             } else {
                 Exporter.drain(this);
-                handler.post(this::stopSelf);
+                // (1.29 deep check: asked again on the main thread; a job started in between kept its service)
+                handler.post(() -> { if (Native.busy()) handler.postDelayed(this::check, CHECK_MS); else stopSelf(); });
             }
         }, "khana-job-check").start();
     }

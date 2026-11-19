@@ -43,6 +43,53 @@ pub fn core(word: &str) -> String {
     sub(r"^[^\w]+|[^\w‌]+$", "", word).replace('\u{064b}', "")
 }
 
+pub fn consonants_ok(word: &str, ph: &str) -> bool {
+    let mut want = String::new();
+    for c in word.chars() {
+        let m = match c {
+            'ب' => 'b', 'پ' => 'p', 'ت' | 'ط' => 't', 'ث' | 'س' | 'ص' => 's', 'ج' => 'j', 'چ' => 'C', 'خ' => 'x', 'د' => 'd',
+            'ذ' | 'ز' | 'ض' | 'ظ' => 'z', 'ر' => 'r', 'ژ' => ';', 'ش' => 'S', 'غ' | 'ق' => 'q', 'ف' => 'f', 'ک' | 'ك' => 'k',
+            'گ' => 'g', 'ل' => 'l', 'م' => 'm', 'ن' | '\u{064B}' => 'n',
+            'ا' | 'آ' | 'و' | 'ی' | 'ي' | 'ى' | 'ه' | 'ة' | 'ۀ' | 'ع' | 'ء' | 'أ' | 'إ' | 'ئ' | 'ؤ' | 'ح' | '\u{200c}' => continue,
+            c if ('\u{064C}'..='\u{0652}').contains(&c) || c == '\u{0670}' => continue,
+            _ => return true,
+        };
+        if !want.ends_with(m) { want.push(m); }
+    }
+    let ends_yeh = word.ends_with(['ی', 'ي']) && word.chars().rev().nth(1).is_some_and(|c| !"اآوی‌".contains(c) && c != '\u{200c}');
+    if ends_yeh && word.chars().count() >= 3 {
+        let r = ph.trim_end_matches(['1', '-']);
+        let r = r.strip_suffix("ye").unwrap_or(r);
+        if !r.ends_with(['i', 'y', 'A']) { return false; }
+    }
+    if word.ends_with('ا') && !want.is_empty() && ph.trim_end_matches('1').ends_with("an") && !want.ends_with('n') { want.push('n'); }
+    let ph = ph.replace("gh", "q");
+    let mut got = String::new();
+    for c in ph.chars().filter(|c| "bptsjCxdzr;Sqfkglmn".contains(*c)) {
+        if !got.ends_with(c) { got.push(c); }
+    }
+    want == got
+}
+
+pub fn no_ezafe_before_verb(ph: &str) -> String {
+    const VERBS: &[&str] = &["kard", "kardam", "kardi", "kardim", "kardid", "kardand", "Sod", "Sodam", "Sodi", "Sodim", "Sodid", "Sodand",
+        "bud", "budam", "budi", "budim", "budid", "budand", "raft", "raftam", "raftand", "dAd", "dAdam", "dAdand", "goft", "goftam",
+        "goftand", "dASt", "dAStam", "dAStand", "?Amad", "?Amadam", "?Amadand", "mord", "mordand", "gereft", "gereftam", "gereftand",
+        "?ast", "hast", "nist", "hastand", "nistand", "hastam", "nistam"];
+    const NUMBERS: &[&str] = &["yek", "do", "se", "CahAr", "panj", "SeS", "haft", "haSt", "noh", "dah", "yAzdah", "davAzdah", "sizdah",
+        "CahArdah", "pAnzdah", "SAnzdah", "hefdah", "hejdah", "nuzdah", "bist", "si", "Cehel", "panjAh", "haftAd", "haStAd", "navad"];
+    let mut w: Vec<String> = split_ws(ph).iter().map(|s| s.to_string()).collect();
+    for i in 0..w.len().saturating_sub(1) {
+        let number = NUMBERS.contains(&w[i].trim_end_matches("e1")) && !NUMBERS.contains(&w[i + 1].as_str()) && w[i + 1] != "?o";
+        if (VERBS.contains(&w[i + 1].as_str()) || number) && w[i].ends_with("e1") && (w[i].chars().count() > 3 || number) {
+            let base = &w[i][..w[i].len() - 2];
+            let base = if base.ends_with('y') && base[..base.len() - 1].ends_with(['A', 'u', 'o', 'i', 'e']) { &base[..base.len() - 1] } else { base };
+            w[i] = base.to_string();
+        }
+    }
+    w.join(" ")
+}
+
 pub fn align_words(words: &[String], phw: &[String]) -> Vec<(usize, usize)> {
     if words.len() == phw.len() {
         return (0..words.len()).map(|i| (i, i)).collect();
@@ -122,6 +169,53 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("رایانش", "rAyAneS"),
     ("رایانش ابری", "rAyAneSe ?abri"),
     ("بروم", "beravam"),
+    ("کشتی", "keSti"), ("کشتی‌ها", "keStihA"), ("کشتی گرفتن", "koSti gereftan"), ("کشتی گرفت", "koSti gereft"),
+    ("کشتی گرفتند", "koSti gereftand"), ("کشتی می‌گیرند", "koSti migirand"), ("کشتی می‌گرفتند", "koSti migereftand"),
+    ("کشتی آزاد", "koSti ?AzAd"), ("کشتی فرنگی", "koSti farangi"),
+    ("نکند", "nakonad"), ("نکنی", "nakoni"), ("نکنم", "nakonam"), ("نکنند", "nakonand"), ("بکنید", "bekonid"), ("بکنم", "bekonam"),
+    ("بکنی", "bekoni"), ("بکند", "bekonad"), ("بکنیم", "bekonim"), ("بکنند", "bekonand"),
+    ("چهارشنبه‌سوری", "CahArSanbesuri"), ("چهارشنبه سوری", "CahArSanbesuri"),
+    ("شوید", "Savid"), ("نشوید", "naSavid"), ("جلد", "jeld"), ("کبد", "kabed"), ("مایل", "mAyel"), ("پنل", "panel"), ("پانل", "pAnel"),
+    ("فقه", "feqh"), ("جور", "jur"), ("جزو", "jozv"), ("مجتمع", "mojtama?"), ("السلام", "?assalAm"), ("بده", "bede"), ("نیا", "nayA"),
+    ("شرب", "Sorb"), ("نوسان", "navasAn"), ("مشرق", "maSreq"), ("غدد", "qodad"), ("وزرا", "vozarA"), ("وزرای", "vozarAye"),
+    ("روسای", "ro?asAye"), ("رؤسای", "ro?asAye"), ("روسا", "ro?asA"), ("رؤسا", "ro?asA"), ("مصدق", "mosaddeq"), ("مهدوی", "mahdavi"),
+    ("روبه‌رو", "ruberu"), ("روبرو", "ruberu"), ("روبه رو", "ruberu"), ("جست‌وجو", "jostoju"), ("جستجو", "jostoju"), ("جست و جو", "jostoju"),
+    ("گفت‌وگو", "goftogu"), ("گفتگو", "goftogu"), ("گفت و گو", "goftogu"), ("ارایه", "?erA?e"), ("ارائه", "?erA?e"), ("هیات", "hey?at"),
+    ("هیأت", "hey?at"), ("هیئت", "hey?at"), ("گاها", "gAhan"), ("گاهاً", "gAhan"), ("ناچارا", "nACAran"), ("ناچاراً", "nACAran"),
+    ("ایرانسل", "?irAnsel"),
+    ("ارگ", "?arg"), ("مشترکان", "moStarekAn"), ("سرب", "sorb"), ("لکن", "lAken"), ("گریم", "gerim"), ("راهور", "rAhvar"), ("فورا", "foran"),
+    ("فوراً", "foran"), ("یائسگی", "yA?esegi"), ("متد", "metod"), ("هفدهم", "hefdahom"), ("مجرای", "majrAye"), ("شنود", "Senud"),
+    ("نبوت", "nobovvat"), ("نصاب", "nesAb"), ("شعاع", "So?A?"), ("مبدأ", "mabda?"), ("مبدا", "mabda?"), ("پرشین", "parSin"),
+    ("مولف", "mo?allef"), ("مؤلف", "mo?allef"), ("بسم", "besm"), ("هیدروژن", "hidro;en"), ("مستر", "mester"), ("یوونتوس", "yuventus"),
+    ("بطن", "batn"), ("صحیحی", "sahihi"), ("اهلبیت", "?ahlebeyt"), ("اهل‌بیت", "?ahlebeyt"), ("سیدالشهدا", "seyyedoSSohadA"),
+    ("ارس", "?aras"), ("فول", "ful"), ("محول", "mohavval"), ("حکام", "hokkAm"),
+    ("اسپم", "?espam"), ("بیع", "bey?"), ("ضایعه", "zAye?e"), ("گود", "gowd"), ("خلیج‌فارس", "xalije fArs"), ("خلیجفارس", "xalije fArs"),
+    ("خلیج فارس", "xalije fArs"), ("سهیل", "sohayl"), ("طیبه", "tayyebe"), ("نامجو", "nAmju"), ("معراج", "me?rAj"),
+    ("عبدالعزیز", "?abdol?aziz"), ("کوانتومی", "kuAntomi"), ("زیپ", "zip"), ("مسطح", "mosattah"), ("شمش", "SemS"), ("پُر", "por"),
+    ("احد", "?ahad"), ("تاسوعا", "tAsu?A"), ("السّلام", "?assalAm"), ("سپه", "sepah"), ("گجت", "gajet"), ("چشمم", "CeSmam"),
+    ("موید", "mo?ayyed"), ("مؤید", "mo?ayyed"), ("سه‌گانه", "segAne"), ("سهگانه", "segAne"), ("رؤیت", "ro?yat"), ("رویت", "ro?yat"),
+    ("ولوو", "volvo"), ("راکد", "rAked"), ("متعاقبا", "mote?Aqeban"), ("متعاقباً", "mote?Aqeban"), ("معاند", "mo?Aned"),
+    ("کرملین", "kremlin"),
+    ("بایت", "bAyt"), ("کمیل", "komeyl"), ("بهسوی", "besuye"), ("به‌سوی", "besuye"), ("مبرم", "mobram"), ("هلال‌احمر", "helAle ahmar"),
+    ("هلالاحمر", "helAle ahmar"), ("هلال احمر", "helAle ahmar"), ("هفدهمین", "hefdahomin"), ("ستار", "sattAr"), ("ستارخان", "sattArxAn"),
+    ("لود", "lod"), ("ماکرون", "mAkron"), ("ملقب", "molaqqab"), ("تأویل", "ta?vil"), ("اوستا", "?avestA"), ("مصلای", "mosallAye"),
+    ("مصلی", "mosallA"), ("مرودشت", "marvdaSt"), ("شهرری", "Sahre rey"), ("شهر ری", "Sahre rey"), ("والامقام", "vAlAmaqAm"),
+    ("دیون", "doyun"), ("هامبورگ", "hAmburg"), ("زیمنس", "zimens"), ("وبر", "veber"), ("لیبل", "leybel"), ("تیمم", "tayammom"),
+    ("ازن", "?ozon"), ("بهموقع", "bemowqe?"), ("به‌موقع", "bemowqe?"), ("عبارتاند", "?ebAratand"), ("عبارت‌اند", "?ebAratand"),
+    ("مردد", "moradded"), ("سهیلی", "sohayli"), ("سهیلا", "soheylA"), ("امثالهم", "?amsAlehem"), ("نهجالبلاغه", "nahjolbalAqe"),
+    ("نهج‌البلاغه", "nahjolbalAqe"), ("اینشتین", "?inSteyn"),
+    ("مبداء", "mabda?"), ("میلر", "miler"), ("مشاع", "moSA?"), ("تیمملی", "time melli"), ("پلیر", "pleyer"), ("مفتح", "mofatteh"),
+    ("مفسد", "mofsed"), ("لوپز", "lopez"), ("کوانتوم", "kuAntom"), ("بیوقفه", "biveqfe"), ("بی‌وقفه", "biveqfe"), ("مجد", "majd"),
+    ("المنت", "?elemAnt"), ("برگزیت", "bregzit"), ("هاوکینگ", "hAking"), ("میایستد", "miistad"), ("می‌ایستد", "miistad"),
+    ("کارن", "kAren"), ("جوید", "juyid"), ("کمنظیر", "kamnazir"), ("کم‌نظیر", "kamnazir"), ("فوتون", "foton"), ("مشرک", "moSrek"),
+    ("پرشیا", "parSiyA"),
+    ("اخص", "?axass"), ("درایران", "dar ?irAn"), ("بهسمت", "besamte"), ("به‌سمت", "besamte"), ("دبلیو", "dabelyu"), ("پتنت", "patent"),
+    ("دایرکت", "dAyrekt"), ("نساء", "nesA?"), ("سیدالشهداء", "seyyedoSSohadA"), ("کلود", "klod"), ("فولادوند", "fulAdvand"),
+    ("میشکند", "miSkanad"), ("می‌شکند", "miSkanad"), ("شیوخ", "Soyux"), ("منصه", "manasse"), ("امل", "?amal"), ("هاتف", "hAtef"),
+    ("تأسی", "ta?assi"), ("دجال", "dajjAl"), ("فرقان", "forqAn"), ("حبیبالله", "habibollAh"), ("حبیب‌الله", "habibollAh"),
+    ("ملانین", "melAnin"), ("قصهگویی", "qesseguyi"), ("قصه‌گویی", "qesseguyi"), ("ندبه", "nodbe"), ("مجرا", "majrA"),
+    ("محرمات", "moharramAt"), ("مصراع", "mesrA?"), ("گلر", "goler"), ("عبدالعلی", "?abdol?ali"), ("شمر", "Semr"),
+    ("متدولوژی", "metodolo;i"), ("تراورتن", "trAverten"), ("پرنسس", "prenses"), ("عالیرتبه", "?Alirotbe"), ("عالی‌رتبه", "?Alirotbe"), ("افکت", "?efekt"), ("گیتار", "gitAr"), ("عفو", "?afv"), ("اینست", "?inast"), ("والمسلمین", "valmoslemin"),
     ("بروی", "beravi"),
     ("یک و نیم", "yeko nim"),
     ("دو و نیم", "do?o nim"),
@@ -362,6 +456,8 @@ impl LexiconG2P {
 
     fn phonemise_uncached(&self, text: &str, keep_ezafe: bool) -> R {
         let mut text = sub(r"ق\.\s?م\.?", "قبل از میلاد", text);
+        text = sub(r"([\u0600-\u06FF]{2,})ه[ \u200c](گی|گان|گانی)(?![\u0600-\u06FF])", "\\1\\2", &text);
+        text = sub(r"(?<=[\u0600-\u06FF]ه) +(ی|ای)(?![\u0600-\u06FF\u200c])", "\u{200c}\\1", &text);
         text = sub(r"(?<=[\d۰-۹٠-٩]) قم(?![\w])", " قبل از میلاد", &text);
         text = sub(r"(?<=[\d۰-۹٠-٩])\s*ص\.?(?![\w])", " صفحه", &text);
         text = sub(r"(?<![\d۰-۹٠-٩])([\d۰-۹٠-٩]{2,4})\s*[-–]\s*([\d۰-۹٠-٩]{2,4})(?![\d۰-۹٠-٩])", r"\1 تا \2", &text);
@@ -475,8 +571,13 @@ impl LexiconG2P {
     }
 
     fn base_checked(&self, text: &str) -> R {
-        let ph = collapse_loops(&self.base.phonemise(text, true)?);
         let words: Vec<&str> = split_ws(text).into_iter().filter(|w| search(r"\w", w)).collect();
+        let raw = self.base.phonemise(text, true)?;
+        let mut ph = if split_ws(&raw).len() > words.len() { collapse_loops(&raw) } else { raw };
+        if words.len() >= 2 && words.len() <= 4 && split_ws(&ph).len() < words.len() && words.iter().all(|w| *w == words[0]) {
+            let one = collapse_loops(&self.base.phonemise(words[0], true)?);
+            if split_ws(&one).len() == 1 { ph = vec![one; words.len()].join(" "); }
+        }
         let n = split_ws(&ph).len();
         let nw = words.len();
         if (nw as isize - 1 <= n as isize && n <= nw) || nw < 4 || (n > nw && search(r"[0-9۰-۹٠-٩A-Za-z]", text)) {
@@ -497,16 +598,22 @@ impl LexiconG2P {
     }
 
     fn phonemise_marked(&self, text: &str, keep_ezafe: bool) -> R {
-        let mut ph = self.base_checked(text)?;
+        let mut ph = no_ezafe_before_verb(&self.base_checked(text)?);
         let words: Vec<String> = split_ws(text).into_iter().filter(|w| search(&format!("[{FA_LETTER}]"), w)).map(|s| s.to_string()).collect();
         let mut phw: Vec<String> = split_ws(&ph).iter().map(|s| s.to_string()).collect();
-        if phw.iter().any(|p| len(p) >= 3 && !has_vowel(p)) {
-            for (i, j) in align_words(&words, &phw) {
-                if len(&phw[j]) >= 3 && !has_vowel(&phw[j]) {
+        let pairs = align_words(&words, &phw);
+        let suspect = |i: usize, j: usize| (len(&phw[j]) >= 3 && !has_vowel(&phw[j])) || !consonants_ok(&words[i], &phw[j]);
+        if pairs.iter().any(|&(i, j)| suspect(i, j)) {
+            for (i, j) in pairs {
+                let no_vowel = len(&phw[j]) >= 3 && !has_vowel(&phw[j]);
+                if no_vowel || !consonants_ok(&words[i], &phw[j]) {
                     let alone: Vec<String> = split_ws(&self.base.phonemise(&words[i], true)?).iter().map(|s| s.to_string()).collect();
-                    if alone.len() == 1 && has_vowel(&alone[0]) {
-                        let one = if phw[j].ends_with('1') && !alone[0].ends_with('1') { "1" } else { "" };
-                        phw[j] = format!("{}{one}", alone[0]);
+                    if alone.len() == 1 && has_vowel(&alone[0]) && (no_vowel || consonants_ok(&words[i], &alone[0])) {
+                        let a = alone[0].trim_end_matches('1');
+                        let ez = if !phw[j].ends_with('1') || alone[0].ends_with('1') { "" }
+                            else if phw[j].ends_with("ye1") && a.ends_with(['A', 'u', 'o', 'i', 'e']) { "ye1" }
+                            else if phw[j].ends_with("e1") { "e1" } else { "1" };
+                        phw[j] = format!("{}{ez}", alone[0]);
                     }
                 }
             }
@@ -572,8 +679,10 @@ impl LexiconG2P {
             let ws: Vec<String> = split_ws(text).into_iter().filter(|w| search(&format!("[{FA_LETTER}]"), w)).map(|s| s.to_string()).collect();
             let mut pw: Vec<String> = split_ws(&ph).iter().map(|s| s.to_string()).collect();
             for (i, j) in align_words(&ws, &pw) {
-                if search("ش\u{200c}?ها", &ws[i]) && !pw[j].contains("ShA") {
-                    if let Some(k) = pw[j].rfind("SA") {
+                if search("ش\u{200c}?ها(?:ی|یی|یم|یت|یش|یمان|یتان|یشان)?[^\\p{L}]*$", &ws[i]) && !pw[j].contains("ShA") {
+                    let ends = ["", "y", "ye", "yi", "yam", "yat", "yaS", "yemAn", "yetAn", "yeSAn"];
+                    let at = pw[j].match_indices("SA").map(|(k, _)| k).filter(|&k| ends.contains(&pw[j][k + 2..].trim_end_matches('1'))).last();
+                    if let Some(k) = at {
                         pw[j].replace_range(k..k + 2, "ShA");
                     }
                 }
@@ -589,3 +698,4 @@ impl LexiconG2P {
         Ok(if keep_ezafe { ph } else { ph.replace('1', "") })
     }
 }
+
