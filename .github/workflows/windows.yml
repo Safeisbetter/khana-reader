@@ -13,7 +13,7 @@ on:
         type: boolean
         default: false
       tag:
-        description: "Existing release tag to upload the Windows packages to, for example v1.23"
+        description: "Existing release tag to upload the Windows packages to, for example v1.22"
         type: string
         required: false
         default: ""
@@ -27,7 +27,7 @@ permissions:
 env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: v1.29
+  MODELS_RELEASE: "v1.27"
 
 jobs:
   build:
@@ -35,26 +35,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [full]
+        edition: [light, full]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: ONNX Runtime for Windows
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          # Microsoft's onnxruntime page on GitHub is gone (2026-11-18), so the DLL is taken from Khana's own
-          # v1.27 Windows package, which carries onnxruntime.dll from the size-checked Microsoft 1.19.2 zip.
-          gh release download v1.27 --repo $env:GITHUB_REPOSITORY -p KhanaReader-Windows-light-experimental.zip -D ortpkg
-          if ($LASTEXITCODE -ne 0) { throw "ONNX Runtime package download failed" }
-          if ((Get-FileHash ortpkg/KhanaReader-Windows-light-experimental.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne "5f37dc64a46304a5e318569ba45397141a33445495a629b655eb9ea838cc6105") { throw "ONNX Runtime package checksum mismatch" }
-          Expand-Archive ortpkg/KhanaReader-Windows-light-experimental.zip -DestinationPath ortpkg/x
-          New-Item -ItemType Directory -Force ort | Out-Null
-          $dll = Get-ChildItem -Recurse ortpkg/x -Filter onnxruntime*.dll
-          if (-not $dll) { throw "onnxruntime.dll not found in the v1.27 package" }
-          $dll | ForEach-Object { Copy-Item $_.FullName ort/ }
-          Remove-Item -Recurse -Force ortpkg
+          Invoke-WebRequest "https://github.com/microsoft/onnxruntime/releases/download/v$env:ORT_VERSION/onnxruntime-win-x64-$env:ORT_VERSION.zip" -OutFile ort.zip
+          # (the file must be the size Microsoft published for this version: 64,540,734 bytes; GitHub gives no checksum for it)
+          if ((Get-Item ort.zip).Length -ne 64540734) { throw "onnxruntime zip: unexpected size $((Get-Item ort.zip).Length)" }
+          Expand-Archive ort.zip -DestinationPath ort
 
       - name: Models (from the Android download of the release)
         shell: pwsh
@@ -64,7 +55,7 @@ jobs:
           $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader.apk" } else { "KhanaReader-lite.apk" }
           gh release download $env:MODELS_RELEASE --repo $env:GITHUB_REPOSITORY -p $apk -D apk
           if ($LASTEXITCODE -ne 0) { throw "Model package download failed" }
-          $expected = if ("${{ matrix.edition }}" -eq "full") { "5ae8cca20e67d30a8913c869d681f8fdce67245041f3ee3e6b3e5ffd437edd76" } else { "fae085288791289c71fa0f7f4f387136f04661d4d5479ae6db0068c343e97ce9" }
+          $expected = if ("${{ matrix.edition }}" -eq "full") { "744dc80fa8b63edb28d711c9b7d8dd1a1a4168b78e6a9c3bb4b3b9c7a8094518" } else { "5db252e0c72d30a78545d29009b271feb01d487574c89900ed6e129a55ce73a9" }
           if ((Get-FileHash "apk/$apk" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Model package checksum mismatch" }
           Move-Item "apk/$apk" apk/models.zip
           Expand-Archive apk/models.zip -DestinationPath apk/x
@@ -82,7 +73,7 @@ jobs:
       - name: CTranslate2 (cache)
         if: matrix.edition == 'full'
         id: ct2cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ct2build
           key: ct2-${{ env.CT2_VERSION }}-ruy-1
@@ -102,7 +93,21 @@ jobs:
         shell: pwsh
         run: |
           if ("${{ matrix.edition }}" -eq "full") { $env:KHANA_CT2_DIR = "${{ github.workspace }}\ct2build\Release" }
-          cargo build --release --bin khana
+          cargo build --release --bin khana --example ci_check
+
+      - name: Check of the core (voice, text, WAV, picture, translation)
+        shell: pwsh
+        env:
+          KHANA_MODELS: ${{ github.workspace }}/pack/models
+        run: |
+          $dll = (Get-ChildItem -Recurse ort -Filter onnxruntime.dll | Select-Object -First 1).FullName
+          Copy-Item $dll target/release/examples/
+          if ("${{ matrix.edition }}" -eq "full") {
+            Copy-Item ct2build/Release/ctranslate2.dll target/release/examples/
+            $env:KHANA_EXPECT_TRANSLATE = "1"
+          }
+          .\target\release\examples\ci_check.exe
+          if ($LASTEXITCODE -ne 0) { throw "the check failed" }
 
       - name: Package
         shell: pwsh
@@ -163,7 +168,7 @@ jobs:
           } finally { $inputStream.Dispose() }
           Get-FileHash KhanaReader-Windows-full-experimental.zip -Algorithm SHA256
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: matrix.edition == 'full'
         with:
           name: Windows-full-transfer-1
@@ -171,7 +176,7 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: matrix.edition == 'full'
         with:
           name: Windows-full-transfer-2
@@ -179,7 +184,7 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: KhanaReader-Windows-${{ matrix.edition }}-experimental
           path: KhanaReader-Windows-${{ matrix.edition }}-experimental.zip
@@ -193,8 +198,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: zips
           merge-multiple: true
