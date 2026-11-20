@@ -432,7 +432,9 @@ function renderLexicon() {
   $("lexSummary").textContent = "فهرست اصلاح‌ها (" + fa(n) + ")";
   $("lexList").innerHTML = Object.entries(lex).map(([w, p]) =>
     `<div class="lexrow"><span class="w">${esc(w)} ← <b>${esc(p)}</b></span>` +
-    `<button type="button" data-say="${esc(w)}">▶</button><button type="button" data-del="${esc(w)}">حذف</button></div>`).join("");
+    `<button type="button" data-say="${esc(w)}" aria-label="شنیدن «${esc(w)}»">▶</button>` +
+    `<button type="button" data-fix="${esc(w)}" aria-label="اصلاح تلفظ «${esc(w)}»">اصلاح</button>` +
+    `<button type="button" data-del="${esc(w)}" aria-label="حذف «${esc(w)}»">حذف</button></div>`).join("");
 }
 async function saveLexicon(lex) {
   S.settings.lexicon = lex; ttsCache.clear(); bufCache.clear(); renderLexicon();
@@ -450,7 +452,7 @@ $("lexAdd").onclick = async () => {
   $("lexWord").value = ""; $("lexSay").value = "";
   // without vowel marks the word is read like normal text, so the marks are what give control
   toast(/[\u064b-\u0652]/.test(p) ? "تلفظ «" + w + "» ذخیره شد."
-    : "ذخیره شد. برای تلفظ دقیق، حرکت‌ها را هم بگذارید؛ مثلاً هَرجَهَت.");
+    : "ذخیره شد. برای تلفظ دقیق، حرکت‌ها را هم بگذارید؛ مثلاً مِهر.");
 };
 $("lexTest").onclick = async () => {
   const w = $("lexWord").value.trim(), p = $("lexSay").value.trim();
@@ -460,10 +462,61 @@ $("lexTest").onclick = async () => {
 };
 $("lexMarks").onclick = () => openPronunciation($("lexWord").value);
 $("lexList").addEventListener("click", async e => {
-  const say = e.target.closest("[data-say]"), del = e.target.closest("[data-del]");
+  const say = e.target.closest("[data-say]"), del = e.target.closest("[data-del]"), fix = e.target.closest("[data-fix]");
   if (say) sayWord(say.dataset.say);
+  // (a saved word can be fixed from its row, without selecting it in the text: the picker opens on the saved spelling)
+  if (fix) openPronunciation(fix.dataset.fix);
   if (del) { const lex = { ...(S.settings.lexicon || {}) }; delete lex[del.dataset.del]; await saveLexicon(lex); }
 });
+
+// Saved fixes can be copied out as text and pasted into another copy of the app, or read from a file.
+// (Nothing is sent anywhere: the text is only shown here, copied to the clipboard, or read from the chosen file.)
+const LEX_IO = { entries: 2000, word: 60, say: 120, fileBytes: 1024 * 1024 };
+function fixesText() {
+  return JSON.stringify({ khana_fixes: 1, lexicon: S.settings.lexicon || {} }, null, 2);
+}
+function parseFixes(text) {
+  let data;
+  try { data = JSON.parse(text); } catch { throw new Error("این متن فهرست درست نیست. با «کپی فهرست» یک متن تازه بگیرید."); }
+  const lex = data && typeof data === "object" && data.lexicon && typeof data.lexicon === "object" ? data.lexicon : data;
+  if (!lex || typeof lex !== "object" || Array.isArray(lex)) throw new Error("فهرست اصلاح در این متن پیدا نشد.");
+  const out = {};
+  for (const [w, p] of Object.entries(lex).slice(0, LEX_IO.entries)) {
+    if (typeof p !== "string") continue;
+    const word = w.replace(/[\u0000-\u001f]/g, "").trim().slice(0, LEX_IO.word);
+    const say = p.replace(/[\u0000-\u001f]/g, "").trim().slice(0, LEX_IO.say);
+    if (word && say) out[word] = say;
+  }
+  if (!Object.keys(out).length) throw new Error("هیچ اصلاحی در این متن نبود.");
+  return out;
+}
+$("lexCopy").onclick = async () => {
+  const text = fixesText();
+  $("lexIO").value = text;
+  try { await navigator.clipboard.writeText(text); toast("فهرست اصلاح‌ها کپی شد."); }
+  catch { $("lexIO").select(); toast("کپی نشد؛ متن داخل کادر را انتخاب و کپی کنید."); }
+};
+$("lexPickFile").onclick = () => $("lexFile").click();
+$("lexFile").onchange = async e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  if (f.size > LEX_IO.fileBytes) return toast("این فایل برای فهرست اصلاح خیلی بزرگ است.");
+  try { $("lexIO").value = await f.text(); toast("فایل خوانده شد. حالا «افزودن اصلاح‌های این متن» را بزنید."); }
+  catch (err) { toast(err.message); }
+};
+$("lexApply").onclick = async () => {
+  let incoming;
+  try { incoming = parseFixes($("lexIO").value); } catch (err) { return toast(err.message); }
+  const before = S.settings.lexicon || {};
+  const added = Object.keys(incoming).filter(w => before[w] !== incoming[w]).length;
+  if (!added) return toast("همه‌ی این اصلاح‌ها از قبل ذخیره شده بودند.");
+  try {
+    await saveLexicon({ ...before, ...incoming });
+    $("lexIO").value = "";
+    toast(fa(added) + " اصلاح تلفظ اضافه یا به‌روز شد.");
+  } catch (err) { toast(err.message); }
+};
 // select a word in the text -> a button offers to fix how it is read
 document.addEventListener("selectionchange", () => {
   const t = getSelection().toString().trim();

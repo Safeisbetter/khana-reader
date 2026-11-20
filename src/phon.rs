@@ -73,6 +73,10 @@ pub fn pronounce_word(word: &str) -> String {
                 } else if first {
                     out.push('?');
                     out.push_str(if vowel.is_empty() { "a" } else { vowel });
+                } else if vowel.is_empty() && out.ends_with('a') {
+                    // (a fatha before an alif is the long vowel «ā» alone: کِتَاب is «ketAb», not «ketaAb»)
+                    out.pop();
+                    out.push('A');
                 } else {
                     out.push('A');
                     out.push_str(vowel);
@@ -106,7 +110,7 @@ pub fn pronounce_word(word: &str) -> String {
                 }
             }
             'ه' => {
-                if last && marks.is_empty() && !ends_any(&out, &["A", "i", "u"]) && !out.ends_with('h') {
+                if last && marks.is_empty() && !ends_any(&out, &["A", "i", "u"]) && !out.ends_with('h') && !out.ends_with('a') {
                     if !out.ends_with('e') {
                         out.push('e');
                     }

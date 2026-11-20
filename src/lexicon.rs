@@ -11,6 +11,24 @@ use std::sync::Mutex;
 
 type R = Result<String, String>;
 
+/// True when every letter of a Persian word has its own vowel mark (or sukun), except the letters that can be long vowels
+/// (ا آ و ی ه), which may stand bare. Such a word can be said from its marks alone.
+pub fn fully_marked(word: &str) -> bool {
+    let mut letters: Vec<(char, bool)> = Vec::new();
+    for c in word.chars() {
+        if ('\u{064b}'..='\u{0652}').contains(&c) {
+            if let Some(l) = letters.last_mut() {
+                if matches!(c, '\u{064e}' | '\u{0650}' | '\u{064f}' | '\u{0652}') {
+                    l.1 = true;
+                }
+            }
+        } else if ('\u{0600}'..='\u{06ff}').contains(&c) {
+            letters.push((c, false));
+        }
+    }
+    !letters.is_empty() && letters.iter().all(|(c, marked)| *marked || "اآوییه".contains(*c))
+}
+
 pub fn collapse_loops(ph: &str) -> String {
     let mut words: Vec<String> = split_ws(ph).iter().map(|s| s.to_string()).collect();
     for n in 1..5 {
@@ -445,7 +463,14 @@ impl LexiconG2P {
         if let Some(p) = self.memo.lock().unwrap().get(&key) {
             return Ok(p.clone());
         }
-        let r = self.phonemise_uncached(text, keep_ezafe)?;
+        let mut r = self.phonemise_uncached(text, keep_ezafe)?;
+        // A stray leading «ye» (from a linking «ی» that was split off the word before) is not a sound a word starts with,
+        // unless the text itself starts with ی: دریای سیاه was read «ye daryAye siyAh».
+        if !text.trim_start().starts_with(['ی', 'ي']) {
+            if let Some(rest) = r.strip_prefix("ye ").or_else(|| r.strip_prefix("ye1 ")) {
+                r = rest.to_string();
+            }
+        }
         let mut m = self.memo.lock().unwrap();
         if m.len() > 20000 {
             m.clear();
@@ -475,6 +500,17 @@ impl LexiconG2P {
         for m in rx(r"(?<![\d۰-۹٠-٩٫٬.,/])[9۹٩](?![\d۰-۹٠-٩٫٬]|[.,/][\d۰-۹٠-٩])").find_iter(text.as_str()).flatten() {
             if !found.iter().any(|(a, b, _)| *a < m.end() && m.start() < *b) {
                 found.push((m.start(), m.end(), "noh".into()));
+            }
+        }
+        // A Persian word that has its own vowel marks (fatha, kasra or damma, as an author or a fix writes them) is said as
+        // those marks say. The general reader ignored the marks: مِهر was read «mohr».
+        for m in rx(r"(?<![؀-ۿ‌])[؀-ۿ‌ً-ْ]*[َُِ][؀-ۿ‌ً-ْ]*").find_iter(text.as_str()).flatten() {
+            // (only a word whose sounds are all marked: with a letter left unmarked, the marks alone would drop its vowel)
+            if fully_marked(m.as_str()) && !found.iter().any(|(a, b, _)| *a < m.end() && m.start() < *b) {
+                let ph = pronounce(m.as_str());
+                if !ph.is_empty() {
+                    found.push((m.start(), m.end(), ph));
+                }
             }
         }
         for m in rx(LATIN_WORD).find_iter(text.as_str()).flatten() {

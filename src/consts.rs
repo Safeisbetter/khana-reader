@@ -200,6 +200,11 @@ pub const BUILTIN_LEXICON: &[(&str, &str)] = &[
     ("برمه", "barme"),
     ("آبزرور", "obzarv"),
     ("کُرد", "kord"),
+    // (common words that the general reader got wrong in the reference check: مردم was read «mordam», خوشحال «xoSAl», بیشتر «biStar», دولت «dolat»)
+    ("مردم", "mardom"),
+    ("خوشحال", "xoshhAl"),
+    ("بیشتر", "bishtar"),
+    ("دولت", "dowlat"),
 ];
 pub const NUMBER_PH: &[&str] = &["?o", "CAhAr", "CAhArdah", "CAhArsad", "CAr", "CArdah", "Cehel", "SAnzdah", "Sast", "SeS", "SeSsad", "bist", "dah", "davAzdah", "devist", "do", "haSt", "haStAd", "haStsad", "haft", "haftAd", "haftsad", "hefdah", "hezAr", "hijdah", "milyArd", "milyun", "navad", "noh", "nohsad", "nuzdah", "pAnsad", "pAnzdah", "panj", "panjAh", "sad", "se", "si", "sisad", "sizdah", "vo", "yAzdah", "yek"];
 

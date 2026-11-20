@@ -8,6 +8,22 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(|s| s.as_str()) {
         Some("dump") => dump(&args[2], &args[3..]),
+        // prints how each word would be said (the phonemes), one per line: for checking pronunciation without listening
+        Some("ph") => {
+            let models = khana::vocab::models_dir();
+            let eng = khana::tts::Engine::new(&models.join("parsigo/model")).unwrap();
+            // (PH_SELF=1: each word is also taken as its own spelling, the way a fix saved in the app is used)
+            let own: Vec<(String, String)> = if std::env::var("PH_SELF").is_ok() { args[2..].iter().map(|w| (w.clone(), w.clone())).collect() } else { Vec::new() };
+            eng.g2p.set_lexicon(&own);
+            let words: Vec<String> = if args.len() > 2 && args[2] == "-" {
+                let mut s = String::new();
+                std::io::Read::read_to_string(&mut std::io::stdin(), &mut s).unwrap();
+                s.lines().map(|l| l.to_string()).collect()
+            } else { args[2..].to_vec() };
+            for w in words.iter().filter(|w| !w.trim().is_empty()) {
+                println!("{w}\t{}", eng.g2p.phonemise(w, false).unwrap_or_default());
+            }
+        }
         Some("plans") => plans(&args[2], &args[3]),
         Some("say") => say(&args[2], &args[3], args.get(4).map(|s| s.as_str()).unwrap_or("male_news.wav")),
         Some("hear") => hear(&args[2]),

@@ -2008,3 +2008,23 @@ html:root:not(#k1):not(#k2) .top .brand { gap: 3px; }
 /* 1.30: the settings tile as large as the eye button beside it */
 html:root:not(#k1):not(#k2) .bar .top > .more-tools > summary { width: calc(52px * var(--ui-scale, 1)); height: calc(52px * var(--ui-scale, 1)); min-width: 0; min-height: 0; padding: 0; margin-inline: 6px; border: 0; background: transparent; box-shadow: none; }
 html:root:not(#k1):not(#k2) .bar .top > .more-tools > summary svg.ui-icon { width: 100%; height: 100%; flex: none; }
+/* saved fixes: the copy-and-paste box is wide, large and easy to read (the text inside is a list of words, so it reads left to right) */
+.lexio { margin-top: 10px; }
+.lexio > summary { cursor: pointer; font-size: calc(16px * var(--ui-scale, 1)); padding: 6px 0; }
+#lexIO { display: block; width: 100%; box-sizing: border-box; min-height: calc(120px * var(--ui-scale, 1)); margin-top: 6px; padding: 10px; border-radius: 12px; border: 2px solid currentColor; background: transparent; color: inherit; font: inherit; font-size: calc(15px * var(--ui-scale, 1)); line-height: 1.6; }
+
+/* the top bar on the start page: the settings tile, the eye and «باز کردن» share one height, one corner and one neutral surface
+   (the open button keeps its gold, as the main action; the eye keeps its yellow only while it is switched on) */
+html:root:not(#k1):not(#k2) .bar .top > .more-tools > summary,
+html:root:not(#k1):not(#k2) .bar .top > .lowvision-top {
+  width: 46px; height: 46px; min-width: 46px; min-height: 46px; padding: 0; margin-inline: 4px; box-sizing: border-box;
+  border-radius: 14px; border: 1.5px solid light-dark(#C7C7CC, #3A3A3C); background: light-dark(#F2F2F7, #1C1C1E); color: light-dark(#1C1C1E, #F2F2F7);
+  box-shadow: none; display: inline-flex; align-items: center; justify-content: center;
+}
+html:root:not(#k1):not(#k2) .bar .top > .more-tools > summary svg.ui-icon,
+html:root:not(#k1):not(#k2) .bar .top > .lowvision-top svg { width: 24px; height: 24px; flex: 0 0 24px; }
+html:root:not(#k1):not(#k2) .bar .top > .more-tools > summary svg.settings-app-icon { width: 46px; height: 46px; flex: 0 0 46px; margin: -1px; }
+html:root:not(#k1):not(#k2) .bar .top > .lowvision-top.lowvision-top:not([aria-pressed="true"]) { background: light-dark(#F2F2F7, #1C1C1E) !important; color: light-dark(#1C1C1E, #F2F2F7) !important; border: 1.5px solid light-dark(#C7C7CC, #3A3A3C) !important; }
+html:root:not(#k1):not(#k2) .bar .top > .lowvision-top[aria-pressed="true"] { background: #FFD60A !important; color: #000 !important; border-color: #FFD60A !important; }
+html:root:not(#k1):not(#k2) .bar .top > .more-tools > summary { border-radius: 14px !important; }
+html:root:not(#k1):not(#k2) .bar .top #openFileBtn { height: 46px; box-sizing: border-box; border-radius: 14px; }
