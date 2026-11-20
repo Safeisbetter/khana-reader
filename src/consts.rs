@@ -188,7 +188,18 @@ pub const EZAFE_FORM: &[(&str, &str)] = &[
 pub const KASRA_END: &str = "ِ[ّْ]*[^\\w\u{600}-ۿ]*$";
 pub const LATIN_WORD: &str = "[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’]*";
 pub const BUILTIN_LEXICON: &[(&str, &str)] = &[
-
+    ("روش‌شناسی", "raveSenAsi"),
+    ("راترهام", "rotherAm"),
+    ("وست", "vest"),
+    ("جیمی سوایل", "jeymi sawayl"),
+    ("اسلاوی ژیژک", "eslAvi ;i;ek"),
+    ("بوردیو", "burdiyo"),
+    ("باتلر-اسلاس", "bAtler-eslAs"),
+    ("وست مینستر", "vest minestAr"),
+    ("شفیلد", "Sefild"),
+    ("برمه", "barme"),
+    ("آبزرور", "obzarv"),
+    ("کُرد", "kord"),
 ];
 pub const NUMBER_PH: &[&str] = &["?o", "CAhAr", "CAhArdah", "CAhArsad", "CAr", "CArdah", "Cehel", "SAnzdah", "Sast", "SeS", "SeSsad", "bist", "dah", "davAzdah", "devist", "do", "haSt", "haStAd", "haStsad", "haft", "haftAd", "haftsad", "hefdah", "hezAr", "hijdah", "milyArd", "milyun", "navad", "noh", "nohsad", "nuzdah", "pAnsad", "pAnzdah", "panj", "panjAh", "sad", "se", "si", "sisad", "sizdah", "vo", "yAzdah", "yek"];
 
