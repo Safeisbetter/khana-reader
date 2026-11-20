@@ -896,6 +896,7 @@ addEventListener("message", e => {
   const m = e.data || {};
   if (m.ready) { if (pdfFrame.ready) pdfFrame.ready(); return; }
   if (m.needPassword) {
+    // (the frame is sandboxed without allow-same-origin, so its origin is «null» and cannot be named as a target: the message goes as before)
     askPassword(!!m.again).then(pw => pdfFrame.contentWindow.postMessage(pw == null ? { op: "password", cancel: true } : { op: "password", value: pw }, "*"));
     return;
   }
@@ -935,6 +936,7 @@ async function pdfCall(msg, transfer) {
     // (1.29 deep check: a PDF that makes pdf.js hang no longer blocks every later file: after 3 minutes the call fails)
     const t = setTimeout(() => { if (pdfWait.delete(id)) no(new Error("PDF باز نشد: پاسخی نیامد.")); }, 180000);
     pdfWait.set(id, { ok: v => { clearTimeout(t); ok(v); }, no: e => { clearTimeout(t); no(e); } });
+    // (the sandboxed frame's origin is «null»: it cannot be named as a target, so the message goes as before)
     pdfFrame.contentWindow.postMessage({ ...msg, id }, "*", transfer || []);
   });
 }
