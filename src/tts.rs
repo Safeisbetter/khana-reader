@@ -266,7 +266,7 @@ impl Engine {
         let f = |k: &str| c[k].as_f64().unwrap();
         let w = load_npz(&dir.join("weights.npz"))?;
         let get = |k: &str| f32s(&w.iter().find(|x| x.0 == k).unwrap().1).to_vec();
-        let threads = std::env::var("KHANA_TTS_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(if cfg!(shell) { 1usize } else { 2 });
+        let threads = std::env::var("KHANA_TTS_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(if cfg!(shell) { 1usize } else { std::thread::available_parallelism().map_or(2, |n| n.get().clamp(2, 4)) });
         let opts = |p: &Path| onnx::session(p, Some(threads)).map_err(|e| e.to_string());
         let s_dec = opts(&dir.join("mimi_decoder_step_kv.onnx"))?;
         let dec_in: Vec<String> = s_dec.inputs.iter().map(|i| i.name.clone()).collect();
@@ -848,10 +848,13 @@ impl Engine {
                 }
             }
         }
-        let seeds: Vec<u64> = {
-            let mut r = self.rng.lock().unwrap();
-            (0..jobs.len()).map(|_| r.random::<u64>()).collect()
-        };
+        // (the noise of each piece is seeded by its own text, not by chance: the same sentence then sounds the same
+        // every time, and the number of threads cannot change what is said)
+        let seeds: Vec<u64> = jobs.iter().map(|j| {
+            let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+            for b in j.1.as_bytes() { h = (h ^ *b as u64).wrapping_mul(0x0000_0100_0000_01b3); }
+            h
+        }).collect();
         let results: Vec<Mutex<Option<Result<Vec<f32>, String>>>> = (0..jobs.len()).map(|_| Mutex::new(None)).collect();
         let next = std::sync::atomic::AtomicUsize::new(0);
         let ticket = order.unwrap_or_else(|| TICKETS.fetch_add(1, std::sync::atomic::Ordering::SeqCst));
