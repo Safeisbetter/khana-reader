@@ -156,14 +156,53 @@ if (window.KHANA_NO_MIC) {
 (function () {
   const pageStop = stopReading;
   let control = Promise.resolve(), timer = null, polling = false, lastPosition = null, finishing = false, startAt = null;
+  let pageLoadMs = null, initialTextMs = 0, startupSummaryUntil = null;
+  let pendingWord = null;
+  const setReadingStatus = (message, busy) => {
+    const state = $('readingState');
+    if (state.textContent !== message) state.textContent = message;
+    state.setAttribute('aria-busy', String(!!busy));
+    document.body.classList.toggle('reading-waiting', !!busy || performance.now() < startupSummaryUntil);
+  };
+  const clearPendingWord = () => {
+    if (pendingWord) pendingWord.classList.remove('read-pending');
+    pendingWord = null;
+  };
+  const showReadTiming = pos => {
+    const tip = $('readingTip');
+    if (!tip) return;
+    const parts = [];
+    if (Number.isFinite(pos.firstReadyMs) && Number.isFinite(pos.firstTextMs)) {
+      startupSummaryUntil ??= performance.now() + 6000;
+      const seconds = ms => fa((ms / 1000).toFixed(1)) + ' ثانیه';
+      parts.push('آماده‌سازی متن: ' + seconds(initialTextMs + pos.firstTextMs));
+      parts.push('انتظار برای صدای اول: ' + seconds(Math.max(0, pos.firstReadyMs - pos.firstTextMs)));
+    }
+    if (pageLoadMs !== null) parts.push('بارگذاری صفحه: ' + fa((pageLoadMs / 1000).toFixed(1)) + ' ثانیه');
+    if (pos && pos.stalls > 0) parts.push('مکث صدا: ' + fa(pos.stalls) + ' بار، ' + fa((pos.stalled / 1000).toFixed(1)) + ' ثانیه');
+    const stall = pos.lastStall;
+    if (stall) {
+      const sec = ms => fa((ms / 1000).toFixed(1));
+      if (reader.lastTimingCount !== pos.stalls) startupSummaryUntil = performance.now() + 10000;
+      reader.lastTimingCount = pos.stalls;
+      parts.push(`آخرین مکث: ${sec(stall.wait)} ثانیه · صف اولیه: ${sec(stall.worker + stall.admission)} · بیشترین انتظار بخش: ${sec(stall.slot)} · طولانی‌ترین ساخت بخش: ${sec(stall.generation)} ثانیه · تعداد تلاش‌ها: ${fa(stall.attempts)}`);
+    } else reader.lastTimingCount = 0;
+    if (parts.length) tip.textContent = parts.join(' · ');
+  };
   const command = (path, body = {}) => (control = control.catch(() => {}).then(() => jpost(path, body)));
   stopReading = function () {
+    reader.voiceChangePending = false;
+    clearPendingWord();
     pageStop(); clearTimeout(timer); lastPosition = null; reader.nativePosition = null;
+    pageLoadMs = null;
+    $('readingState').setAttribute('aria-busy', 'false');
+    document.body.classList.remove('reading-waiting');
     command('/api/read_stop').catch(() => {});
   };
   function highlight(pos) {
     clearReadingMarks();
     if (pos.para < 0) return;
+    if (pendingWord && startAt && pos.page === startAt.page && pos.para === startAt.para && pos.end > pos.start) clearPendingWord();
     const paragraph = document.querySelector(`.text p[data-i="${pos.para}"]`);
     if (!paragraph) return;
     paragraph.classList.add('reading');
@@ -197,11 +236,39 @@ if (window.KHANA_NO_MIC) {
       lastPosition = pos;
       reader.nativePosition = pos;
       if (pos.page !== S.page) {
+        const pageStarted = performance.now();
         const paras = await getParas(pos.page);
         if (reader.run !== run) return;
+        pageLoadMs = performance.now() - pageStarted;
         showPage(pos.page, paras);
       }
-      reader.paused = !!pos.paused; setPlayButton(); highlight(pos);
+      showReadTiming(pos);
+      reader.paused = !!pos.paused; setPlayButton();
+      const preparing = pos.waitingPage;
+      const speaking = pos.para >= 0 && Number(pos.duration) > 0 && Number(pos.elapsed) < Number(pos.duration);
+      const changingVoice = reader.voiceChangePending && !Number.isFinite(pos.firstReadyMs);
+      if (reader.paused) setReadingStatus('خواندن مکث شده', false);
+      else if (changingVoice) setReadingStatus('آماده کردن صدای جمله‌ی انتخاب‌شده…', true);
+      // A queued speech item is the thing blocking playback. A page scan can run in the
+      // background at the same time, so do not let it hide an actual speech-generation wait.
+      else if (pos.waitingSpeech && !speaking) {
+        const seconds = fa(Math.floor((Number(pos.waitingSpeechMs) || 0) / 1000));
+        setReadingStatus(pendingWord ? `آماده کردن صدا از واژه‌ی انتخاب‌شده… ${seconds} ثانیه` : `آماده کردن جمله‌ی بعدی… ${seconds} ثانیه`, true);
+      }
+      else if (preparing && !speaking) setReadingStatus(`آماده‌سازی کتاب، صفحه‌ی ${fa(preparing)} از ${fa(S.doc.pages)}؛ در حال آماده کردن صفحه‌ی اسکن‌شده`, true);
+      else if (pos.waitingText && Number.isFinite(pos.firstReadyMs) && !speaking) {
+        const seconds = fa(Math.floor((Number(pos.waitingTextMs) || 0) / 1000));
+        setReadingStatus(`در حال آماده کردن متن صفحه‌ی بعد، ${fa(pos.waitingTextPage)} از ${fa(S.doc.pages)}؛ ${seconds} ثانیه`, true);
+      }
+      else if (!Number.isFinite(pos.firstTextMs)) setReadingStatus(`آماده‌سازی کتاب، صفحه‌ی ${fa(pos.page || S.page)} از ${fa(S.doc.pages)}؛ در حال آماده کردن متن`, true);
+      else if (!Number.isFinite(pos.firstReadyMs)) {
+        setReadingStatus(pendingWord ? 'آماده کردن صدا از واژه‌ی انتخاب‌شده…' : 'آماده کردن صدای اول…', true);
+      }
+      else if (pos.startupBuffering) setReadingStatus('آماده کردن صدا برای شروع خواندن…', true);
+      else if (pendingWord) setReadingStatus('آماده کردن صدا از واژه‌ی انتخاب‌شده…', true);
+      else setReadingStatus('در حال خواندن', false);
+      if (Number.isFinite(pos.firstReadyMs)) reader.voiceChangePending = false;
+      highlight(pos);
     } catch (e) { if (reader.run === run) { stopReading(); toast(e.message); } }
     finally { polling = false; }
     if (reader.run === run && reader.active) timer = setTimeout(() => poll(run), 250);
@@ -209,33 +276,55 @@ if (window.KHANA_NO_MIC) {
   readFrom = async function (para, offset = 0) {
     // (finishing: a new voice or speed: the phone ends the sentence being heard by itself, so it is not stopped here)
     const exact = finishing; finishing = false;
+    const voiceChangePending = reader.voiceChangePending;
     if (exact) { pageStop(); clearTimeout(timer); lastPosition = null; reader.nativePosition = null; } else stopReading();
+    reader.voiceChangePending = voiceChangePending;
+    pageLoadMs = null;
     if (!S.doc) return;
+    startupSummaryUntil = null;
+    $('readingTip').textContent = '';
+    const textStarted = performance.now();
     const run = reader.run, doc = S.doc, settings = { ...S.settings }, first = S.page;
+    let scanPlan = null;
     startAt = { page: first, para, start: offset, end: offset };
     reader.active = true; reader.paused = false; setPlayButton();
+    const paraEl = offset > 0 ? document.querySelector(`.text p[data-i="${para}"]`) : null;
+    pendingWord = paraEl ? [...paraEl.querySelectorAll('.w')].find(w => Number(w.dataset.s) === offset) || null : null;
+    if (pendingWord) pendingWord.classList.add('read-pending');
+    setReadingStatus('در حال آماده کردن متن…', true);
     try {
       // The sandboxed PDF renderer needs a visible page to prepare scans. OCR them once before
       // native reading starts; no pictures or book files are written to shared storage.
       if (doc.engine === 'pdfjs') {
         const lengths = await jget(`/api/lengths?doc=${doc.id}`);
         const last = settings.autoNext === false ? first : doc.pages;
-        for (let n = first; n <= last; n++) {
-          if (reader.run !== run || !S.doc || S.doc.id !== doc.id) return;
-          if (lengths.letters[n - 1] < 0) {
-            $('readingState').textContent = `آماده کردن صفحه‌ی اسکن‌شده… ${fa(n)} از ${fa(last)}`;
-            await pageReq(`/api/page?doc=${doc.id}&n=${n}&tr=false`, n, doc.id);
-          }
+        scanPlan = { lengths, last };
+        if (lengths.letters[first - 1] < 0) {
+          setReadingStatus(`آماده کردن صفحه‌ی اسکن‌شده… ${fa(first)} از ${fa(last)}`, true);
+          await pageReq(`/api/page?doc=${doc.id}&n=${first}&tr=false`, first, doc.id);
         }
       }
       const announceTitle = false;
       if (reader.run !== run) return;
+      initialTextMs = performance.now() - textStarted;
       const request = { doc: doc.id, pages: doc.pages, page: first, para, start: offset,
         voice: settings.voice, speed: Number(settings.speed) || 1, tr: !!(doc.canTranslate && settings.translate),
         rev: !!settings.reversed, yeh: !!settings.persianYeh, autoNext: settings.autoNext !== false, announceEnd: !doc.isTyped, announceTitle, exact };
       control = control.catch(() => {}).then(() => reader.run === run ? jpost('/api/read_start', request) : null);
       await control;
-      if (reader.run === run) poll(run);
+      if (reader.run === run) {
+        poll(run);
+        if (scanPlan) {
+          void (async () => {
+            for (let n = first + 1; n <= scanPlan.last; n++) {
+              if (reader.run !== run || !reader.active || !S.doc || S.doc.id !== doc.id) return;
+              if (scanPlan.lengths.letters[n - 1] < 0) {
+                await pageReq(`/api/page?doc=${doc.id}&n=${n}&tr=false`, n, doc.id);
+              }
+            }
+          })().catch(() => {});
+        }
+      }
     } catch (e) { if (reader.run === run) { stopReading(); toast(e.message); } }
   };
   async function pause(paused) {
@@ -271,12 +360,7 @@ if (window.KHANA_NO_MIC) {
 
 (function () {
  document.documentElement.classList.add('android-reader');
- const button = $('readingToolsBtn'); button.hidden = false;
- button.onclick = () => {
-  const open = document.body.classList.toggle('reading-tools-open');
-  button.setAttribute('aria-expanded', String(open));
-  button.textContent = open ? 'بستن ابزارها' : 'صفحه و سرعت';
- };
+ const button = $('readingToolsBtn'); button.hidden = true;
 })();
 
 // Positive means the next page in the reader's writing direction. Long presses, taps and vertical scrolls stay untouched.
@@ -286,7 +370,7 @@ function bookSwipeDelta(dx, dy, elapsed, width, rtl) {
   return (dx > 0 ? 1 : -1) * (rtl ? 1 : -1);
 }
 (function () {
-  const page = $('quickPage'), speed = $('quickSpeed'), content = $('mainContent');
+  const page = $('quickPage'), speed = $('quickSpeed'), tone = $('quickTone'), content = $('mainContent');
   page.hidden = speed.hidden = false;
   $('paragraphHelp').textContent += ' برای صفحه‌ی بعد به راست و برای صفحه‌ی قبل به چپ بکشید.';
   function close() {
@@ -308,6 +392,7 @@ function bookSwipeDelta(dx, dy, elapsed, width, rtl) {
   }
   page.onclick = () => toggle('quick-page-open', page);
   speed.onclick = () => toggle('quick-speed-open', speed);
+  tone.hidden = false;
   document.addEventListener('pointerdown', e => {
     if (!e.target.closest('#quickPage,#quickSpeed,#pageControls,#speedControls')) close();
   });

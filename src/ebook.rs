@@ -44,8 +44,14 @@ fn blocks(xml: &str) -> Vec<String> {
     if too_deep(&doc) {
         return Vec::new();
     }
+    blocks_from_nodes(doc.descendants())
+}
+
+fn blocks_from_nodes<'a, 'input: 'a>(
+    nodes: impl Iterator<Item = roxmltree::Node<'a, 'input>>,
+) -> Vec<String> {
     let mut out = Vec::new();
-    for n in doc.descendants().filter(|n| n.is_element() && BLOCKS.contains(&n.tag_name().name())) {
+    for n in nodes.filter(|n| n.is_element() && BLOCKS.contains(&n.tag_name().name())) {
         let mut t = String::new();
         for d in n.descendants() {
             if d.is_element() && ["br"].contains(&d.tag_name().name()) {
@@ -74,10 +80,16 @@ pub fn epub_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
     let mut z = zip::ZipArchive::new(std::io::Cursor::new(data)).map_err(|_| bad())?;
     let container = part(&mut z, "META-INF/container.xml").ok_or_else(bad)?;
     let c = roxmltree::Document::parse_with_options(&container, xml_options(false)).map_err(|_| bad())?;
+    if too_deep(&c) {
+        return Err(bad());
+    }
     let opf_path = c.descendants().find(|n| n.tag_name().name() == "rootfile").and_then(|n| n.attribute("full-path")).ok_or_else(bad)?.to_string();
     let base = opf_path.rsplit_once('/').map(|(d, _)| format!("{d}/")).unwrap_or_default();
     let opf = part(&mut z, &opf_path).ok_or_else(bad)?;
     let o = roxmltree::Document::parse_with_options(&opf, xml_options(true)).map_err(|_| bad())?;
+    if too_deep(&o) {
+        return Err(bad());
+    }
     let items: Vec<(String, String)> = o
         .descendants()
         .filter(|n| n.tag_name().name() == "item")
@@ -105,7 +117,7 @@ pub fn epub_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
             continue;
         }
         if let Some(x) = part(&mut z, &name) {
-            used += x.len() as u64;
+            used = used.saturating_add(x.len() as u64);
             out.extend(blocks(&x));
             if used > TOTAL_LIMIT || out.len() >= MAX_PARAGRAPHS {
                 return Err(too_big());
@@ -120,8 +132,17 @@ pub fn epub_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
 
 pub fn fb2_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
     let text = String::from_utf8_lossy(data);
-    let body: String = findall(r"(?s)<body[^>]*>.*?</body>", &text).join("\n");
-    let out = blocks(&format!("<fb>{body}</fb>"));
+    let safe = xml_safe(&text);
+    let doc = roxmltree::Document::parse_with_options(&safe, xml_options(true))
+        .map_err(|_| "این کتاب FB2 باز نشد. شاید خراب باشد.".to_string())?;
+    if too_deep(&doc) {
+        return Err("این کتاب FB2 باز نشد. شاید خراب باشد.".into());
+    }
+    let body_nodes = doc
+        .descendants()
+        .filter(|n| n.is_element() && n.tag_name().name() == "body")
+        .flat_map(|body| body.descendants());
+    let out = blocks_from_nodes(body_nodes);
     if out.is_empty() {
         return Err("در این کتاب FB2 متنی پیدا نشد.".into());
     }
@@ -147,6 +168,80 @@ fn percent_decode(s: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+
+#[cfg(test)]
+mod reader_tests {
+    use super::{epub_paragraphs, fb2_paragraphs};
+    use std::io::{Cursor, Write};
+    use zip::write::SimpleFileOptions;
+
+    fn archive(entries: &[(&str, &str)]) -> Vec<u8> {
+        let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        for (name, text) in entries {
+            zip.start_file(*name, SimpleFileOptions::default()).unwrap();
+            zip.write_all(text.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn epub_preserves_spine_order_and_paragraphs() {
+        let container = r#"<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/book.opf"/></rootfiles></container>"#;
+        let opf = r#"<package xmlns="http://www.idpf.org/2007/opf"><manifest><item id="one" href="one.xhtml" media-type="application/xhtml+xml"/><item id="two" href="two.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="two"/><itemref idref="one"/></spine></package>"#;
+        let first = r#"<html xmlns="http://www.w3.org/1999/xhtml"><body><h1>Second chapter</h1><p>Last text.</p></body></html>"#;
+        let second = r#"<html xmlns="http://www.w3.org/1999/xhtml"><body><p>First in spine.</p></body></html>"#;
+        let data = archive(&[("META-INF/container.xml", container), ("OEBPS/book.opf", opf), ("OEBPS/one.xhtml", first), ("OEBPS/two.xhtml", second)]);
+        assert_eq!(epub_paragraphs(&data).unwrap(), ["First in spine.", "Second chapter", "Last text."]);
+    }
+
+    #[test]
+    fn epub_rejects_corrupt_archives_and_deep_metadata() {
+        assert!(epub_paragraphs(b"not a zip").is_err());
+        let mut container = String::from(r#"<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">"#);
+        for _ in 0..260 {
+            container.push_str("<x>");
+        }
+        for _ in 0..260 {
+            container.push_str("</x>");
+        }
+        container.push_str("</container>");
+        let data = archive(&[("META-INF/container.xml", &container)]);
+        assert!(epub_paragraphs(&data).is_err());
+    }
+
+    #[test]
+    fn epub_rejects_overdeep_package_metadata() {
+        let container = r#"<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfile full-path="book.opf"/></container>"#;
+        let mut opf = String::from(r#"<package xmlns="http://www.idpf.org/2007/opf">"#);
+        for _ in 0..260 {
+            opf.push_str("<x>");
+        }
+        for _ in 0..260 {
+            opf.push_str("</x>");
+        }
+        opf.push_str("</package>");
+        let data = archive(&[("META-INF/container.xml", container), ("book.opf", &opf)]);
+        assert!(epub_paragraphs(&data).is_err());
+    }
+
+    #[test]
+    fn fb2_reads_paragraphs_and_rejects_corrupt_xml() {
+        let fb2 = b"<FictionBook><body><section><p>First.</p><p>Second.</p></section></body></FictionBook>";
+        assert_eq!(fb2_paragraphs(fb2).unwrap(), ["First.", "Second."]);
+        assert!(fb2_paragraphs(b"<FictionBook><body><p>truncated").is_err());
+        assert!(fb2_paragraphs(b"not an FB2 document").is_err());
+        let mut deep = String::from("<FictionBook><body>");
+        for _ in 0..260 {
+            deep.push_str("<x>");
+        }
+        deep.push_str("text");
+        for _ in 0..260 {
+            deep.push_str("</x>");
+        }
+        deep.push_str("</body></FictionBook>");
+        assert!(fb2_paragraphs(deep.as_bytes()).is_err());
+    }
 }
 
 

@@ -71,6 +71,9 @@ function applySettings() {
   $("speedChip").textContent = pct(s.speed);
   $("quickSpeedValue").textContent = pct(s.speed);
   $("quickSpeed").setAttribute("aria-label", "سرعت خواندن " + pct(s.speed) + "؛ تنظیم سرعت");
+  $("quickTone").setAttribute("aria-pressed", String(s.naturalTone !== false));
+  $("quickTone").textContent = s.naturalTone !== false ? "لحن طبیعی" : "لحن یکنواخت";
+  $("quickTone").setAttribute("aria-label", "لحن خواندن: " + (s.naturalTone !== false ? "طبیعی" : "یکنواخت") + "؛ برای تغییر بزنید");
   $("speedChip").classList.toggle("changed", Number(s.speed) !== 1);
   $("speedChip").setAttribute("aria-label", "سرعت " + pct(s.speed) + "؛ برای سرعت عادی بزنید");
   const chosenTheme = s.theme === undefined ? "modern" : s.theme;
@@ -180,8 +183,16 @@ async function restartNow(gen) {
     if (wasPaused) { actx.suspend(); reader.paused = true; setPlayButton(); }
   }
 }
-$("voice").onchange = e => { setSetting("voice", e.target.value); $("dockVoice").value = e.target.value; ttsCache.clear(); restartReading(); };
-$("dockVoice").onchange = e => { $("voice").value = e.target.value; setSetting("voice", e.target.value); ttsCache.clear(); restartReading(); };
+// Android's native select popup can send its closing tap to the text underneath it.
+// Ignore that synthetic follow-up click so choosing a voice cannot start reading there.
+let ignoreTextTapUntil = 0;
+const guardTextFromVoicePicker = () => { ignoreTextTapUntil = performance.now() + 900; };
+for (const id of ["voice", "dockVoice"]) {
+  $(id).addEventListener("pointerdown", () => { ignoreTextTapUntil = performance.now() + 450; }, true);
+  $(id).addEventListener("change", guardTextFromVoicePicker, true);
+}
+$("voice").onchange = e => { setSetting("voice", e.target.value); $("dockVoice").value = e.target.value; ttsCache.clear(); if (reader.active) reader.voiceChangePending = true; restartReading(); };
+$("dockVoice").onchange = e => { $("voice").value = e.target.value; setSetting("voice", e.target.value); ttsCache.clear(); if (reader.active) reader.voiceChangePending = true; restartReading(); };
 // reading speed: 0.5× to 2×; the slider, the −/+ buttons, the presets and the Speed menu all come here
 // (shown in percent: ۱۰۰٪ is normal; the −/+ buttons go one percent at a time, the menu's keys five)
 const pct = v => fa(Math.round(Number(v) * 100)) + "٪";
@@ -226,6 +237,7 @@ $("lineHeight").oninput = e => setSetting("lineHeight", +e.target.value);
 document.querySelectorAll("input[name=cursor]").forEach(r => r.onchange = () => setSetting("cursor", r.value));
 $("autoNext").onchange = e => { setSetting("autoNext", e.target.checked); restartReading(); };
 $("naturalTone").onchange = e => { setSetting("naturalTone", e.target.checked); ttsCache.clear(); bufCache.clear(); restartReading(); };
+$("quickTone").onclick = () => { $("naturalTone").checked = !$("naturalTone").checked; $("naturalTone").onchange({ target: $("naturalTone") }); };
 $("autoPlay").onchange = e => setSetting("autoPlay", e.target.checked);
 document.querySelectorAll("input[name=hl]").forEach(r => r.onchange = () => setSetting("highlight", r.value));
 document.querySelectorAll("input[name=fc]").forEach(r => r.onchange = () => setSetting("frameColor", r.value));
@@ -284,13 +296,17 @@ addEventListener("click", e => {
 
 /* ---------------- finding a setting by a word of its name ---------------- */
 // Settings in groups (tabs): one group at a time; a search looks in all of them
-const SET_TABS = ["voice", "text", "look", "words", "safe"];
+const SET_TABS = ["voice", "reading", "display", "advanced"];
 let setTab = "voice";
-try { const t = localStorage.getItem("khana-set-tab"); if (SET_TABS.includes(t)) setTab = t; } catch (e) {}
+try {
+  const old = localStorage.getItem("khana-set-tab");
+  const migrated = ({ text: "reading", look: "display", words: "advanced", safe: "advanced" })[old] || old;
+  if (SET_TABS.includes(migrated)) setTab = migrated;
+} catch (e) {}
 function applySetTabs() {
   const searching = $("setFind").value.trim() !== "";
   document.querySelectorAll("#settings .panel-body > .field").forEach(f => {
-    f.classList.toggle("set-off", !searching && (f.dataset.set || "safe") !== setTab);
+    f.classList.toggle("set-off", !searching && (f.dataset.set || "advanced") !== setTab);
   });
   $("setTabs").hidden = searching;
   document.querySelectorAll("#setTabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === setTab)));
@@ -314,6 +330,44 @@ $("setFind").oninput = () => {
 };
 applySetTabs();
 new MutationObserver(() => { if ($("settings").hidden && $("setFind").value) { $("setFind").value = ""; $("setFind").oninput(); } }).observe($("settings"), { attributes: true, attributeFilter: ["hidden"] });
+
+// Keep the help panel scannable: show one short lead sentence per card and put the full guidance
+// behind a native disclosure, which remains available to keyboard and screen-reader users.
+document.querySelectorAll("#helpPanel .guide-card").forEach(card => {
+  const heading = card.querySelector("h3");
+  const content = [...card.children].filter(node => node !== heading);
+  if (!heading || !content.length) return;
+  const firstParagraph = content.find(node => node.matches("p"));
+  const fullText = firstParagraph ? firstParagraph.textContent.trim() : content[0].textContent.trim();
+  const sentence = fullText.match(/^.*?[.!؟؛](?:\s|$)/u)?.[0]?.trim() || fullText;
+  const lead = document.createElement("p");
+  lead.className = "guide-lead";
+  lead.textContent = sentence.length > 150 ? sentence.slice(0, 147).trimEnd() + "…" : sentence;
+  // The collapsed preview is already visible above the disclosure. Remove that
+  // same opening sentence from the expanded copy so it does not appear twice.
+  if (firstParagraph) {
+    let remaining = Math.min(sentence.length, firstParagraph.textContent.length);
+    const walker = document.createTreeWalker(firstParagraph, NodeFilter.SHOW_TEXT);
+    while (remaining > 0) {
+      const node = walker.nextNode();
+      if (!node) break;
+      const take = Math.min(remaining, node.nodeValue.length);
+      if (take === node.nodeValue.length) node.remove();
+      else node.deleteData(0, take);
+      remaining -= take;
+    }
+    const firstText = document.createTreeWalker(firstParagraph, NodeFilter.SHOW_TEXT).nextNode();
+    if (firstText) firstText.nodeValue = firstText.nodeValue.replace(/^\s+/, "");
+    if (!firstParagraph.textContent.trim()) firstParagraph.remove();
+  }
+  const details = document.createElement("details");
+  details.className = "guide-details";
+  const summary = document.createElement("summary");
+  summary.textContent = "جزئیات بیشتر";
+  summary.setAttribute("aria-label", `جزئیات بیشتر درباره‌ی ${heading.textContent.trim()}`);
+  details.append(summary, ...content);
+  card.append(lead, details);
+});
 $("persianYeh").onchange = e => setSetting("persianYeh", e.target.checked, true);
 $("reversed").onchange = e => setSetting("reversed", e.target.checked, true);
 $("bitrate").onchange = e => setSetting("bitrate", +e.target.value);
@@ -432,7 +486,9 @@ function renderLexicon() {
   $("lexSummary").textContent = "فهرست اصلاح‌ها (" + fa(n) + ")";
   $("lexList").innerHTML = Object.entries(lex).map(([w, p]) =>
     `<div class="lexrow"><span class="w">${esc(w)} ← <b>${esc(p)}</b></span>` +
-    `<button type="button" data-say="${esc(w)}">▶</button><button type="button" data-del="${esc(w)}">حذف</button></div>`).join("");
+    `<button type="button" data-say="${esc(w)}" aria-label="شنیدن «${esc(w)}»">▶</button>` +
+    `<button type="button" data-fix="${esc(w)}" aria-label="اصلاح تلفظ «${esc(w)}»">اصلاح</button>` +
+    `<button type="button" data-del="${esc(w)}" aria-label="حذف «${esc(w)}»">حذف</button></div>`).join("");
 }
 async function saveLexicon(lex) {
   S.settings.lexicon = lex; ttsCache.clear(); bufCache.clear(); renderLexicon();
@@ -450,7 +506,7 @@ $("lexAdd").onclick = async () => {
   $("lexWord").value = ""; $("lexSay").value = "";
   // without vowel marks the word is read like normal text, so the marks are what give control
   toast(/[\u064b-\u0652]/.test(p) ? "تلفظ «" + w + "» ذخیره شد."
-    : "ذخیره شد. برای تلفظ دقیق، حرکت‌ها را هم بگذارید؛ مثلاً هَرجَهَت.");
+    : "ذخیره شد. برای تلفظ دقیق، حرکت‌ها را هم بگذارید؛ مثلاً مِهر.");
 };
 $("lexTest").onclick = async () => {
   const w = $("lexWord").value.trim(), p = $("lexSay").value.trim();
@@ -460,21 +516,109 @@ $("lexTest").onclick = async () => {
 };
 $("lexMarks").onclick = () => openPronunciation($("lexWord").value);
 $("lexList").addEventListener("click", async e => {
-  const say = e.target.closest("[data-say]"), del = e.target.closest("[data-del]");
+  const say = e.target.closest("[data-say]"), del = e.target.closest("[data-del]"), fix = e.target.closest("[data-fix]");
   if (say) sayWord(say.dataset.say);
+  // (a saved word can be fixed from its row, without selecting it in the text: the picker opens on the saved spelling)
+  if (fix) openPronunciation(fix.dataset.fix);
   if (del) { const lex = { ...(S.settings.lexicon || {}) }; delete lex[del.dataset.del]; await saveLexicon(lex); }
 });
+
+// Saved fixes can be copied out as text and pasted into another copy of the app, or read from a file.
+// (Nothing is sent anywhere: the text is only shown here, copied to the clipboard, or read from the chosen file.)
+const LEX_IO = { entries: 2000, word: 60, say: 120, fileBytes: 1024 * 1024 };
+function fixesText() {
+  return JSON.stringify({ khana_fixes: 1, lexicon: S.settings.lexicon || {} }, null, 2);
+}
+function parseFixes(text) {
+  let data;
+  try { data = JSON.parse(text); } catch { throw new Error("این متن فهرست درست نیست. با «کپی فهرست» یک متن تازه بگیرید."); }
+  const lex = data && typeof data === "object" && data.lexicon && typeof data.lexicon === "object" ? data.lexicon : data;
+  if (!lex || typeof lex !== "object" || Array.isArray(lex)) throw new Error("فهرست اصلاح در این متن پیدا نشد.");
+  const out = {};
+  for (const [w, p] of Object.entries(lex).slice(0, LEX_IO.entries)) {
+    if (typeof p !== "string") continue;
+    const word = w.replace(/[\u0000-\u001f]/g, "").trim().slice(0, LEX_IO.word);
+    const say = p.replace(/[\u0000-\u001f]/g, "").trim().slice(0, LEX_IO.say);
+    if (word && say) out[word] = say;
+  }
+  if (!Object.keys(out).length) throw new Error("هیچ اصلاحی در این متن نبود.");
+  return out;
+}
+$("lexCopy").onclick = async () => {
+  const text = fixesText();
+  $("lexIO").value = text;
+  try { await navigator.clipboard.writeText(text); toast("فهرست اصلاح‌ها کپی شد."); }
+  catch { $("lexIO").select(); toast("کپی نشد؛ متن داخل کادر را انتخاب و کپی کنید."); }
+};
+$("lexPickFile").onclick = () => $("lexFile").click();
+$("lexFile").onchange = async e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  if (f.size > LEX_IO.fileBytes) return toast("این فایل برای فهرست اصلاح خیلی بزرگ است.");
+  try { $("lexIO").value = await f.text(); toast("فایل خوانده شد. حالا «افزودن اصلاح‌های این متن» را بزنید."); }
+  catch (err) { toast(err.message); }
+};
+$("lexApply").onclick = async () => {
+  let incoming;
+  try { incoming = parseFixes($("lexIO").value); } catch (err) { return toast(err.message); }
+  const before = S.settings.lexicon || {};
+  const added = Object.keys(incoming).filter(w => before[w] !== incoming[w]).length;
+  if (!added) return toast("همه‌ی این اصلاح‌ها از قبل ذخیره شده بودند.");
+  try {
+    await saveLexicon({ ...before, ...incoming });
+    $("lexIO").value = "";
+    toast(fa(added) + " اصلاح تلفظ اضافه یا به‌روز شد.");
+  } catch (err) { toast(err.message); }
+};
 // select a word in the text -> a button offers to fix how it is read
 document.addEventListener("selectionchange", () => {
-  const t = getSelection().toString().trim();
-  const ok = t && t.length <= 30 && !/\s/.test(t) && $("textView").contains(getSelection().anchorNode);
+  const selection = getSelection();
+  const t = selection.toString().trim();
+  const selectedPara = selection.rangeCount ? selection.getRangeAt(0).startContainer : null;
+  const selectedElement = selectedPara && (selectedPara.nodeType === Node.ELEMENT_NODE ? selectedPara : selectedPara.parentElement);
+  const paragraph = selectedElement && selectedElement.closest("p[data-i]");
+  const ok = !!(S.view === "text" && t && t.length <= 30 && !/\s/.test(t) && paragraph && $("textView").contains(selection.anchorNode));
   $("fixWord").hidden = !ok;
+  $("readSelection").hidden = !ok || S.editing && !paragraph.isContentEditable;
+  $("selectionActions").hidden = !ok;
   if (ok) {
     // (while the text is being edited the button changes the word in the whole book; otherwise it fixes how the word is said)
     $("fixWord").textContent = S.editing ? `اصلاح «${t}»` : `اصلاح تلفظ «${t}»`;
     $("fixWord").dataset.word = t;
+    const range = selection.getRangeAt(0);
+    const word = selectedElement.closest(".w");
+    let offset;
+    if (!S.editing && word) offset = Number(word.dataset.s) || 0;
+    else {
+      const before = document.createRange();
+      before.selectNodeContents(paragraph);
+      before.setEnd(range.startContainer, range.startOffset);
+      offset = before.toString().length;
+    }
+    $("readSelection").dataset.p = paragraph.dataset.i;
+    $("readSelection").dataset.offset = String(offset);
   }
 });
+// A selected word can be spoken in context without changing the book text. In edit mode, save any
+// paragraph changes first, leave edit mode, then start at the selected word.
+for (const id of ["readSelection", "fixWord"]) $(id).addEventListener("pointerdown", e => e.preventDefault());
+$("readSelection").onclick = async () => {
+  const index = Number($("readSelection").dataset.p), offset = Number($("readSelection").dataset.offset);
+  if (!Number.isInteger(index) || !S.doc || !S.paras[index]) return;
+  if (S.editing) {
+    const p = $("textView").querySelector(`p[data-i="${index}"]`);
+    if (p && p.dataset.shown !== undefined) {
+      const shown = p.dataset.shown, text = p.innerText.replace(/\u00a0/g, " ").trim();
+      if (text !== shown.trim() && !await sendEdit({ kind: "paragraph", shown, text })) return;
+    }
+    if (S.editing) $("editBtn").click();
+  }
+  if (S.view !== "text") { S.view = "text"; syncChrome(); }
+  $("selectionActions").hidden = true;
+  ensureAudio();
+  readFrom(index, offset, true);
+};
 $("fixWord").onclick = () => {
   $("fixWord").hidden = true;
   if (S.editing) return openWordEditor($("fixWord").dataset.word);
@@ -691,22 +835,20 @@ function startChime() {
     setTimeout(() => ctx.close && ctx.close(), 2000);
   } catch (e) { /* no sound is fine */ }
 }
-// the fish in the water: a press shows or hides the quotation in the water
+// the welcome picture: a press shows or hides the quotation in the water
 {
   const jump = $("jumpArt");
-  // (1.29: the band's visible part of the scene: as wide as the band is, from 240 up to the 560 the scene is drawn; its middle
-  // stays where it was)
-  const scene = jump && jump.querySelector("svg.water-scene");
-  const fitScene = () => {
-    const r = jump.getBoundingClientRect();
-    if (!scene || !r.width || !r.height) return;
-    const w = Math.max(240, Math.min(560, 176 * r.width / r.height));
-    scene.setAttribute("viewBox", `${(120 - w / 2).toFixed(1)} 0 ${w.toFixed(1)} 176`);
+  // Use only the device's local clock to tint the still image. No time value leaves the device.
+  const setSceneLight = () => {
+    const hour = new Date().getHours();
+    jump.dataset.light = hour >= 6 && hour < 9 ? "dawn" : hour >= 9 && hour < 17 ? "day" : hour >= 17 && hour < 20 ? "evening" : "night";
   };
-  if (scene) { fitScene(); if (window.ResizeObserver) new ResizeObserver(fitScene).observe(jump); else addEventListener("resize", fitScene); }
+  setSceneLight();
+  setInterval(setSceneLight, 60_000);
   const toggleQuote = () => {
     const open = jump.classList.toggle("show-quote");
     jump.setAttribute("aria-expanded", String(open));
+    $("waterQuote").setAttribute("aria-hidden", String(!open));
   };
   jump.addEventListener("click", toggleQuote);
   jump.addEventListener("keydown", e => {
@@ -772,7 +914,7 @@ async function openFile(file, images) {
     // (the light download has no translator: a book in another language is said so, not read with the Farsi voice)
     if (d.hasText && d.lang !== "fa" && !d.canTranslate && d.lang !== "unknown") note(`این سند به زبان ${langName} است. نسخه‌ی سبک ترجمه ندارد و فقط متن فارسی را درست می‌خواند. برای خواندن کتاب‌های خارجی، نسخه‌ی کامل را نصب کنید.`, true);
     else if (!d.hasText) note("این سند متنی ندارد؛ احتمالاً اسکن یا تصویر است. می‌توانید صفحه‌ها را در نمای «صفحه» ببینید، اما خواندن با صدا ممکن نیست.", true);
-    else if (d.scanned) note(`${fa(d.pages)} صفحه. این سند اسکن است؛ متن هر صفحه با «تشخیص متن» روی همین دستگاه خوانده می‌شود و ممکن است چند غلط داشته باشد.` + (d.canTranslate ? ` متن ${langName} است و به فارسی ترجمه می‌شود.` : ""));
+    else if (d.scanned) note(`${fa(d.pages)} صفحه. این سند اسکن است؛ متن هر صفحه با «تشخیص متن» روی همین دستگاه خوانده می‌شود و ممکن است چند خطا داشته باشد.` + (d.canTranslate ? ` متن ${langName} است و به فارسی ترجمه می‌شود.` : ""));
     else if (d.canTranslate) note(`${fa(d.pages)} صفحه، به زبان ${langName}. متن به فارسی ترجمه می‌شود و همان خوانده می‌شود (ترجمه‌ی ماشینی، روی همین دستگاه). متن اصلی را با دکمه‌ی «ترجمه به فارسی» یا نمای «صفحه» ببینید. برای خواندن از هر جای متن، روی همان جمله کلیک کنید.`);
     else note(`${fa(d.pages)} صفحه. برای خواندن از هر جای متن، روی همان جمله کلیک کنید.`);
     if (!d.hasText && d.hasImages) S.view = "page";
@@ -843,6 +985,7 @@ addEventListener("message", e => {
   const m = e.data || {};
   if (m.ready) { if (pdfFrame.ready) pdfFrame.ready(); return; }
   if (m.needPassword) {
+    // (the frame is sandboxed without allow-same-origin, so its origin is «null» and cannot be named as a target: the message goes as before)
     askPassword(!!m.again).then(pw => pdfFrame.contentWindow.postMessage(pw == null ? { op: "password", cancel: true } : { op: "password", value: pw }, "*"));
     return;
   }
@@ -882,6 +1025,7 @@ async function pdfCall(msg, transfer) {
     // (1.29 deep check: a PDF that makes pdf.js hang no longer blocks every later file: after 3 minutes the call fails)
     const t = setTimeout(() => { if (pdfWait.delete(id)) no(new Error("PDF باز نشد: پاسخی نیامد.")); }, 180000);
     pdfWait.set(id, { ok: v => { clearTimeout(t); ok(v); }, no: e => { clearTimeout(t); no(e); } });
+    // (the sandboxed frame's origin is «null»: it cannot be named as a target, so the message goes as before)
     pdfFrame.contentWindow.postMessage({ ...msg, id }, "*", transfer || []);
   });
 }
@@ -1061,7 +1205,7 @@ async function loadPage(n, keepReading) {
   // the page's picture needs no text: drawn at once, not after a translation that may be waiting its turn
   if (S.view === "page") renderPageImage();
   // a scanned page is read (OCR) and a foreign one translated the first time: say so meanwhile
-  const waitT = setTimeout(() => { if (seq === S.loadSeq) $("textView").innerHTML = `<p class="empty">${translating() ? "در حال ترجمه‌ی این صفحه به فارسی…" : "در حال آماده کردن این صفحه…"}</p>`; }, 250);
+  const waitT = setTimeout(() => { if (seq === S.loadSeq) $("textView").innerHTML = `<p class="empty preparing" role="status" aria-live="polite">${translating() ? "در حال ترجمه‌ی این صفحه به فارسی…" : "در حال آماده کردن این صفحه…"}</p>`; }, 250);
   try {
   if (translating()) {
     // shown (and readable) from its first translated paragraphs on; the rest follows
@@ -1284,7 +1428,8 @@ function ensureAudio() {  // call inside a click/drop so the Mac lets sound star
 const bufCache = new Map();  // voice|speed|text -> Promise<AudioBuffer>
 // Android can prepare several sentences faster than real time when the requests overlap.
 // Start them in reading order and bound the work; playback still awaits each piece in order.
-const speechConcurrency = /Android/.test(navigator.userAgent) ? Math.max(1, Math.min(3, Math.floor((navigator.hardwareConcurrency || 2) / 2))) : 1;
+const isAndroidReader = /Android/i.test(navigator.userAgent);
+const speechConcurrency = isAndroidReader ? Math.max(1, Math.min(3, Math.floor((navigator.hardwareConcurrency || 2) / 2))) : 1;
 const speechTasks = [];
 let speechRunning = 0;
 // (urgent: the sentences after a change of voice or speed go before everything already waiting)
@@ -1377,7 +1522,7 @@ function spokenSentences(text) {
   if (start < text.length) out.push({ start, text: text.slice(start) });
   return out;
 }
-function piecesFor(page, paras, fromPara, fromOff = 0) {
+function piecesFor(page, paras, fromPara, fromOff = 0, exactStart = false) {
   const out = [];
   let afterTitle = false;
   paras.forEach((p, i) => {
@@ -1391,10 +1536,16 @@ function piecesFor(page, paras, fromPara, fromOff = 0) {
       parts.forEach((part, k) => {
         const at = p.indexOf(part, off);
         if (/[\p{L}\p{N}]/u.test(part) && !(i === fromPara && at + part.length <= fromOff)) {
+          let spoken = part.trim(), spokenAt = at + Math.max(0, part.indexOf(spoken));
+          if (exactStart && i === fromPara && fromOff > spokenAt && fromOff < spokenAt + spoken.length) {
+            const relative = fromOff - spokenAt;
+            const word = [...spoken.matchAll(/\S+/g)].find(m => m.index + m[0].length > relative);
+            if (word) { spoken = spoken.slice(word.index); spokenAt += word.index; }
+          }
           const before = out.length ? out[out.length - 1].text : "";
           const asked = /[؟?!][»”"'’)\]]*$/.test(before);
           const pause = title ? 1.1 : afterTitle ? 0.8 : first ? 0.9 : k > 0 ? 0.2 : asked ? 0.6 : 0.45;
-          out.push({ page, p: i, start: at, end: at + part.length, text: part.trim(), pause: pause * (({ short: 0.45, long: 1.4 })[S.settings.sentencePause] || 1) });
+          out.push({ page, p: i, start: spokenAt, end: spokenAt + spoken.length, text: spoken, pause: pause * (({ short: 0.45, long: 1.4 })[S.settings.sentencePause] || 1) });
           afterTitle = title;
         }
         first = false; off = at + part.length;
@@ -1404,7 +1555,7 @@ function piecesFor(page, paras, fromPara, fromOff = 0) {
   return out;
 }
 
-const reader = { active: false, paused: false, run: 0, queue: [], next: 0, playing: [], lastEnd: 0, lastPage: 0, sources: [] };
+const reader = { active: false, paused: false, buffering: false, voiceChangePending: false, run: 0, queue: [], next: 0, playing: [], lastEnd: 0, lastPage: 0, sources: [] };
 function setPlayButton() {
   const wasReading = document.body.classList.contains("is-reading");
   const wasPaused = document.body.classList.contains("is-paused");
@@ -1414,9 +1565,14 @@ function setPlayButton() {
   if (!reader.active) { document.body.classList.remove("reading-tools-open"); $("readingToolsBtn").setAttribute("aria-expanded", "false"); $("readingToolsBtn").textContent = "صفحه و سرعت"; }
   $("play").setAttribute("aria-pressed", String(reader.active && !reader.paused));
   $("play").setAttribute("aria-label", reader.active && !reader.paused ? "مکث خواندن" : reader.paused ? "ادامه‌ی خواندن" : "شروع خواندن");
-  $("play").textContent = reader.active && !reader.paused ? "❚❚ مکث" : (reader.paused ? "▶ ادامه" : "▶ خواندن");
+  const playIcon = reader.active && !reader.paused
+    ? '<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 5h4v14H7zM15 5h4v14h-4z" fill="currentColor"/></svg>'
+    : '<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>';
+  $("play").innerHTML = playIcon + (reader.active && !reader.paused ? "مکث" : reader.paused ? "ادامه" : "خواندن");
   $("stop").disabled = !reader.active;
-  const state = reader.paused ? "خواندن مکث شده" : reader.active ? "در حال خواندن" : "آماده‌ی خواندن";
+  const waitingAudio = reader.active && !reader.paused && reader.buffering;
+  const state = reader.paused ? "خواندن مکث شده" : waitingAudio ? "در حال آماده کردن صدا…" : reader.active ? "در حال خواندن" : "آماده‌ی خواندن";
+  $("readingState").setAttribute("aria-busy", String(waitingAudio));
   if ($("readingState").textContent !== state) $("readingState").textContent = state;
 }
 // a big mouse pointer for people who see badly: drawn here as pictures (black arrow with a white edge; yellow over things that can be pressed)
@@ -1446,12 +1602,12 @@ async function atBookStart(n) {
 
 // fromOff: start at the sentence holding this offset of paragraph i (a click on it); the book's
 // name is said only when reading starts at the very beginning
-async function readFrom(i, fromOff = 0) {
+async function readFrom(i, fromOff = 0, exactStart = false) {
   stopReading();
   if (!S.doc) return;
   ensureAudio();
   const run = ++reader.run;
-  Object.assign(reader, { active: true, paused: false, queue: piecesFor(S.page, S.paras, i, fromOff), next: 0,
+  Object.assign(reader, { active: true, paused: false, buffering: false, queue: piecesFor(S.page, S.paras, i, fromOff, exactStart), next: 0,
     playing: [], lastEnd: 0, lastPage: S.page, sources: [] });
   if (reader.queue[0]) reader.queue[0].pause = 0;
   reader.pageParas = { [S.page]: S.paras };
@@ -1512,11 +1668,18 @@ async function readFrom(i, fromOff = 0) {
       // (and nothing new is asked for while a change of voice waits for its first sentences: they go first)
       if (reader.lastEnd - actx.currentTime > 30 || reader.restarting) { await sleep(250); continue; }
       const piece = reader.queue[reader.next];
+      const waitingAudio = reader.lastEnd <= actx.currentTime + 0.25;
+      if (waitingAudio) { reader.buffering = true; setPlayButton(); }
       const bufP = speechBuffer(piece.text, run);
       for (let k = 1; k <= 3; k++) if (reader.queue[reader.next + k]) speechBuffer(reader.queue[reader.next + k].text, run).catch(() => {});
       let buf;
       // (a sentence dropped because the voice changed is asked for again, in the new voice)
-      try { buf = await bufP; } catch (e) { if (reader.run === run && isDropped(e)) { await sleep(100); continue; } throw e; }
+      try { buf = await bufP; } catch (e) {
+        if (waitingAudio && reader.run === run) { reader.buffering = false; setPlayButton(); }
+        if (reader.run === run && isDropped(e)) { await sleep(100); continue; }
+        throw e;
+      }
+      if (waitingAudio && reader.run === run) { reader.buffering = false; setPlayButton(); }
       if (reader.run !== run) return;
       reader.playing = reader.playing.filter(u => u.t1 > actx.currentTime);
       const src = actx.createBufferSource();
@@ -1584,7 +1747,7 @@ function clearReadingMarks() {
   reader.shownWord = null; reader.shownPiece = null;
 }
 function stopReading() {
-  reader.run++; reader.active = false; reader.paused = false;
+  reader.run++; reader.active = false; reader.paused = false; reader.buffering = false;
   reader.sources.forEach(s => { try { s.stop(); } catch (e) {} });
   reader.sources = []; reader.playing = [];
   if (actx && actx.state === "suspended") actx.resume();
@@ -1602,6 +1765,7 @@ $("play").onclick = () => {
 };
 $("stop").onclick = stopReading;
 $("textView").addEventListener("click", e => {
+  if (performance.now() < ignoreTextTapUntil) { e.preventDefault(); e.stopImmediatePropagation(); return; }
   const p = e.target.closest("p[data-i]");
   // (editing: a tap on a paragraph opens its window; a selected word is left for the «change the word» button)
   if (S.editing) return;

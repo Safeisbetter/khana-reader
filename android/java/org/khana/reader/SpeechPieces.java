@@ -6,10 +6,17 @@ import java.util.regex.Pattern;
 
 /** Sentence boundaries shared by native foreground and screen-off reading. Offsets are UTF-16, as in the page. */
 final class SpeechPieces {
+    // Keep Android's streaming TTS requests short enough that one slow generation cannot
+    // leave the player silent for several seconds after a short comma-delimited lead-in.
+    private static final int MAX_PIECE = 80;
     static final class Piece {
         final String text;
         final int start, end;
-        Piece(String source, int first, int last) { text = source.substring(first, last).trim(); start = first; end = last; }
+        final boolean continuation;
+        Piece(String source, int first, int last) { this(source, first, last, false); }
+        Piece(String source, int first, int last, boolean continuation) {
+            text = source.substring(first, last).trim(); start = first; end = last; this.continuation = continuation;
+        }
     }
     private static final Pattern INITIAL = Pattern.compile("(?:^|\\s)(?:(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|vs|e\\.g|i\\.e)\\.|(?:[A-Z]\\.)+)$", Pattern.CASE_INSENSITIVE);
     static List<Piece> split(String text) {
@@ -33,17 +40,31 @@ final class SpeechPieces {
         if (first < text.length()) add(out, text, first, text.length());
         return out;
     }
-    /** The first piece of a reading, cut at its first comma when it is long: the short part is made in a few seconds, so the voice
-     *  starts sooner after play or after a change of voice, and the rest is made while it is heard. */
+    /** Keep the first clip after a jump or page turn short enough to prepare while the old page ends. */
     static List<Piece> head(String text, Piece p) {
         List<Piece> out = new ArrayList<>();
         if (p.end - p.start > 60) {
-            for (int i = p.start + 15; i < p.end - 15; i++) {
+            int minCut = p.start + 30;
+            int targetCut = Math.min(p.end - 15, p.start + 50);
+            for (int i = minCut; i < targetCut; i++) {
                 if ("،,؛;:".indexOf(text.charAt(i)) < 0) continue;
                 int cut = i + 1;
                 while (cut < p.end && Character.isWhitespace(text.charAt(cut))) cut++;
+                if (cut - p.start <= 55) {
+                    out.add(new Piece(text, p.start, cut));
+                    out.add(new Piece(text, cut, p.end, true));
+                    return out;
+                }
+            }
+            int cut = targetCut;
+            while (cut > minCut && !Character.isWhitespace(text.charAt(cut - 1))) cut--;
+            if (cut <= minCut) {
+                cut = targetCut;
+                while (cut < p.end - 15 && !Character.isWhitespace(text.charAt(cut))) cut++;
+            }
+            if (cut > minCut && cut < p.end) {
                 out.add(new Piece(text, p.start, cut));
-                out.add(new Piece(text, cut, p.end));
+                out.add(new Piece(text, cut, p.end, true));
                 return out;
             }
         }
@@ -52,14 +73,23 @@ final class SpeechPieces {
     }
     private static boolean asciiLetter(char c) { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'; }
     private static void add(List<Piece> out, String text, int first, int end) {
-        // Bound generation latency on an unusually long sentence without dropping letters.
-        while (end - first > 600) {
-            int cut = first + 600;
-            while (cut > first && !Character.isWhitespace(text.charAt(cut))) cut--;
-            if (cut == first) { cut = first + 600; if (Character.isHighSurrogate(text.charAt(cut - 1))) cut--; }
-            out.add(new Piece(text, first, cut)); first = cut;
+        // Keep one TTS request short enough to prepare while the previous piece is heard.
+        // Prefer clause punctuation; otherwise use a word boundary, preserving every source offset.
+        int initial = first;
+        while (end - first > MAX_PIECE) {
+            int limit = first + MAX_PIECE;
+            int cut = -1;
+            for (int i = first + MAX_PIECE / 2; i < limit; i++) {
+                if ("،,؛;:".indexOf(text.charAt(i)) >= 0) cut = i + 1;
+            }
+            if (cut < 0) {
+                cut = limit;
+                while (cut > first && !Character.isWhitespace(text.charAt(cut - 1))) cut--;
+                if (cut == first) { cut = limit; if (Character.isHighSurrogate(text.charAt(cut - 1))) cut--; }
+            }
+            out.add(new Piece(text, first, cut, first > initial)); first = cut;
             while (first < end && Character.isWhitespace(text.charAt(first))) first++;
         }
-        if (text.substring(first, end).codePoints().anyMatch(Character::isLetterOrDigit)) out.add(new Piece(text, first, end));
+        if (text.substring(first, end).codePoints().anyMatch(Character::isLetterOrDigit)) out.add(new Piece(text, first, end, first > initial));
     }
 }

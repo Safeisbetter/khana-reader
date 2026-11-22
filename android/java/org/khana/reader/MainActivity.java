@@ -11,6 +11,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.system.Os;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.webkit.CookieManager;
@@ -27,6 +28,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.window.OnBackInvokedDispatcher;
 import android.widget.TextView;
 import java.io.File;
@@ -58,6 +60,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     private PermissionRequest micRequest;
     private Exporter.Saved saving;
     private boolean pageBarPainted;
+    private boolean startupLoading;
     private int barGround, barInk;
 
     // the page's own dark colours (web/app.css, --paper)
@@ -74,12 +77,12 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         super.onConfigurationChanged(c);
         // (the activity is not recreated for a change of mode: the colours around the page change here)
         boolean n = night();
-        if (outer != null) outer.setBackgroundColor(n ? DARK_PAPER : Color.WHITE);
-        if (root != null) root.setBackgroundColor(n ? DARK_PAPER : Color.WHITE);
+        if (outer != null) outer.setBackgroundColor(startupLoading ? Color.BLACK : n ? DARK_PAPER : Color.WHITE);
+        if (root != null) root.setBackgroundColor(startupLoading ? Color.BLACK : n ? DARK_PAPER : Color.WHITE);
         if (web != null) web.setBackgroundColor(n ? DARK_PAPER : Color.WHITE);
         // Keep a chosen page theme until the page supplies its updated colours. Resetting to
         // green here left the bar green when the page's colour had not changed (and was cached).
-        if (outer != null) applyBarColors(pageBarPainted ? barGround : defaultBarGround(), pageBarPainted ? barInk : defaultBarInk());
+        if (outer != null) applyBarColors(startupLoading ? Color.BLACK : pageBarPainted ? barGround : defaultBarGround(), startupLoading ? Color.WHITE : pageBarPainted ? barInk : defaultBarInk());
         applyFullScreen();
     }
 
@@ -133,11 +136,11 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
-        outer.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
+        outer.setBackgroundColor(Color.BLACK);
         // The page already has settings, export, font and speed controls. A second, empty native
         // toolbar wasted a full row, especially in landscape. Keep just the system-safe insets.
         root = new FrameLayout(this);
-        root.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
+        root.setBackgroundColor(Color.BLACK);
         outer.addView(root, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         // Held sideways the page fills the whole screen: the status and navigation bars are hidden (a swipe from the edge brings
         // them back for a moment), and the page goes under the camera's corner too, with only its text kept clear of it (--cut-l,
@@ -161,7 +164,8 @@ public final class MainActivity extends Activity implements Exporter.Asker {
             return in;
         });
         setContentView(outer);
-        applyBarColors(defaultBarGround(), defaultBarInk());
+        startupLoading = true;
+        applyBarColors(Color.BLACK, Color.WHITE);
         applyFullScreen();
         if (Build.VERSION.SDK_INT >= 33) {
             // (the back gesture, Android 13 and newer; for an app made for Android 16 and newer the only way)
@@ -177,7 +181,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
             showPage();
             return;
         }
-        TextView wait = message("خوانا آماده می‌شود…\nبار اول چند دقیقه طول می‌کشد (صداها و مدل‌ها باز می‌شوند).");
+        TextView wait = startupMessage();
         new Thread(() -> {
             String err = null;
             try {
@@ -190,8 +194,11 @@ public final class MainActivity extends Activity implements Exporter.Asker {
                 // (1.29 deep check: a window closed meanwhile builds nothing; and «save as» is ready at once, not only after the
                 // window was left and opened again)
                 if (isDestroyed()) return;
-                if (fail != null) wait.setText("خوانا باز نشد:\n" + fail);
-                else { showPage(); if (!isFinishing()) Exporter.setAsker(this); }
+                if (fail != null) {
+                    wait.setText("خوانا باز نشد:\n" + fail);
+                    View progress = root.findViewWithTag("khana-start-progress");
+                    if (progress != null) progress.setVisibility(View.GONE);
+                } else { startupLoading = false; showPage(); if (!isFinishing()) Exporter.setAsker(this); }
             });
         }, "khana-start").start();
     }
@@ -199,11 +206,35 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     private TextView message(String text) {
         TextView t = new TextView(this);
         t.setText(text);
+        t.setTextColor(Color.WHITE);
         t.setGravity(Gravity.CENTER);
-        t.setTextSize(18);
+        t.setTextSize(22);
         t.setPadding(48, 48, 48, 48);
         root.removeAllViews();
         root.addView(t, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        return t;
+    }
+
+    /** A high-contrast first-launch screen while the offline reader and its bundled models start. */
+    private TextView startupMessage() {
+        root.setBackgroundColor(Color.BLACK);
+        LinearLayout box = new LinearLayout(this);
+        box.setGravity(Gravity.CENTER);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(32, 32, 32, 32);
+        ProgressBar progress = new ProgressBar(this);
+        progress.setTag("khana-start-progress");
+        box.addView(progress, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        TextView t = new TextView(this);
+        t.setText("در حال آماده‌سازی خوانا…\nبار اول، آماده‌شدن برنامه و صداها ممکن است چند دقیقه طول بکشد.");
+        t.setTextColor(Color.WHITE);
+        t.setGravity(Gravity.CENTER);
+        t.setTextSize(22);
+        t.setLineSpacing(10, 1.15f);
+        t.setPadding(20, 28, 20, 8);
+        box.addView(t, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.removeAllViews();
+        root.addView(box, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         return t;
     }
 
@@ -250,6 +281,9 @@ public final class MainActivity extends Activity implements Exporter.Asker {
 
     private void showPage() {
         if (web != null) return;
+        startupLoading = false;
+        outer.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
+        applyBarColors(pageBarPainted ? barGround : defaultBarGround(), pageBarPainted ? barInk : defaultBarInk());
         CookieManager.getInstance().setAcceptCookie(false);
         web = new WebView(this);
         web.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);

@@ -4,7 +4,7 @@
 .keyboard-open #wordPanel .panel-head { padding-block: 3px; }
 .keyboard-open #wordPanel .edit-context { max-height: 44px; padding-block: 4px; }
 .keyboard-open #wordPanel .field { min-width: 0; padding: 5px; }
-.keyboard-open #wordPanel .field label { font-size: 13px; line-height: 1.6; }
+.keyboard-open #wordPanel .field label { font-size: 14px; line-height: 1.6; }
 .keyboard-open #wordPanel input { width: 100%; min-width: 0; }
 .keyboard-open #wordPanel .editor-actions { position: static; padding-block: 3px; }
 
@@ -13,8 +13,7 @@
 .android-reader .is-reading:not(.reading-tools-open) .tools { display: none; }
 .android-reader .is-reading:not(.reading-tools-open) .dock .pager,
 .android-reader .is-reading:not(.reading-tools-open) .dock .speedctl,
-.android-reader .is-reading:not(.reading-tools-open) .dock .booktime,
-.android-reader .is-reading:not(.reading-tools-open) .reading-context { display: none; }
+.android-reader .is-reading:not(.reading-tools-open) .dock .booktime { display: none; }
 .android-reader .is-reading:not(.reading-tools-open) .dock { width: max-content; max-width: calc(100% - 16px); padding: 6px 10px; }
 .android-reader .is-reading:not(.reading-tools-open) #play { min-height: 50px; min-width: 130px; }
 .android-reader .is-reading:not(.reading-tools-open) #bookTools { display: none; }
@@ -23,8 +22,7 @@
 /* The ready state must leave as much room for the book as playback does. */
 .android-reader .has-doc:not(.reading-tools-open) .dock .pager,
 .android-reader .has-doc:not(.reading-tools-open) .dock .speedctl,
-.android-reader .has-doc:not(.reading-tools-open) .dock .booktime,
-.android-reader .has-doc:not(.reading-tools-open) .reading-context { display: none; }
+.android-reader .has-doc:not(.reading-tools-open) .dock .booktime { display: none; }
 .android-reader .has-doc:not(.reading-tools-open) .dock { width: max-content; max-width: calc(100% - 16px); padding: 6px 10px; }
 .android-reader .has-doc:not(.reading-tools-open) #play { min-height: 50px; min-width: 130px; }
 .android-reader .has-doc:not(.reading-tools-open) .dock .transport { flex: 0 1 auto; }
@@ -35,13 +33,14 @@
 
 /* Page and speed stay beside Play in one compact phone row. Expanded controls are temporary. */
 @media (max-width: 680px) {
- .android-reader body.has-doc .dock { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.15fr) minmax(0,1fr) 48px; gap: 6px; width: calc(100% - 16px); max-width: 520px; padding: 6px; }
+ .android-reader body.has-doc .dock { display: grid; grid-template-columns: minmax(0,1fr) minmax(1.25fr,1.4fr) minmax(0,1fr) minmax(0,1fr) 48px; gap: 6px; width: calc(100% - 16px); max-width: 640px; padding: 8px; }
  .android-reader body.has-doc .dock .transport { display: contents; }
  .android-reader body.has-doc .dock .mobile-dock-button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; min-width: 0; min-height: 52px; padding: 3px; font-size: calc(14px * var(--ui-scale)); line-height: 1.35; grid-row: 1; background: var(--tone); }
  .android-reader body.has-doc .dock #quickPage { grid-column: 1; }
  .android-reader body.has-doc .dock #play { grid-column: 2; grid-row: 1; min-width: 0; min-height: 52px; padding-inline: 4px; font-size: calc(18px * var(--ui-scale)); }
  .android-reader body.has-doc .dock #quickSpeed { grid-column: 3; }
- .android-reader body.has-doc .dock #stop { grid-column: 4; grid-row: 1; min-width: 48px; min-height: 52px; padding: 4px; font-size: 0; }
+ .android-reader body.has-doc .dock #quickTone { grid-column: 4; }
+ .android-reader body.has-doc .dock #stop { grid-column: 5; grid-row: 1; min-width: 48px; min-height: 52px; padding: 4px; font-size: 0; }
  .android-reader body.has-doc .dock #stop::before { content: "■"; font-size: 20px; }
  .android-reader body.has-doc .dock .pager, .android-reader body.has-doc .dock .speedctl { display: none; position: absolute; inset-inline: 0; bottom: calc(100% + 8px); background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 10px; justify-content: center; box-shadow: 0 4px 16px #0003; }
  .android-reader body.has-doc.quick-page-open .dock .pager { display: flex; }
@@ -95,16 +94,16 @@ html.android-reader:root .bar { position: sticky; top: 0; z-index: 50; }
 /* a smaller reading bar, as wide as the text board (not wider), with slimmer tiles and voice picker */
 @media (max-width: 680px) {
   html.android-reader:root body.has-doc .dock { width: calc(100% - 32px); max-width: 520px; padding: 5px; row-gap: 4px; gap: 5px; border-radius: 18px; }
-  html.android-reader:root body.has-doc .dock .mobile-dock-button, html.android-reader:root body.has-doc .dock #play, html.android-reader:root body.has-doc .dock #stop { min-height: 42px; border-radius: 12px; }
-  html.android-reader:root body.has-doc .dock .mobile-dock-button { font-size: calc(12.5px * var(--ui-scale)); line-height: 1.25; }
+  html.android-reader:root body.has-doc .dock .mobile-dock-button, html.android-reader:root body.has-doc .dock #play, html.android-reader:root body.has-doc .dock #stop { min-height: 48px; border-radius: 12px; }
+  html.android-reader:root body.has-doc .dock .mobile-dock-button { font-size: max(14px, calc(14px * var(--ui-scale))); line-height: 1.3; }
   html.android-reader:root body.has-doc .dock #play { font-size: calc(16px * var(--ui-scale)); }
-  html.android-reader:root body.has-doc .dock .quick-voice select { min-height: 38px; padding-block: 4px; font-size: calc(14px * var(--ui-scale)); border-radius: 12px; }
+  html.android-reader:root body.has-doc .dock .quick-voice select { min-height: 48px; padding-block: 6px; font-size: max(14px, calc(14px * var(--ui-scale))); border-radius: 12px; }
 }
 
 /* A phone held sideways (MainActivity hides the system bars and lets the page run under the camera's corner, --cut-l/--cut-r):
    the screen is wide and low, so the text uses the whole width, the top bar is smaller and the reading controls are one slim row. */
 @media (orientation: landscape) and (max-height: 520px) {
-  html.android-reader:root .bar { zoom: .74; padding-left: max(28px, var(--cut-l, 0px)); padding-right: max(28px, var(--cut-r, 0px)); }
+  html.android-reader:root .bar { zoom: 1; padding-left: max(28px, var(--cut-l, 0px)); padding-right: max(28px, var(--cut-r, 0px)); }
   html.android-reader:root main { padding-left: 0; padding-right: 0; padding-top: 0; }
   html.android-reader:root .sheet { max-width: none; margin: 0; }
   html.android-reader:root #textView.text { max-width: none !important; width: 100% !important; margin: 0 !important; border-radius: 0; border-inline: 0; box-shadow: none;
@@ -113,7 +112,7 @@ html.android-reader:root .bar { position: sticky; top: 0; z-index: 50; }
   html.android-reader:root body.has-doc .dock { zoom: .8; display: flex !important; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 8px;
     width: auto; max-width: min(760px, 92vw); padding: 6px 10px; bottom: 6px; border-radius: 22px; grid-template-columns: none; }
   html.android-reader:root body.has-doc .dock .reading-context { display: flex; align-items: center; margin: 0; padding: 0; flex: 1 1 260px; min-width: 0; }
-  html.android-reader:root body.has-doc .dock #readingState, html.android-reader:root body.has-doc .dock #readingTip { display: none; }
+  html.android-reader:root body.has-doc .dock #readingState, html.android-reader:root body.has-doc .dock #readingTip { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   html.android-reader:root body.has-doc .dock .quick-voice, html.android-reader:root body.has-doc .dock .quick-voice select { width: 100%; margin: 0; }
   html.android-reader:root body.has-doc .dock .transport { display: flex; flex: 0 0 auto; gap: 8px; margin: 0; }
   html.android-reader:root body.has-doc .dock .transport button { height: 52px; min-height: 52px; padding-inline: 18px; }
@@ -163,7 +162,7 @@ html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-head { background: var(--ios-bg) !important; border: 0 !important; }
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-head h2 { font-size: 28px; font-weight: 800; letter-spacing: -.3px; }
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-head [data-close] { background: transparent !important; background-image: none !important; border: 0 !important; box-shadow: none !important;
-  color: var(--tint-ink) !important; font-weight: 600; min-height: 44px; }
+  color: var(--tint-ink) !important; font-weight: 600; min-height: 48px; }
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > .field, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > section.field { background: var(--ios-card) !important; border: 0 !important;
   border-radius: var(--ios-r) !important; box-shadow: none !important; padding: 14px 16px !important; }
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > .field > label, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > .field > .lbl, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > .field > h3 { color: var(--ios-label); font-weight: 700; }
@@ -173,10 +172,10 @@ html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"
 
 /* the search field and the settings groups as a segmented control */
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) #setFind { background: var(--ios-fill) !important; border: 0 !important; border-radius: 12px !important; box-shadow: none !important;
-  min-height: 44px; padding-inline: 16px !important; color: var(--ios-label); }
+  min-height: 48px; padding-inline: 16px !important; color: var(--ios-label); }
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .settabs { background: var(--ios-fill) !important; border: 0 !important; border-radius: 12px !important; padding: 3px !important; gap: 0 !important; }
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .settabs button { flex: 1 1 0; background: transparent !important; background-image: none !important; border: 0 !important; border-radius: 9px !important;
-  box-shadow: none !important; color: var(--ios-label) !important; min-height: 38px; font-size: 14px; font-weight: 600; padding-inline: 6px !important; }
+  box-shadow: none !important; color: var(--ios-label) !important; min-height: 48px; font-size: 14px; font-weight: 600; padding-inline: 6px !important; }
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .settabs button[aria-selected="true"] { background: var(--ios-seg) !important; color: var(--ios-label) !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, .12), 0 0 0 .5px rgba(0, 0, 0, .04) !important; }
 
@@ -234,14 +233,14 @@ html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"
     flex: 0 0 auto; align-items: center; }
   html.android-reader:root body.has-doc .dock .mobile-dock-button, html.android-reader:root body.has-doc .dock .booktime { display: none !important; }
   html.android-reader:root body.has-doc .dock .reading-context { display: flex !important; flex: 0 1 230px; min-width: 150px; margin: 0; padding: 0; }
-  html.android-reader:root body.has-doc .dock #readingState, html.android-reader:root body.has-doc .dock #readingTip { display: none; }
+  html.android-reader:root body.has-doc .dock #readingState, html.android-reader:root body.has-doc .dock #readingTip { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   html.android-reader:root body.has-doc .dock .quick-voice, html.android-reader:root body.has-doc .dock .quick-voice select { width: 100%; margin: 0; }
   html.android-reader:root body.has-doc .dock .transport { display: flex; flex: 0 0 auto; gap: 8px; margin: 0; }
   html.android-reader:root body.has-doc .dock .pager input { width: 3.6em; }
-  html.android-reader:root body.has-doc .dock :is(.pager, .speedctl) button { min-width: 44px; min-height: 44px; }
+  html.android-reader:root body.has-doc .dock :is(.pager, .speedctl) button { min-width: 48px; min-height: 48px; }
 }
 @media (orientation: landscape) and (max-height: 520px) {
-  html.android-reader:root body.has-doc .dock { flex-wrap: nowrap; max-width: none; zoom: .78; }
+  html.android-reader:root body.has-doc .dock { flex-wrap: nowrap; max-width: none; zoom: 1; }
 }
 
 /* segmented switches (Text / Page), the speed control, the page number and the file's name: grey fill, full-contrast text, the chosen
@@ -262,7 +261,7 @@ html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu :is(.tools, .group, .row) { background: transparent !important; border: 0 !important; box-shadow: none !important; }
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu > :is(button, summary, label):last-child, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu > :last-child > :is(button, summary, label):last-child { box-shadow: none !important; }
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu input[type="search"], html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu input[type="text"] { width: calc(100% - 24px) !important; max-width: none !important; margin: 8px 12px !important;
-  background: var(--ios-fill) !important; border: 0 !important; border-radius: 10px !important; box-shadow: none !important; color: var(--ios-label) !important; min-height: 44px; }
+  background: var(--ios-fill) !important; border: 0 !important; border-radius: 10px !important; box-shadow: none !important; color: var(--ios-label) !important; min-height: 48px; }
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu :has(> input[type="search"]) { width: 100% !important; max-width: none !important; box-sizing: border-box; flex: 1 1 100% !important; background: transparent !important; border: 0 !important; }
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu .search, html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu :has(> .search) { grid-column: 1 / -1 !important; width: 100% !important; max-width: none !important; justify-self: stretch !important; }
 html.android-reader:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .more-menu .search .count:empty { display: none !important; }
@@ -308,7 +307,7 @@ html.android-reader:root #welcome .jump-art .water-quote { font-size: max(11px, 
 html.android-reader:root .settabs button { min-width: 0 !important; overflow: hidden; }
 @media (max-width: 400px) {
   html.android-reader:root .settabs { gap: 5px !important; }
-  html.android-reader:root .settabs button { font-size: 11.5px !important; padding: 8px 2px 6px !important; min-height: 80px; }
+  html.android-reader:root .settabs button { font-size: 13px !important; padding: 8px 2px 6px !important; min-height: 80px; }
   html.android-reader:root #setTabs .tab-ic { width: 30px; height: 30px; border-radius: 8px; }
   html.android-reader:root #setTabs .tab-ic svg { width: 19px; height: 19px; }
 }
@@ -320,7 +319,44 @@ html.android-reader:root .settabs button { min-width: 0 !important; overflow: hi
   html.android-reader:root body.has-doc .dock { zoom: 1 !important; }
 }
 @media (orientation: landscape) and (max-height: 520px) and (max-width: 680px) {
-  html.android-reader:root body.has-doc .dock .mobile-dock-button { min-width: 60px; min-height: 52px; font-size: 13px; }
+  html.android-reader:root body.has-doc .dock .mobile-dock-button { min-width: 60px; min-height: 52px; font-size: 14px; }
 }
 /* wider screens have page and speed on the reading bar itself: the menu does not offer them again */
 @media (min-width: 681px) { html.android-reader:root #readingToolsBtn { display: none !important; } }
+
+/* Keep book and speech preparation visible above the reader controls until the wait ends. */
+.android-reader body.reading-waiting.has-doc .dock .reading-context {
+  display: flex !important; position: fixed !important; z-index: 30; left: 50%; right: auto;
+  bottom: calc(var(--dock-height, 120px) + 14px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  width: min(760px, calc(100% - 24px)); max-width: none; margin: 0; padding: 12px 16px;
+  align-items: center; justify-content: center; gap: 6px 12px; text-align: center;
+  background: var(--surface); color: var(--ink); border: 2px solid var(--lapis); border-radius: 14px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .22); overflow: visible; clip-path: none;
+  pointer-events: none; white-space: normal; font-size: 16px; line-height: 1.7;
+}
+.android-reader body.reading-waiting.has-doc .dock .reading-context #readingState,
+.android-reader body.reading-waiting.has-doc .dock .reading-context #readingTip {
+  display: inline !important; position: static !important; width: auto !important; height: auto !important;
+  overflow: visible !important; clip-path: none !important; white-space: normal !important;
+}
+.android-reader body.reading-waiting.has-doc .dock .reading-context .quick-voice { display: none !important; }
+
+/* Accessibility: preserve live playback announcements in compact layouts and keep touch labels readable. */
+html.android-reader:root body.has-doc .dock .mobile-dock-button { font-size: max(14px, calc(14px * var(--ui-scale))) !important; }
+html.android-reader:root body.has-doc .dock #quickTone { grid-row: 1; min-width: 78px; }
+html.android-reader:root body.has-doc .dock #play,
+html.android-reader:root body.has-doc .dock #stop,
+html.android-reader:root body.has-doc .dock :is(.pager, .speedctl) button { min-height: 48px !important; }
+html.android-reader:root body.has-doc .dock .mobile-dock-button,
+html.android-reader:root body.has-doc .dock #play,
+html.android-reader:root body.has-doc .dock #stop { min-height: 48px !important; }
+html.android-reader:root .settabs button { font-size: max(13px, calc(13px * var(--ui-scale))) !important; }
+html.android-reader:root :focus-visible { outline: 3px solid var(--ink) !important; outline-offset: 3px !important; }
+@media (prefers-contrast: more) {
+  html.android-reader:root :is(button, .btn, summary, input, select, textarea) { border-width: 2px !important; }
+}
+@media (min-width: 681px) {
+  html.android-reader:root body.has-doc .dock #quickTone { display: inline-flex !important; min-height: 48px; align-items: center; justify-content: center; }
+  html.android-reader:root body.has-doc .dock .reading-context { order: -1; flex: 1 1 100%; }
+  html.android-reader:root body.has-doc .dock .quick-voice { flex: 0 1 280px; }
+}

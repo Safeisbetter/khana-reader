@@ -66,13 +66,17 @@ pub fn pronounce_word(word: &str) -> String {
         let prev_has_vowel = prev_marks.chars().any(|m| vowel_mark(m).is_some()) || ends_any(&out, &["A", "i", "u"]);
         let shadda = marks.contains(SHADDA);
         match ch {
-            'آ' => out.push_str("?A"),
+            // Initial alef and alef-madda begin with a vowel in Persian; do not add a glottal stop.
+            'آ' => out.push('A'),
             'ا' => {
                 if marks.contains(TANWIN) {
                     out.push_str("an");
                 } else if first {
-                    out.push('?');
                     out.push_str(if vowel.is_empty() { "a" } else { vowel });
+                } else if vowel.is_empty() && out.ends_with('a') {
+                    // (a fatha before an alif is the long vowel «ā» alone: کِتَاب is «ketAb», not «ketaAb»)
+                    out.pop();
+                    out.push('A');
                 } else {
                     out.push('A');
                     out.push_str(vowel);
@@ -106,7 +110,7 @@ pub fn pronounce_word(word: &str) -> String {
                 }
             }
             'ه' => {
-                if last && marks.is_empty() && !ends_any(&out, &["A", "i", "u"]) && !out.ends_with('h') {
+                if last && marks.is_empty() && !ends_any(&out, &["A", "i", "u"]) && !out.ends_with('h') && !out.ends_with('a') {
                     if !out.ends_with('e') {
                         out.push('e');
                     }
@@ -127,4 +131,24 @@ pub fn pronounce_word(word: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pronounce_word;
+
+    #[test]
+    fn known_word_pronunciations_stay_stable() {
+        let cases = [
+            ("از", "az"),
+            ("ایفا", "aifA"),
+            ("آزمایش", "AzmAyS"),
+            ("کِتاب", "ketAb"),
+            ("سَلام", "salAm"),
+            ("ء", "?"),
+        ];
+        for (word, expected) in cases {
+            assert_eq!(pronounce_word(word), expected, "word: {word}");
+        }
+    }
 }

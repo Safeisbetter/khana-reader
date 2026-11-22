@@ -72,6 +72,7 @@ pub fn wait_for_power(cancelled: &dyn Fn() -> bool) {
 pub fn set_max_tries(n: usize) {
     MAX_TRIES.store(n.clamp(1, PACE_TRIES), std::sync::atomic::Ordering::Relaxed);
 }
+
 pub const PARAGRAPH_GAP: f64 = 0.9;
 
 static COMMA_PAUSE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3F26_6666);
@@ -107,11 +108,15 @@ impl Slot {
     fn take(ticket: u64) -> Slot {
         let mut st = SLOTS.state.lock().unwrap_or_else(|e| e.into_inner());
         st.1.push(ticket);
-        while !(st.0 < slot_count() && st.1.iter().min() == Some(&ticket)) {
+        // Use FIFO slot admission. A sentence can enqueue another model chunk as
+        // soon as one finishes; strict minimum-ticket priority lets that same
+        // sentence repeatedly jump ahead of later queued sentences, preventing
+        // their audio from being prepared while this sentence is retried.
+        while !(st.0 < slot_count() && st.1.first() == Some(&ticket)) {
             st = SLOTS.turn.wait(st).unwrap_or_else(|e| e.into_inner());
         }
-        if let Some(i) = st.1.iter().position(|t| *t == ticket) {
-            st.1.swap_remove(i);
+        if !st.1.is_empty() {
+            st.1.remove(0);
         }
         st.0 += 1;
         drop(st);
@@ -249,7 +254,20 @@ pub struct Engine {
     rng: Mutex<rand::rngs::StdRng>,
 }
 
+#[derive(Default)]
+pub struct SegmentTiming {
+    pub admission_ms: std::sync::atomic::AtomicU64,
+    pub slot_ms: std::sync::atomic::AtomicU64,
+    pub generation_ms: std::sync::atomic::AtomicU64,
+    pub cooldown_ms: std::sync::atomic::AtomicU64,
+    pub model_ms: std::sync::atomic::AtomicU64,
+    pub decode_ms: std::sync::atomic::AtomicU64,
+    pub asr_ms: std::sync::atomic::AtomicU64,
+    pub attempts: std::sync::atomic::AtomicU64,
+}
+
 struct Voice<'a> {
+    timing: &'a SegmentTiming,
     id: &'a str,
     cache: &'a [f32],
     off: usize,
@@ -556,7 +574,7 @@ impl Engine {
         (0..n).filter(|i| rms(&speech[i * w..(i + 1) * w]) >= floor).count() as f64 / n as f64
     }
 
-    fn speech_bounds(&self, p: &[f32]) -> (usize, usize) {
+    fn speech_bounds(&self, p: &[f32], leading_margin: f64) -> (usize, usize) {
         let r = rms(p);
         if !(r >= 1e-6) {
             return (0, p.len());
@@ -568,7 +586,7 @@ impl Engine {
         if idx.is_empty() {
             return (0, p.len());
         }
-        let start = idx[0].saturating_sub((0.02 * RATE as f64) as usize);
+        let start = idx[0].saturating_sub((leading_margin * RATE as f64) as usize);
         let end = (idx[idx.len() - 1] + (0.06 * RATE as f64) as usize).min(p.len());
         (start, end)
     }
@@ -677,15 +695,24 @@ impl Engine {
             if cancel() {
                 return Err("cancelled".to_string());
             }
-            let t = std::time::Instant::now();
+            let t_cooldown = std::time::Instant::now();
             cool_down();
+            voice.timing.cooldown_ms.fetch_add(t_cooldown.elapsed().as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
+            voice.timing.attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let t_model = std::time::Instant::now();
             let latents = self.generate_chunk(voice, chunk, rng, cancel)?;
-            lap(0, t);
-            let t = std::time::Instant::now();
+            lap(0, t_model);
+            voice.timing.model_ms.fetch_add(t_model.elapsed().as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
+            let t_decode = std::time::Instant::now();
             let a = self.decode_all(&latents)?;
-            lap(1, t);
+            lap(1, t_decode);
+            voice.timing.decode_ms.fetch_add(t_decode.elapsed().as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
             let t_check = std::time::Instant::now();
-            let (s0, e0) = self.speech_bounds(&a);
+            // Keep more onset audio in fast-start pieces. Low-energy unvoiced
+            // consonants such as Persian «س» can precede the first loud vowel.
+            // Keep enough audio before the first loud frame for soft consonants such as Persian «س».
+            // The former 20 ms normal margin could remove the onset of a word at a piece boundary.
+            let (s0, e0) = self.speech_bounds(&a, 0.10);
             let speech = audio::settle_tail(self.compress_pauses(&a[s0..e0], 0.30, 0.12), RATE);
             let dur = speech.len() as f64 / RATE as f64;
             let r = if speech.is_empty() { 0.0 } else { rms(&speech) };
@@ -706,9 +733,10 @@ impl Engine {
                 _ => true,
             };
             lap(2, t_check);
-            let t = std::time::Instant::now();
+            let t_asr = std::time::Instant::now();
             let (heard, missing) = if loud_ok && !voice.quick && LISTEN.load(std::sync::atomic::Ordering::Relaxed) { asr::heard_score(chunk, &speech, RATE) } else { (None, Vec::new()) };
-            lap(3, t);
+            lap(3, t_asr);
+            voice.timing.asr_ms.fetch_add(t_asr.elapsed().as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
             let words_ok = if LISTEN_LIGHT.load(std::sync::atomic::Ordering::Relaxed) { !asr::heard_clear_fault(heard, &missing) } else { asr::heard_ok(heard, &missing) };
             let b = |x: bool| if x { 1.0 } else { 0.0 };
             let key = [b(loud_ok), b(same_voice), b(words_ok), b(dur_ok), b(pace_ok), -(missing.len() as f64), heard.unwrap_or(1.0),
@@ -799,8 +827,11 @@ impl Engine {
     pub fn plan_text_kinds(&self, text: &str) -> Vec<(f64, Vec<(String, f64)>, prosody::Kind)> {
         let mut sentences = Vec::new();
         let mut last: Option<prosody::Kind> = None;
+        let natural = self.natural.load(std::sync::atomic::Ordering::Relaxed);
         for para in split(r"\n\s*\n", text) {
-            let mut gap = last.map_or(PARAGRAPH_GAP, |k| prosody::gap_after(k, PARAGRAPH_GAP));
+            let mut gap = last.map_or(PARAGRAPH_GAP, |k| {
+                if natural { prosody::gap_after(k, PARAGRAPH_GAP) } else { PARAGRAPH_GAP }
+            });
             for sent in planner::split_sentences(&para) {
                 let plan = match planner::plan_phrases(&sent, &self.g2p, &self.sp) {
                     Ok(p) => p,
@@ -818,7 +849,7 @@ impl Engine {
                 if !plan.is_empty() {
                     let kind = prosody::kind_of(&sent);
                     sentences.push((gap, plan, kind));
-                    gap = prosody::gap_after(kind, SENTENCE_GAP);
+                    gap = if natural { prosody::gap_after(kind, SENTENCE_GAP) } else { SENTENCE_GAP };
                     last = Some(kind);
                 }
             }
@@ -827,17 +858,17 @@ impl Engine {
     }
 
     pub fn synthesize_text(&self, text: &str, voice_id: &str, wav: &Path, workers: usize, quick: bool, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Vec<f32>, String> {
-        self.synthesize_text_in_order(text, voice_id, wav, workers, quick, None, cancel)
+        self.synthesize_text_in_order(text, voice_id, wav, workers, quick, None, &SegmentTiming::default(), cancel)
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn synthesize_text_in_order(&self, text: &str, voice_id: &str, wav: &Path, workers: usize, quick: bool, order: Option<u64>, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Vec<f32>, String> {
+    pub fn synthesize_text_in_order(&self, text: &str, voice_id: &str, wav: &Path, workers: usize, quick: bool, order: Option<u64>, timing: &SegmentTiming, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Vec<f32>, String> {
         let sentences = if strip(text).is_empty() { Vec::new() } else { self.plan_text_kinds(text) };
         if sentences.is_empty() {
             return Ok(Vec::new());
         }
         let vc = self.voice_cache(wav)?;
-        let voice = Voice { id: voice_id, cache: &vc.0, off: vc.1, quick };
+        let voice = Voice { timing, id: voice_id, cache: &vc.0, off: vc.1, quick };
         let chunker = Chunker { tok: &self.sp };
         let mut jobs: Vec<(usize, String, f64)> = Vec::new();
         for (si, (_, plan, _)) in sentences.iter().enumerate() {
@@ -862,13 +893,17 @@ impl Engine {
                     if i >= jobs.len() {
                         break;
                     }
+                    let queued = std::time::Instant::now();
                     let _slot = if cancel() { None } else { Some(Slot::take(ticket)) };
+                    timing.slot_ms.fetch_max(queued.elapsed().as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
+                    let started = std::time::Instant::now();
                     let r = if cancel() {
                         Err("cancelled".to_string())
                     } else {
                         let mut rng = rand::rngs::StdRng::seed_from_u64(seeds[i]);
                         self.generate_checked(&voice, &jobs[i].1, &mut rng, 0, cancel)
                     };
+                    timing.generation_ms.fetch_max(started.elapsed().as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
                     *results[i].lock().unwrap() = Some(r);
                 });
             }

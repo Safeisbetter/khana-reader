@@ -465,6 +465,9 @@ pub fn docx_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
     let mut main = "word/document.xml".to_string();
     if let Some(rels) = zip_read(&mut z, "_rels/.rels") {
         if let Ok(x) = roxmltree::Document::parse_with_options(&rels, crate::ebook::xml_options(false)) {
+            if crate::ebook::too_deep(&x) {
+                return Err(bad());
+            }
             for r in x.descendants().filter(|n| n.tag_name().name() == "Relationship") {
                 if r.attribute("Type").unwrap_or("").ends_with("/officeDocument") {
                     main = r.attribute("Target").unwrap_or("").trim_start_matches('/').to_string();
@@ -514,7 +517,7 @@ pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
         if let Ok(f) = z.by_index_raw(i) {
             let fname = f.name().map(|s| s.to_string()).unwrap_or_default();
             if fname.ends_with(".xml") {
-                total += f.size();
+                total = total.saturating_add(f.size());
             }
             names.insert(fname);
         }
@@ -526,11 +529,16 @@ pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
     const R: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     const P: &str = "http://schemas.openxmlformats.org/presentationml/2006/main";
     let mut slides: Vec<String> = Vec::new();
+    let mut deep_metadata = false;
     (|| -> Option<()> {
         let rels_xml = zip_read(&mut z, "ppt/_rels/presentation.xml.rels")?;
         let pres_xml = zip_read(&mut z, "ppt/presentation.xml")?;
         let rels = roxmltree::Document::parse_with_options(&rels_xml, crate::ebook::xml_options(false)).ok()?;
         let pres = roxmltree::Document::parse_with_options(&pres_xml, crate::ebook::xml_options(false)).ok()?;
+        if crate::ebook::too_deep(&rels) || crate::ebook::too_deep(&pres) {
+            deep_metadata = true;
+            return None;
+        }
         let map: HashMap<String, String> = rels
             .root_element()
             .children()
@@ -550,6 +558,9 @@ pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
         }
         Some(())
     })();
+    if deep_metadata {
+        return Err("این فایل پاورپوینت باز نشد. شاید خراب باشد.".into());
+    }
     if slides.is_empty() {
         let mut s: Vec<(u64, String)> = names
             .iter()
@@ -568,7 +579,7 @@ pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
     let mut read_total = 0u64;
     for path in slides {
         let xml = zip_read(&mut z, &path).unwrap_or_default();
-        read_total += xml.len() as u64;
+        read_total = read_total.saturating_add(xml.len() as u64);
         if read_total > 200 * 1024 * 1024 {
             return Err("این فایل پاورپوینت باز نشد. شاید خراب باشد.".into());
         }
@@ -620,24 +631,57 @@ pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
 }
 
 pub fn textutil_paragraphs(data: &[u8], ext: &str) -> Result<Vec<String>, String> {
+    let ext = ext.to_ascii_lowercase();
+    if !TEXTUTIL_TYPES.contains(&ext.as_str()) {
+        return Err("این نوع فایل Word پشتیبانی نمی‌شود.".into());
+    }
     let tmp = crate::private_fs::TempDir::new().map_err(|e| e.to_string())?;
     let src = tmp.join(format!("input{ext}"));
     let dst = tmp.join("output.txt");
     let res = (|| {
         std::fs::write(&src, data).map_err(|e| e.to_string())?;
-        let st = std::process::Command::new("/usr/bin/textutil")
+        let mut child = std::process::Command::new("/usr/bin/textutil")
             .args(["-convert", "txt", "-encoding", "UTF-8", "-output"])
             .arg(&dst)
             .arg(&src)
-            .output()
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
             .map_err(|_| "برای خواندن این نوع فایل، ابزار textutil مک لازم است.".to_string())?;
-        if !st.status.success() {
+        let status = wait_child(&mut child, std::time::Duration::from_secs(60))?;
+        if !status.success() {
             return Err("این فایل Word باز نشد. شاید خراب باشد.".to_string());
         }
         let b = std::fs::read(&dst).map_err(|e| e.to_string())?;
         Ok(split_paragraphs(&String::from_utf8_lossy(&b)))
     })();
     res
+}
+
+fn wait_child(
+    child: &mut std::process::Child,
+    timeout: std::time::Duration,
+) -> Result<std::process::ExitStatus, String> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Ok(status),
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(25))
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("زمان خواندن فایل Word بیش از حد شد.".into());
+            }
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(e.to_string());
+            }
+        }
+    }
 }
 
 pub fn open_document_layout(name: &str, mut pages: Vec<(Vec<LayoutItem>, f64, bool)>, engines: Arc<Engines>) -> Arc<Document> {
@@ -688,6 +732,94 @@ pub fn open_document(name: &str, data: &[u8], engines: Arc<Engines>) -> Result<A
 
 pub fn open_pages(name: &str, pages: Vec<Vec<String>>, engines: Arc<Engines>) -> Arc<Document> {
     Document::new(name, pages, Vec::new(), Vec::new(), engines, None)
+}
+
+#[cfg(test)]
+mod reader_tests {
+    use super::{docx_paragraphs, pptx_pages, textutil_paragraphs};
+    use std::io::{Cursor, Write};
+    use zip::write::SimpleFileOptions;
+
+    fn archive(entries: &[(&str, &str)]) -> Vec<u8> {
+        let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        for (name, text) in entries {
+            zip.start_file(*name, SimpleFileOptions::default()).unwrap();
+            zip.write_all(text.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn docx_keeps_paragraph_and_table_text_order() {
+        let xml = r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>First</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>A</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>B</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p><w:r><w:t>Last</w:t></w:r></w:p></w:body></w:document>"#;
+        let data = archive(&[("word/document.xml", xml)]);
+        assert_eq!(docx_paragraphs(&data).unwrap(), ["First", "A | B", "Last"]);
+    }
+
+    #[test]
+    fn docx_rejects_bad_zip_and_overdeep_relationships() {
+        assert!(docx_paragraphs(b"not a zip").is_err());
+        let mut rels = String::from(r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#);
+        for _ in 0..260 {
+            rels.push_str("<x>");
+        }
+        for _ in 0..260 {
+            rels.push_str("</x>");
+        }
+        rels.push_str("</Relationships>");
+        let data = archive(&[("_rels/.rels", &rels), ("word/document.xml", "<w:document xmlns:w=\"urn:w\"><w:body/></w:document>")]);
+        assert!(docx_paragraphs(&data).is_err());
+    }
+
+    #[test]
+    fn pptx_keeps_slide_order_and_text() {
+        let presentation = r#"<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst><p:sldId id="1" r:id="rId1"/></p:sldIdLst></p:presentation>"#;
+        let rels = r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="slides/slide1.xml" Type="slide"/></Relationships>"#;
+        let slide = r#"<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Slide text</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:sld>"#;
+        let data = archive(&[("ppt/presentation.xml", presentation), ("ppt/_rels/presentation.xml.rels", rels), ("ppt/slides/slide1.xml", slide)]);
+        assert_eq!(pptx_pages(&data).unwrap(), [vec!["Slide text".to_string()]]);
+    }
+
+    #[test]
+    fn pptx_handles_corrupt_archives_without_panicking() {
+        assert!(pptx_pages(b"not a zip").is_err());
+        let data = archive(&[("ppt/presentation.xml", "<p:presentation"), ("ppt/_rels/presentation.xml.rels", "<Relationships/>")]);
+        let _ = pptx_pages(&data);
+    }
+
+    #[test]
+    fn pptx_rejects_overdeep_presentation_metadata() {
+        let mut presentation = String::from(r#"<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">"#);
+        for _ in 0..260 {
+            presentation.push_str("<x>");
+        }
+        for _ in 0..260 {
+            presentation.push_str("</x>");
+        }
+        presentation.push_str("</p:presentation>");
+        let data = archive(&[("ppt/presentation.xml", &presentation), ("ppt/_rels/presentation.xml.rels", "<Relationships/>")]);
+        assert!(pptx_pages(&data).is_err());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn textutil_reads_valid_html_and_rejects_unknown_extensions() {
+        let html = b"<html><body><p>Khana textutil sample</p></body></html>";
+        assert!(textutil_paragraphs(html, "../../unexpected").is_err());
+        match textutil_paragraphs(html, ".HTML") {
+            Ok(out) => assert!(out.join(" ").contains("Khana textutil sample")),
+            Err(e) if e.contains("helper application") || e.contains("No such file or directory") => return,
+            Err(e) => panic!("textutil failed unexpectedly: {e}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn converter_wait_has_a_timeout() {
+        let mut child = std::process::Command::new("/bin/sleep").arg("2").spawn().unwrap();
+        let error = super::wait_child(&mut child, std::time::Duration::from_millis(20)).unwrap_err();
+        assert!(error.contains("زمان"));
+    }
 }
 
 

@@ -145,7 +145,9 @@ async function outline() {
 const BRIDGE = parent === window;
 const VIEW = new URL("../view/", import.meta.url).href;
 async function send(m, transfer) {
-  if (!BRIDGE) return parent.postMessage(m, "*", transfer || []);
+  // (the reader page is this frame's own origin: messages go only there. Where the origin is «null» (a custom scheme), the
+  // page cannot be named, so the message is sent as before)
+  if (!BRIDGE) return parent.postMessage(m, location.origin !== "null" ? location.origin : "*", transfer || []);
   let kind, body = "", extra = "";
   if (m.needPassword) { kind = "password"; extra = m.again ? "&again=1" : ""; }
   else if (!m.ok) { kind = "error"; body = String(m.error); }

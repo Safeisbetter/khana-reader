@@ -91,6 +91,10 @@ main { padding: 20px 16px 64px; }
   background: var(--hl-bg); color: var(--hl-ink); font-weight: 700;
   box-shadow: 0 0 0 3px var(--hl-ring); position: relative; z-index: 1;
 }
+.text .w.read-pending {
+  background: var(--hl-bg); color: var(--hl-ink); font-weight: 700;
+  outline: 3px dashed var(--hl-ring); outline-offset: 2px; border-radius: 4px;
+}
 .text .w.now mark { background: transparent; color: inherit; }
 /* «a frame»: the text keeps its own colours and a thick line is drawn just inside the edge of the word being read, so it
    never covers the next word */
@@ -431,8 +435,8 @@ body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: 108p
 /* ---- «نور شب»: for reading at night. Dark and warm: amber writing on a brown-black ground, almost no blue light, low contrast that
    does not glare (the word being read keeps its strong mark) ---- */
 :root[data-theme="night"] {
-  --paper: #100B06; --surface: #19120A; --ink: #F0D7AE; --muted: #B4976E; --line: #382A18; --lapis: #E9A758; --lapis-ink: #1A1105; --turq: #D8A067;
-  --mark: #5B3E12; --mark-ink: #FFE9C4; --reading: #2A1D0D; --danger: #F0896C; --shade: rgba(0, 0, 0, .7); --page: #150F08; --page-edge: #33261A;
+  --paper: #000000; --surface: #090704; --ink: #F0D7AE; --muted: #B4976E; --line: #382A18; --lapis: #E9A758; --lapis-ink: #1A1105; --turq: #D8A067;
+  --mark: #5B3E12; --mark-ink: #FFE9C4; --reading: #2A1D0D; --danger: #F0896C; --shade: rgba(0, 0, 0, .7); --page: #000000; --page-edge: #21180E;
   --hl-bg: #F2B24A; --hl-ink: #1A1105; --hl-ring: #F2B24A; --sent-bg: rgba(242, 178, 74, .16); color-scheme: dark;
 }
 :root[data-theme="night"] body { background: var(--paper); }
@@ -590,7 +594,37 @@ body.locked { overflow: hidden; }
 .text-size button { min-height: 44px; }
 #fontChip { min-width: 42px; justify-content: center; font-variant-numeric: tabular-nums; color: var(--muted); }
 .reading-context { flex: 1 1 100%; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; font-size: 13px; line-height: 1.7; }
-#readingState { color: var(--lapis); font-weight: 600; }
+#readingState { position: relative; display: inline-flex; align-items: center; min-height: 40px; padding: 5px 14px; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--surface) 88%, var(--lapis) 12%); color: var(--lapis); font-weight: 700; }
+#readingState[aria-busy="true"]::before {
+  content: ""; display: inline-block; width: 16px; height: 16px; margin-inline-end: 9px;
+  border: 2px solid color-mix(in srgb, var(--lapis) 24%, transparent); border-top-color: var(--lapis);
+  border-radius: 50%; animation: khana-reading-spin .8s linear infinite;
+}
+#readingState[aria-busy="true"] { overflow: hidden; padding-bottom: 9px; border-color: color-mix(in srgb, var(--lapis) 54%, var(--line)); background: color-mix(in srgb, var(--surface) 78%, var(--lapis) 22%); color: var(--ink); box-shadow: 0 3px 12px color-mix(in srgb, var(--lapis) 15%, transparent); }
+#readingState[aria-busy="true"]::after { content: ""; position: absolute; inset-inline: 10px; bottom: 3px; height: 3px; border-radius: 9px; background: linear-gradient(90deg, transparent, var(--lapis), transparent); background-size: 55% 100%; background-repeat: no-repeat; animation: khana-reading-progress 1.25s ease-in-out infinite alternate; }
+@keyframes khana-reading-spin { to { transform: rotate(360deg); } }
+@keyframes khana-reading-progress { from { background-position: 0% 0; } to { background-position: 100% 0; } }
+@media (prefers-reduced-motion: reduce) { #readingState[aria-busy="true"]::before, #readingState[aria-busy="true"]::after { animation: none; } }
+#textView[aria-busy="true"] .empty.preparing { width: min(440px, calc(100% - 32px)); min-height: 156px; box-sizing: border-box; margin: clamp(18px, 5vw, 36px) auto; padding: 24px 18px 22px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; border: 1px solid color-mix(in srgb, var(--lapis) 30%, var(--line)); border-radius: 22px; background: linear-gradient(145deg, color-mix(in srgb, var(--surface) 92%, var(--lapis) 8%), color-mix(in srgb, var(--surface) 98%, var(--lapis) 2%)); color: var(--ink); box-shadow: 0 12px 32px color-mix(in srgb, var(--lapis) 12%, transparent); font-weight: 700; }
+#textView[aria-busy="true"] .empty.preparing::before { content: ""; width: 28px; height: 28px; border: 3px solid color-mix(in srgb, var(--lapis) 20%, transparent); border-top-color: var(--lapis); border-radius: 50%; animation: khana-reading-spin .85s linear infinite; }
+#textView[aria-busy="true"] .empty.preparing::after { content: ""; display: block; width: 68px; height: 4px; border-radius: 99px; background: linear-gradient(90deg, color-mix(in srgb, var(--lapis) 20%, transparent), var(--lapis), color-mix(in srgb, var(--lapis) 20%, transparent)); background-size: 200% 100%; animation: khana-reading-progress 1.4s ease-in-out infinite alternate; }
+@media (prefers-reduced-motion: reduce) { #textView[aria-busy="true"] .empty.preparing::before, #textView[aria-busy="true"] .empty.preparing::after { animation: none; } }
+
+/* The page preparation notice is a compact iOS-style glass bubble, kept legible in every theme. */
+#textView[aria-busy="true"] .empty.preparing {
+  position: relative; width: min(390px, calc(100% - 32px)); min-height: 0; margin: clamp(22px, 7vh, 64px) auto;
+  padding: 23px 24px; gap: 13px; overflow: hidden; isolation: isolate;
+  border: 1px solid color-mix(in srgb, var(--surface) 76%, var(--lapis)); border-radius: 28px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent); color: var(--ink);
+  -webkit-backdrop-filter: saturate(175%) blur(22px); backdrop-filter: saturate(175%) blur(22px);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 88%, transparent), 0 14px 36px color-mix(in srgb, var(--ink) 13%, transparent);
+  text-wrap: balance; line-height: 1.7; animation: khana-glass-arrive .28s ease-out both;
+}
+#textView[aria-busy="true"] .empty.preparing::before { width: 30px; height: 30px; border-width: 3px; }
+#textView[aria-busy="true"] .empty.preparing::after { width: 76px; height: 4px; }
+@keyframes khana-glass-arrive { from { opacity: 0; transform: translateY(5px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) { #textView[aria-busy="true"] .empty.preparing { animation: none; } }
+@media (forced-colors: active) { #textView[aria-busy="true"] .empty.preparing { border: 2px solid CanvasText; background: Canvas; color: CanvasText; -webkit-backdrop-filter: none; backdrop-filter: none; } }
 #readingTip { color: var(--muted); }
 .guide-card h3 { font-size: 17px; margin: 0; }
 .guide-card p { margin: 0; font-size: 15px; line-height: 2; }
@@ -679,6 +713,8 @@ button:active:not(:disabled) { transform: none; }
 .more-tools > summary::after { content: "⌄"; font-size: 24px; }
 .more-tools[open] > summary { outline: 3px solid var(--lapis); }
 .more-menu { position: absolute; top: calc(100% + 8px); inset-inline-end: 0; z-index: 9; min-width: 250px; max-width: calc(100vw - 24px); padding: 10px; background: var(--surface); border: 2px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); display: grid; gap: 8px; }
+/* The settings control is on the RTL row's right edge; open its menu toward the left, into the screen. */
+html:root[dir="rtl"] .bar .top > .more-tools > .more-menu { inset-inline-end: auto; inset-inline-start: 0; }
 .more-menu button { width: 100%; justify-content: flex-start; white-space: normal; }
 .focus-reading .tools > .group:not(.text-size), .focus-reading .search { display: none; }
 .focus-reading .tools { justify-content: center; }
@@ -1529,7 +1565,7 @@ html:root .tab-ic-text { background: linear-gradient(#3D9BFF, #0A6CF0); }
 html:root .tab-ic-look { background: linear-gradient(#C46BF0, #9B3FD0); }
 html:root .tab-ic-words { background: linear-gradient(#FFAE3D, #F58A07); }
 html:root .tab-ic-safe { background: linear-gradient(#9C9CA3, #6E6E75); }
-html:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .settabs { display: grid !important; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px !important; background: transparent !important; padding: 0 !important; }
+html:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .settabs { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px !important; background: transparent !important; padding: 0 !important; }
 html:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .settabs button { display: flex !important; flex-direction: column; align-items: center; justify-content: flex-start; background: var(--ios-card) !important;
   border-radius: 14px !important; min-height: 92px; padding: 10px 4px 8px !important; font-size: 13px !important; line-height: 1.35; font-weight: 600;
   text-align: center; white-space: normal; box-shadow: none !important; outline: 0; border: 2px solid transparent !important; }
@@ -1539,7 +1575,7 @@ html:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-th
 
 /* the high-contrast themes (black, black-yellow, night light) keep their colours, but get the same five category tiles and the same
    full-width search in the menu, framed in their own text colour */
-html:root:is([data-theme="black"], [data-theme="blackyellow"], [data-theme="night"]) .settabs { display: grid !important; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px !important; overflow: visible !important;
+html:root:is([data-theme="black"], [data-theme="blackyellow"], [data-theme="night"]) .settabs { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px !important; overflow: visible !important;
   flex-wrap: nowrap; margin-top: 10px; padding: 0 !important; background: transparent !important; border: 0 !important; }
 html:root:is([data-theme="black"], [data-theme="blackyellow"], [data-theme="night"]) .settabs button { display: flex !important; flex-direction: column; align-items: center; justify-content: flex-start; min-width: 0 !important;
   min-height: 92px; padding: 10px 4px 8px !important; border-radius: 14px !important; font-size: 13px !important; line-height: 1.35; white-space: normal;
@@ -1687,13 +1723,12 @@ html:root:not(#k1):not(#k2) .lowvision-btn .lv-text { flex: 1 1 auto; min-width:
 html:root:not(#k1):not(#k2) .lowvision-btn .lv-text > span, html:root:not(#k1):not(#k2) .lowvision-btn b { white-space: normal !important; overflow-wrap: anywhere; line-height: 1.5; }
 @media (max-width: 600px) { html:root:not(#k1):not(#k2) .lowvision-btn { padding: 12px 14px; gap: 10px; } html:root:not(#k1):not(#k2) .lowvision-btn .lv-text > span { font-size: calc(13.5px * var(--ui-scale)) !important; } html:root:not(#k1):not(#k2) .lowvision-btn .ui-icon { width: 32px; height: 32px; } }
 
-/* «نوشته‌ی سه‌بعدی»: titles and buttons get a soft depth (a light edge above, a short shadow below); the book's own text stays
-   flat, so it stays easy to read. Only shadows: nothing moves and nothing is blurred over the page, so old phones stay fast */
-html[data-text3d="1"] :is(h1, h2, h3, .panel-head h2, button, .btn, summary, .lbl, .settabs button, #welcome h1.welcome-badge) {
-  text-shadow: 0 1px 1.5px rgba(0, 0, 0, .28);  /* (1.29: one soft shadow; four hard ones smeared the joined Persian letters) */
+/* «نوشته‌ی سه‌بعدی»: a clear, static raised edge on controls and reading text; no blur layer or motion. */
+html[data-text3d="1"] :is(h1, h2, h3, button, .btn, summary, .lbl, .settabs button) {
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 42%, transparent), 0 2px 2px color-mix(in srgb, var(--ink) 28%, transparent);
 }
-html[data-text3d="1"]:is([data-theme="dark"], [data-theme="black"], [data-theme="blackyellow"], [data-theme="night"], [data-theme="glassdark"], [data-theme="depthdark"]) :is(h1, h2, h3, .panel-head h2, button, .btn, summary, .lbl, .settabs button, #welcome h1.welcome-badge) {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, .75);
+html[data-text3d="1"] .text p[data-i] {
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 34%, transparent), 0 2px 1px color-mix(in srgb, var(--ink) 22%, transparent);
 }
 html[data-text3d="1"] #welcome .jump-art .water-quote { text-shadow: 0 1px 2px rgba(0, 0, 0, .6) !important; }
 /* a small phone with «نمایش درشت و پررنگ» on: «▶ خواندن» keeps room inside its frame (its words came within 2 px of the edge) */
@@ -1935,15 +1970,45 @@ html:root:not(#k1):not(#k2) #helpPanel code { font-size: .85em; }
    400; app.js sets the visible part), so nothing important is cut. */
 html, body { overflow-x: clip; }
 html:root:not(#k1):not(#k2) #welcome .jump-art { width: 100vw !important; max-width: none !important; aspect-ratio: auto !important; height: clamp(190px, min(73vw, 46vh), 470px) !important; justify-self: start; margin: -8px calc((100% - 100vw) / 2) 4px !important; padding: 0 !important; border-radius: 0 !important; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); background: #4E4682; }
+html:root:not(#k1):not(#k2) #welcome .jump-art { background-image: url("./welcome-community.jpg") !important; background-position: center 52%; background-size: cover; background-repeat: no-repeat; }
+html:root:not(#k1):not(#k2) #welcome .jump-art::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: rgba(255, 255, 255, .06); transition: background-color 2s ease; }
+html:root:not(#k1):not(#k2) #welcome .jump-art[data-light="dawn"]::before { background: rgba(245, 172, 111, .08); }
+html:root:not(#k1):not(#k2) #welcome .jump-art[data-light="evening"]::before { background: rgba(178, 105, 77, .10); }
+html:root:not(#k1):not(#k2) #welcome .jump-art[data-light="night"]::before { background: rgba(10, 20, 42, .18); }
+html:root:not(#k1):not(#k2) #welcome .jump-art > svg.water-scene { display: none !important; pointer-events: none; }
+html:root:not(#k1):not(#k2) #welcome .jump-art > svg.water-scene > * { visibility: hidden !important; }
+html:root:not(#k1):not(#k2) #welcome .jump-art > svg.water-scene > g[clip-path] { visibility: visible !important; }
+html:root:not(#k1):not(#k2) #welcome .jump-art > svg.water-scene .fish-leap,
+html:root:not(#k1):not(#k2) #welcome .jump-art > svg.water-scene .fish-leap * { visibility: visible !important; }
+html:root:not(#k1):not(#k2) #welcome .jump-art > svg.water-scene > g[clip-path] > .fish-leap:not(.realistic-fish) { display: none !important; }
+html:root:not(#k1):not(#k2) #welcome .jump-art > img.realistic-fish { display: block !important; visibility: visible !important; opacity: 1 !important;
+  position: absolute !important; left: 54% !important; bottom: 9% !important; width: clamp(120px, 14vw, 210px) !important; height: auto !important;
+  z-index: 3; pointer-events: none; transform-origin: 50% 65%; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .55)); }
+@keyframes realistic-fish-glide {
+  from { transform: translateX(-6px) rotate(-.5deg); }
+  to { transform: translateX(6px) rotate(.5deg); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:root:not(#k1):not(#k2) #welcome .jump-art > img.realistic-fish { animation: realistic-fish-glide 28s ease-in-out infinite alternate; }
+}
+@media (max-width: 600px) { html:root:not(#k1):not(#k2) #welcome .jump-art { background-position: 58% 50%; } }
 html:root:not(#k1):not(#k2) .welcome .jump-art svg.water-scene { width: 100%; height: 100%; }
 /* (the words in the water: sized by the band's height, so four lines always fit in the water, below the people on the shore;
    a soft dark panel keeps them readable over the waves; never wider than a comfortable line) */
 html:root:not(#k1):not(#k2) #welcome .jump-art { container-type: size !important; }
 html:root:not(#k1):not(#k2) #welcome .jump-art .water-quote { font-size: clamp(11px, 6.2cqh, 21px) !important; line-height: 1.6 !important;
-  left: 50% !important; right: auto !important; width: min(calc(100% - 24px), 25em); margin-left: calc(min(calc(100% - 24px), 25em) / -2) !important;
-  top: auto !important; bottom: 3.5cqh !important; padding: .45em .9em !important; border-radius: 14px;
+  left: auto !important; right: 3.5% !important; width: min(42%, 25em); margin-left: 0 !important;
+  top: auto !important; bottom: 3.5cqh !important; padding: .45em .9em !important; border-radius: 14px; z-index: 4 !important;
   background: rgba(12, 18, 40, .58) !important; box-sizing: border-box; text-align: center; }
 html:root:not(#k1):not(#k2) #welcome .jump-art .water-quote br { display: block; }
+@media (max-width: 760px) {
+  html:root:not(#k1):not(#k2) #welcome .jump-art { background-image: url("./welcome-community-portrait.jpg") !important; background-position: center 50% !important; height: clamp(190px, min(78vw, 46vh), 460px) !important; }
+  html:root:not(#k1):not(#k2) #welcome .jump-art .water-quote { width: min(58%, 25em) !important; font-size: clamp(11px, 4.8cqh, 17px) !important; }
+  html:root:not(#k1):not(#k2) #welcome .jump-art > img.realistic-fish { left: 45% !important; bottom: 9% !important; width: clamp(98px, 25vw, 145px) !important; }
+}
+@media (min-width: 761px) and (orientation: portrait) {
+  html:root:not(#k1):not(#k2) #welcome .jump-art { background-image: url("./welcome-community-portrait.jpg") !important; background-position: center 58% !important; height: clamp(420px, min(78vw, 50vh), 600px) !important; }
+}
 /* (1.29: a file name or a command inside Persian text keeps its own left-to-right order: «.apk», not «apk.») */
 html:root code, html:root kbd, html:root .guide-card code { unicode-bidi: isolate; direction: ltr; }
 
@@ -2003,8 +2068,136 @@ html:root:not(#k1):not(#k2) #helpPanel .guide-card h3, html:root:not(#k1):not(#k
 /* 1.30 brand word */
 html:root:not(#k1):not(#k2) .top .brand .logo { font-family: "KhanaNaskh", "Vazirmatn", serif; font-weight: 700; font-size: calc(var(--ic, 40px) * .86); text-shadow: 0 1px 0 light-dark(#FFFFFF, #00000080); line-height: 1.25; letter-spacing: 0; padding-block-end: 3px; color: light-dark(#9A1A33, #F2C56B); background: linear-gradient(90deg, transparent, #E2AE45 22%, #E2AE45 78%, transparent) bottom / 100% 2px no-repeat; }
 html[data-theme="blackyellow"]:root:not(#k1):not(#k2) .top .brand .logo { color: #FFE600; }
-html:root:not(#k1):not(#k2) .brand-icon { filter: drop-shadow(0 2px 3px #5A0A1C40); }
+html:root:not(#k1):not(#k2) .brand-icon { filter: drop-shadow(0 2px 3px #5B1B2D40); }
 html:root:not(#k1):not(#k2) .top .brand { gap: 3px; }
 /* 1.30: the settings tile as large as the eye button beside it */
 html:root:not(#k1):not(#k2) .bar .top > .more-tools > summary { width: calc(52px * var(--ui-scale, 1)); height: calc(52px * var(--ui-scale, 1)); min-width: 0; min-height: 0; padding: 0; margin-inline: 6px; border: 0; background: transparent; box-shadow: none; }
 html:root:not(#k1):not(#k2) .bar .top > .more-tools > summary svg.ui-icon { width: 100%; height: 100%; flex: none; }
+/* saved fixes: the copy-and-paste box is wide, large and easy to read (the text inside is a list of words, so it reads left to right) */
+.lexio { margin-top: 10px; }
+.lexio > summary { cursor: pointer; font-size: calc(16px * var(--ui-scale, 1)); padding: 6px 0; }
+#lexIO { display: block; width: 100%; box-sizing: border-box; min-height: calc(120px * var(--ui-scale, 1)); margin-top: 6px; padding: 10px; border-radius: 12px; border: 2px solid currentColor; background: transparent; color: inherit; font: inherit; font-size: calc(15px * var(--ui-scale, 1)); line-height: 1.6; }
+
+/* the top bar on the start page: the settings tile, the eye and «باز کردن» share one height, one corner and one neutral surface
+   (the open button keeps its gold, as the main action; the eye keeps its yellow only while it is switched on) */
+/* In this RTL toolbar, place the existing settings control at the far right. */
+html:root[dir="rtl"] .bar .top > .more-tools { order: -1; }
+html:root:not(#k1):not(#k2) .bar .top > .more-tools > summary,
+html:root:not(#k1):not(#k2) .bar .top > .lowvision-top {
+  width: 46px; height: 46px; min-width: 46px; min-height: 46px; padding: 0; margin-inline: 4px; box-sizing: border-box;
+  border-radius: 14px; border: 1.5px solid light-dark(#C7C7CC, #3A3A3C); background: light-dark(#F2F2F7, #1C1C1E); color: light-dark(#1C1C1E, #F2F2F7);
+  box-shadow: none; display: inline-flex; align-items: center; justify-content: center;
+}
+html:root:not(#k1):not(#k2) .bar .top > .more-tools > summary svg.ui-icon { width: 24px; height: 24px; flex: 0 0 24px; }
+html:root:not(#k1):not(#k2) .bar .top > .lowvision-top svg { width: 30px; height: 30px; flex: 0 0 30px; }
+html:root:not(#k1):not(#k2) .bar .top > .more-tools > summary svg.settings-app-icon { width: 46px; height: 46px; flex: 0 0 46px; margin: -1px; }
+html:root:not(#k1):not(#k2) .bar .top > .lowvision-top.lowvision-top:not([aria-pressed="true"]) { background: light-dark(#F2F2F7, #1C1C1E) !important; color: light-dark(#1C1C1E, #F2F2F7) !important; border: 1.5px solid light-dark(#C7C7CC, #3A3A3C) !important; }
+html:root:not(#k1):not(#k2) .bar .top > .lowvision-top[aria-pressed="true"] { background: #FFD60A !important; color: #000 !important; border-color: #FFD60A !important; }
+html:root:not(#k1):not(#k2) .bar .top > .more-tools > summary { border-radius: 14px !important; }
+html:root:not(#k1):not(#k2) .bar .top #openFileBtn { height: 46px; box-sizing: border-box; border-radius: 14px; }
+
+/* Accessibility pass: readable defaults, clear keyboard focus and comfortable touch targets. */
+:root[data-theme] { --muted: color-mix(in srgb, var(--ink) 82%, var(--paper)); }
+body { font-size: 16px; }
+button, .btn, summary { min-height: 48px; font-size: 16px; }
+:focus-visible { outline: 3px solid var(--lapis) !important; outline-offset: 3px !important; }
+.hint, .guide-card p, .guide-card li, .welcome .drop-hint, .welcome-steps li div > span { color: var(--ink) !important; }
+.guide-card { text-align: start; }
+.guide-card h3 { line-height: 1.7; }
+.guide-card .guide-lead { margin: 0; font-size: 16px; line-height: 1.8; }
+.guide-details { border-top: 1px solid var(--line); padding-top: 8px; }
+.guide-details > summary { min-height: 48px; color: var(--lapis); font-weight: 700; }
+.help-safety { border: 2px solid var(--danger); border-radius: 14px; padding: 14px 16px; color: var(--ink); background: var(--surface); font-size: 16px; line-height: 1.9; }
+.help-safety strong { display: block; color: var(--danger); }
+.text, #pageView, .panel-body { direction: rtl; }
+.panel-body { text-align: start; }
+
+/* One shared 48 px action frame and 26 px glyph for the top bar. */
+html:root { --top-action-size: 48px; --top-glyph-size: 26px; }
+@media (max-width: 300px) { html:root { --top-action-size: 44px; --top-glyph-size: 24px; } }
+html:root .bar .top > .more-tools > summary,
+html:root .bar .top > .lowvision-top,
+html:root .bar .top > .top-save { width: var(--top-action-size); height: var(--top-action-size); min-width: var(--top-action-size); min-height: var(--top-action-size); padding: 0; margin-inline: 3px; box-sizing: border-box; }
+html:root .bar .top > .more-tools > summary svg.ui-icon,
+html:root .bar .top > .lowvision-top svg,
+html:root .bar .top > .top-save svg.ui-icon,
+html:root .bar .top > #openFileBtn svg.ui-icon { width: var(--top-glyph-size); height: var(--top-glyph-size); min-width: var(--top-glyph-size); min-height: var(--top-glyph-size); flex: 0 0 var(--top-glyph-size); margin: 0; }
+html:root .bar .top > #openFileBtn { height: var(--top-action-size); min-height: var(--top-action-size); box-sizing: border-box; }
+/* Match the eye glyph beside Settings to the settings tile's graphite and silver tones. */
+html:root:not([data-lowvision="1"]) .bar .top > .lowvision-top svg { color: light-dark(#2C2C2E, #A9A9AE); }
+html:root .bar .top > .lowvision-top[aria-pressed="true"] svg { color: #000; }
+/* Make «Open file» the clear primary action: larger gold button, same aligned glyph. */
+html:root:not([data-lowvision="1"]) .bar .top > #openFileBtn {
+  height: 52px !important; min-height: 52px !important; padding-inline: 20px !important; gap: 9px !important;
+  border: 1px solid #B88724 !important; border-radius: 16px !important; background: #E6B94F !important;
+  background-image: none !important; color: #281C03 !important; box-shadow: 0 2px 8px rgba(116, 78, 4, .22) !important;
+  font-size: 17px !important; font-weight: 750;
+}
+html:root:not([data-lowvision="1"]) .bar .top > #openFileBtn svg.ui-icon { color: #634400 !important; }
+@media (max-width: 420px) {
+  html:root:not([data-lowvision="1"]) .bar .top > #openFileBtn { height: 50px !important; min-height: 50px !important; padding-inline: 12px !important; gap: 7px !important; font-size: 16px !important; }
+}
+@media (max-width: 340px) {
+  html:root:not([data-lowvision="1"]) .bar .top > #openFileBtn { height: 48px !important; min-height: 48px !important; padding-inline: 8px !important; gap: 5px !important; font-size: 15px !important; }
+}
+
+/* Keep the top-bar action icons on one visual system: equal touch targets, 24 px outline glyphs, one theme-aware color. */
+html:root .bar .top > .more-tools > summary,
+html:root .bar .top > .top-save,
+html:root:not(#k1):not(#k2) .bar .top > .lowvision-top {
+  width: 48px !important; height: 48px !important; min-width: 48px !important; min-height: 48px !important;
+  padding: 0 !important; border: 1px solid var(--line) !important; border-radius: 14px !important;
+  background: var(--surface) !important; color: var(--ink) !important; box-shadow: none !important;
+}
+html:root .bar .top > .more-tools > summary > svg.ui-icon,
+html:root .bar .top > .top-save > svg.ui-icon,
+html:root .bar .top > .lowvision-top > svg.ui-icon {
+  width: 24px !important; height: 24px !important; min-width: 24px !important; min-height: 24px !important;
+  flex: 0 0 24px !important; padding: 0 !important; margin: 0 !important; border-radius: 0 !important;
+  background: none !important; color: currentColor !important; box-shadow: none !important; filter: none !important;
+}
+html:root .bar .top > .lowvision-top[aria-pressed="true"] { background: var(--lapis) !important; color: var(--lapis-ink, #fff) !important; border-color: var(--lapis) !important; }
+
+/* Native dropdowns must follow the selected theme too (voice, lock timeout and audio bitrate lists). */
+html:root:is([data-theme="dark"], [data-theme="night"], [data-theme="black"], [data-theme="blackyellow"], [data-theme="glassdark"], [data-theme="depthdark"]) { color-scheme: dark; }
+html:root:is([data-theme="light"], [data-theme="modern"], [data-theme="glass"], [data-theme="depth"]) { color-scheme: light; }
+html:root :is(select, select option, select optgroup) { background-color: var(--surface) !important; color: var(--ink) !important; }
+
+/* Selection actions stay together above the reader controls on phones and desktops. */
+.selection-actions { position: fixed; z-index: 15; inset-inline: 10px; bottom: 20px; margin-inline: auto; width: max-content; max-width: calc(100vw - 20px); display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.selection-actions[hidden] { display: none; }
+.selection-actions > button { position: static; inset: auto; bottom: auto; margin: 0; width: auto; max-width: 100%; min-height: 48px; padding-inline: 16px; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
+body.has-doc .selection-actions { bottom: calc(var(--dock-height, 180px) + 32px + env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 380px) { .selection-actions { gap: 5px; } .selection-actions > button { padding-inline: 10px; font-size: 14px; } }
+
+/* A clearly labeled, high-contrast top-bar control for enlarging the interface. */
+html:root:not(#k1):not(#k2) .bar .top > .lowvision-top {
+  display: inline-grid !important; grid-auto-flow: column; grid-template-columns: 22px auto; grid-template-rows: 24px;
+  align-items: center; justify-content: center; column-gap: 4px;
+  width: auto !important; min-width: 78px !important; height: 52px !important; min-height: 52px !important;
+  padding: 3px 9px !important; border: 2px solid #111 !important; border-radius: 12px !important;
+  background: #111 !important; color: #FFD60A !important; box-shadow: none !important;
+}
+html:root:not(#k1):not(#k2) .bar .top > .lowvision-top .lowvision-glyph { display: grid; place-items: center; width: 22px; height: 24px; margin: 0; font: 900 19px/24px Arial, sans-serif; letter-spacing: -.06em; text-align: center; }
+html:root:not(#k1):not(#k2) .bar .top > .lowvision-top .lowvision-top-label { display: block; height: 24px; margin: 0; font-size: 14px; font-weight: 800; line-height: 24px; white-space: nowrap; }
+html:root:not(#k1):not(#k2) .bar .top > .lowvision-top[aria-pressed="true"] { background: #FFD60A !important; color: #111 !important; border-color: #111 !important; }
+html:root:not(#k1):not(#k2) .bar .top > .lowvision-top:focus-visible { outline: 3px solid #FFD60A !important; outline-offset: 3px; }
+@media (max-width: 420px) {
+  html:root:not(#k1):not(#k2) .bar .top > .lowvision-top { min-width: 72px !important; padding-inline: 6px !important; column-gap: 4px; }
+}
+@media (forced-colors: active) {
+  html:root:not(#k1):not(#k2) .bar .top > .lowvision-top { forced-color-adjust: auto; background: ButtonFace !important; color: ButtonText !important; border: 2px solid ButtonText !important; }
+  html:root:not(#k1):not(#k2) .bar .top > .lowvision-top[aria-pressed="true"] { background: Highlight !important; color: HighlightText !important; border-color: Highlight !important; }
+}
+
+/* The wordmark's gentle 3D motion uses only composited transforms and stops for reduced motion. */
+@keyframes khana-logo-depth {
+  0%, 100% { transform: perspective(700px) rotateY(-3deg) rotateX(1deg) translateZ(0); }
+  50% { transform: perspective(700px) rotateY(3deg) rotateX(-1deg) translateZ(1px); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:root .bar .top .brand .logo { transform-style: preserve-3d; animation: khana-logo-depth 8s ease-in-out infinite; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html:root .bar .top .brand .logo { animation: none !important; transform: none !important; }
+}

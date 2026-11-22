@@ -11,6 +11,24 @@ use std::sync::Mutex;
 
 type R = Result<String, String>;
 
+/// True when every letter of a Persian word has its own vowel mark (or sukun), except the letters that can be long vowels
+/// (ا آ و ی ه), which may stand bare. Such a word can be said from its marks alone.
+pub fn fully_marked(word: &str) -> bool {
+    let mut letters: Vec<(char, bool)> = Vec::new();
+    for c in word.chars() {
+        if ('\u{064b}'..='\u{0652}').contains(&c) {
+            if let Some(l) = letters.last_mut() {
+                if matches!(c, '\u{064e}' | '\u{0650}' | '\u{064f}' | '\u{0652}') {
+                    l.1 = true;
+                }
+            }
+        } else if ('\u{0600}'..='\u{06ff}').contains(&c) {
+            letters.push((c, false));
+        }
+    }
+    !letters.is_empty() && letters.iter().all(|(c, marked)| *marked || "اآوییه".contains(*c))
+}
+
 pub fn collapse_loops(ph: &str) -> String {
     let mut words: Vec<String> = split_ws(ph).iter().map(|s| s.to_string()).collect();
     for n in 1..5 {
@@ -123,6 +141,23 @@ pub fn align_words(words: &[String], phw: &[String]) -> Vec<(usize, usize)> {
 
 fn lookup<'a>(m: &'a [(&str, &str)], k: &str) -> Option<&'a str> {
     m.iter().find(|(a, _)| *a == k).map(|(_, v)| *v)
+}
+
+fn remove_alif_onset_glottal(word: &str, phonemes: &str) -> String {
+    // Keep the model's explicit glottal onset for alef-initial spellings.
+    // Stripping it changes the phoneme stream in a way that can make the
+    // speech model substitute an unrelated consonant at the start of a word.
+    let _ = word;
+    phonemes.to_string()
+}
+
+fn correct_alif_initials(words: &[&str], phonemes: &str) -> String {
+    let spellings: Vec<String> = words.iter().map(|w| w.to_string()).collect();
+    let mut sounds: Vec<String> = split_ws(phonemes).iter().map(|s| s.to_string()).collect();
+    for (i, j) in align_words(&spellings, &sounds) {
+        sounds[j] = remove_alif_onset_glottal(&spellings[i], &sounds[j]);
+    }
+    sounds.join(" ")
 }
 
 const GENERAL_LEXICON: &[(&str, &str)] = &[
@@ -417,7 +452,7 @@ impl LexiconG2P {
         let mut lex: Vec<(String, String)> = Vec::new();
         for (word, spelling) in all {
             let word = repair_default(&word);
-            let ph = self.spelling_phonemes(&spelling).unwrap_or_default();
+            let ph = remove_alif_onset_glottal(&word, &self.spelling_phonemes(&spelling).unwrap_or_default());
             if !word.is_empty() && !ph.is_empty() {
                 match lex.iter_mut().find(|x| x.0 == word) {
                     Some(x) => x.1 = ph,
@@ -445,7 +480,14 @@ impl LexiconG2P {
         if let Some(p) = self.memo.lock().unwrap().get(&key) {
             return Ok(p.clone());
         }
-        let r = self.phonemise_uncached(text, keep_ezafe)?;
+        let mut r = self.phonemise_uncached(text, keep_ezafe)?;
+        // A stray leading «ye» (from a linking «ی» that was split off the word before) is not a sound a word starts with,
+        // unless the text itself starts with ی: دریای سیاه was read «ye daryAye siyAh».
+        if !text.trim_start().starts_with(['ی', 'ي']) {
+            if let Some(rest) = r.strip_prefix("ye ").or_else(|| r.strip_prefix("ye1 ")) {
+                r = rest.to_string();
+            }
+        }
         let mut m = self.memo.lock().unwrap();
         if m.len() > 20000 {
             m.clear();
@@ -475,6 +517,17 @@ impl LexiconG2P {
         for m in rx(r"(?<![\d۰-۹٠-٩٫٬.,/])[9۹٩](?![\d۰-۹٠-٩٫٬]|[.,/][\d۰-۹٠-٩])").find_iter(text.as_str()).flatten() {
             if !found.iter().any(|(a, b, _)| *a < m.end() && m.start() < *b) {
                 found.push((m.start(), m.end(), "noh".into()));
+            }
+        }
+        // A Persian word that has its own vowel marks (fatha, kasra or damma, as an author or a fix writes them) is said as
+        // those marks say. The general reader ignored the marks: مِهر was read «mohr».
+        for m in rx(r"(?<![؀-ۿ‌])[؀-ۿ‌ً-ْ]*[َُِ][؀-ۿ‌ً-ْ]*").find_iter(text.as_str()).flatten() {
+            // (only a word whose sounds are all marked: with a letter left unmarked, the marks alone would drop its vowel)
+            if fully_marked(m.as_str()) && !found.iter().any(|(a, b, _)| *a < m.end() && m.start() < *b) {
+                let ph = pronounce(m.as_str());
+                if !ph.is_empty() {
+                    found.push((m.start(), m.end(), ph));
+                }
             }
         }
         for m in rx(LATIN_WORD).find_iter(text.as_str()).flatten() {
@@ -581,7 +634,7 @@ impl LexiconG2P {
         let n = split_ws(&ph).len();
         let nw = words.len();
         if (nw as isize - 1 <= n as isize && n <= nw) || nw < 4 || (n > nw && search(r"[0-9۰-۹٠-٩A-Za-z]", text)) {
-            return Ok(ph);
+            return Ok(correct_alif_initials(&words, &ph));
         }
         let mid = nw / 2;
         let cuts: Vec<usize> = (2..nw.saturating_sub(1)).filter(|&k| words[k] == "و").collect();
@@ -594,7 +647,7 @@ impl LexiconG2P {
             l
         };
         left.extend(split_ws(&self.base_checked(&words[h..].join(" "))?).iter().map(|s| s.to_string()));
-        Ok(left.join(" "))
+        Ok(correct_alif_initials(&words, &left.join(" ")))
     }
 
     fn phonemise_marked(&self, text: &str, keep_ezafe: bool) -> R {
@@ -696,6 +749,24 @@ impl LexiconG2P {
             ph = ph.replace("zh", ";");
         }
         Ok(if keep_ezafe { ph } else { ph.replace('1', "") })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{correct_alif_initials, remove_alif_onset_glottal};
+
+    #[test]
+    fn strips_only_an_initial_glottal_for_alef_words() {
+        assert_eq!(remove_alif_onset_glottal("از", "?az"), "?az");
+        assert_eq!(remove_alif_onset_glottal("ایفا", "?ifA"), "?ifA");
+        assert_eq!(remove_alif_onset_glottal("علی", "?ali"), "?ali");
+        assert_eq!(remove_alif_onset_glottal("ارائه", "?erA?e"), "?erA?e");
+    }
+
+    #[test]
+    fn aligns_alef_rule_without_changing_other_words() {
+        assert_eq!(correct_alif_initials(&["از", "خانه"], "?az xAne"), "?az xAne");
     }
 }
 

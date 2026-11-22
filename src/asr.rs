@@ -154,3 +154,27 @@ pub fn heard_bad(heard: Option<f64>, problems: &[String]) -> bool {
     let Some(h) = heard else { return false };
     h < 0.6 || problems.iter().any(|p| p.starts_with('+') || p.ends_with('$') || p.ends_with('^')) || problems.iter().filter(|p| p.starts_with('-')).count() >= 2
 }
+
+#[cfg(test)]
+mod tests {
+    use super::heard_clear_fault;
+
+    fn problems(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[test]
+    fn light_check_preserves_existing_extra_word_tolerance() {
+        assert!(!heard_clear_fault(Some(0.95), &problems(&["+sys"])));
+    }
+
+    #[test]
+    fn light_check_preserves_existing_extra_audio_tolerance() {
+        assert!(!heard_clear_fault(Some(0.95), &problems(&["+4"])));
+    }
+
+    #[test]
+    fn light_check_still_tolerates_one_small_pronunciation_mismatch() {
+        assert!(!heard_clear_fault(Some(0.95), &problems(&["~shklgyr"])));
+    }
+}

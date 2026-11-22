@@ -1238,6 +1238,11 @@ pub struct LLine {
     size: f64,
 }
 
+fn stray_pdf_letter_line(text: &str) -> bool {
+    let text = strip(text);
+    text.len() == 1 && text.as_bytes()[0].is_ascii_alphabetic()
+}
+
 impl LLine {
     pub fn geometry(&self) -> (f64, f64, f64, f64, f64) {
         (self.top, self.bot, self.x0, self.x1, self.size)
@@ -1693,6 +1698,9 @@ pub fn layout_lines(items: &[LayoutItem], page_h: f64) -> Vec<LLine> {
             size: sizes[sizes.len() / 2],
         });
     }
+    // PDF exports sometimes place a lone Latin glyph (for example a detached B or C)
+    // on its own baseline. Drop only isolated one-letter Latin lines after building full lines.
+    lines.retain(|line| !stray_pdf_letter_line(&line.text));
     order_side_columns(lines)
 }
 
@@ -1914,6 +1922,37 @@ pub fn paragraphs_from_lines(lines: &[LLine]) -> Vec<String> {
         prev = Some(l);
     }
     paras
+}
+
+#[cfg(test)]
+mod pdf_line_tests {
+    use super::{layout_lines, stray_pdf_letter_line, LayoutItem};
+
+    fn item(s: &str, top: f64, x1: f64) -> LayoutItem {
+        LayoutItem { s: s.to_string(), x0: 10.0, top, x1, bot: top + 12.0, size: 12.0, rtl: false }
+    }
+
+    #[test]
+    fn recognizes_only_isolated_latin_letters_as_pdf_artifacts() {
+        assert!(stray_pdf_letter_line(" B "));
+        assert!(stray_pdf_letter_line("C"));
+        assert!(!stray_pdf_letter_line("Book"));
+        assert!(!stray_pdf_letter_line("B is a heading."));
+        assert!(stray_pdf_letter_line("a"));
+        assert!(!stray_pdf_letter_line("و"));
+    }
+
+    #[test]
+    fn removes_lone_capital_lines_from_positioned_pdf_text() {
+        let items = vec![
+            item("B", 10.0, 17.0),
+            item("A paragraph from the PDF page.", 35.0, 190.0),
+            item("C", 60.0, 17.0),
+        ];
+        let lines = layout_lines(&items, 800.0);
+        let text: Vec<&str> = lines.iter().map(|line| line.text.as_str()).collect();
+        assert_eq!(text, ["A paragraph from the PDF page."]);
+    }
 }
 
 

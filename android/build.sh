@@ -13,7 +13,7 @@ export TZ=UTC LC_ALL=C
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$HERE")"
 T="$HERE/toolchain"
-OUT="$HERE/build"
+OUT="${KHANA_BUILD_OUT:-$HERE/build}"
 export JAVA_HOME="$T/jdk/jdk-17.0.13+11/Contents/Home"
 export PATH="$JAVA_HOME/bin:$HOME/.cargo/bin:$PATH"
 SDK="$T/sdk"
@@ -34,7 +34,11 @@ mkdir -p "$OUT/jniLibs/arm64-v8a"
 cp "$HERE/prebuilt/arm64-v8a/"*.so "$OUT/jniLibs/arm64-v8a/"
 # (paths of this Mac left out of the library: the source and cargo folders by fixed names)
 export CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=$ROOT=/khana"$'\x1f'"--remap-path-prefix=$HOME/.cargo=/cargo"$'\x1f'"--remap-path-prefix=$HOME/.rustup=/rustup"
-(cd "$ROOT" && cargo rustc --release --lib --target aarch64-linux-android --crate-type cdylib)
+if [ -n "${KHANA_DEV:-}" ] && [ -z "${KHANA_PUBLIC:-}" ]; then
+  (cd "$ROOT" && cargo rustc --release --lib --target aarch64-linux-android --crate-type cdylib --features dev-timing)
+else
+  (cd "$ROOT" && cargo rustc --release --lib --target aarch64-linux-android --crate-type cdylib)
+fi
 "$NDKB/llvm-strip" --strip-unneeded -o "$OUT/jniLibs/arm64-v8a/libkhana.so" "$ROOT/target/aarch64-linux-android/release/libkhana.so"
 
 # 3. the Java shell
@@ -86,7 +90,7 @@ rm -rf "$A/app/models/whisper"  # (speech to text is on the Mac only: 1.6 GB)
 # about half again as fast. Two listeners heard no difference in what is said. KHANA_LM32=1 keeps the 32-bit model.
 LM8="$HERE/prebuilt/voice8/flow_lm_step.onnx"
 if [ -z "${KHANA_LM32:-}" ] && [ -f "$LM8" ]; then cp "$LM8" "$A/app/models/parsigo/model/onnx/flow_lm_step.onnx"; rm -f "$A/app/models/parsigo/model/onnx/flow_lm_step.onnx.data"; fi
-[ -f "$OUT/fonts/Vazirmatn.ttf" ] || { mkdir -p "$OUT/fonts"; swift "$HERE/tools/woff2_to_ttf.swift" "$ROOT/web/Vazirmatn.woff2" "$OUT/fonts/Vazirmatn.ttf"; }
+[ -f "$OUT/fonts/Vazirmatn.ttf" ] || { mkdir -p "$OUT/fonts" "$OUT/swift-module-cache"; swift -module-cache-path "$OUT/swift-module-cache" "$HERE/tools/woff2_to_ttf.swift" "$ROOT/web/Vazirmatn.woff2" "$OUT/fonts/Vazirmatn.ttf"; }
 cp "$OUT/fonts/Vazirmatn.ttf" "$A/fonts/"
 (cd "$A/app" && find . -type f | sed 's|^\./||' | LC_ALL=C sort | while IFS= read -r f; do printf '%s\t%s\n' "$f" "$(stat -f %z "$f")"; done) > "$A/app.files"
 

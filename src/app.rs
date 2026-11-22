@@ -96,7 +96,7 @@ fn all_voices() -> Vec<(String, String, String, String)> {
 fn default_settings() -> Map<String, Value> {
     let first = voices().first().map(|v| v.id).unwrap_or("");
     let v = json!({"voice": first, "speed": 1.0, "fontSize": 21, "lineHeight": 2.2, "reversed": false, "persianYeh": true, "autoNext": true, "focusMode": false, "lowVisionColor": "yellow",
-                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "font": "vazir", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "normal", "cursor": "large", "accent": "khana", "accentFixed": true, "iconStyle": "glossy", "corners": "round", "startSound": true, "uiScale": 1, "lowVision": false, "lowVisionPrev": {}, "text3d": false, "wordSpacing": "normal"});
+                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "font": "vazir", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "normal", "sentencePause": "normal", "cursor": "large", "accent": "khana", "accentFixed": true, "iconStyle": "glossy", "corners": "round", "startSound": true, "uiScale": 1, "lowVision": false, "lowVisionPrev": {}, "text3d": false, "wordSpacing": "normal"});
     v.as_object().unwrap().clone()
 }
 
@@ -156,13 +156,13 @@ static TTS_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 
 pub struct Speech {
     engine: Mutex<Option<Arc<Engine>>>,
-    busy: (Mutex<usize>, std::sync::Condvar),
+    busy: (Mutex<(usize, Vec<u64>)>, std::sync::Condvar),
     last_play: Mutex<Option<Instant>>,
 }
 
 pub fn speech() -> &'static Speech {
     static S: OnceLock<Speech> = OnceLock::new();
-    S.get_or_init(|| Speech { engine: Mutex::new(None), busy: (Mutex::new(0), std::sync::Condvar::new()), last_play: Mutex::new(None) })
+    S.get_or_init(|| Speech { engine: Mutex::new(None), busy: (Mutex::new((0, Vec::new())), std::sync::Condvar::new()), last_play: Mutex::new(None) })
 }
 
 impl Speech {
@@ -179,10 +179,10 @@ impl Speech {
     }
 
     pub fn synthesize(&self, text: &str, voice_id: &str, speed: f64, quick: bool, cancel: &(dyn Fn() -> bool + Sync)) -> Result<(Vec<f32>, usize), String> {
-        self.synthesize_in_order(text, voice_id, speed, quick, None, cancel)
+        self.synthesize_in_order(text, voice_id, speed, quick, None, &tts::SegmentTiming::default(), cancel)
     }
 
-    pub fn synthesize_in_order(&self, text: &str, voice_id: &str, speed: f64, quick: bool, order: Option<u64>, cancel: &(dyn Fn() -> bool + Sync)) -> Result<(Vec<f32>, usize), String> {
+    pub fn synthesize_in_order(&self, text: &str, voice_id: &str, speed: f64, quick: bool, order: Option<u64>, timing: &tts::SegmentTiming, cancel: &(dyn Fn() -> bool + Sync)) -> Result<(Vec<f32>, usize), String> {
         let all = voices();
         let (id, wav, tempo) = if voice_id == "mine" && my_voice().is_file() {
             ("mine".to_string(), my_voice(), 1.0)
@@ -193,7 +193,9 @@ impl Speech {
         let speed = (speed.clamp(0.5, 2.0) * tempo).clamp(0.5, 2.0);
         let eng = self.engine()?;
         let text = tts::speech_clean(text);
-        let _turn = Turn::take(&self.busy);
+        let queued = Instant::now();
+        let _turn = Turn::take(&self.busy, order, cancel)?;
+        timing.admission_ms.store(queued.elapsed().as_millis() as u64, Ordering::Relaxed);
         let started = Instant::now();
         let settings = load_settings();
         eng.g2p.set_lexicon(&lexicon_pairs(&settings));
@@ -202,7 +204,7 @@ impl Speech {
         let recent = self.last_play.lock().unwrap().map_or(false, |t| t.elapsed() < Duration::from_secs(30));
         let workers = if recent { 3 } else { 5 };
         let workers = std::env::var("KHANA_WORKERS").ok().and_then(|v| v.parse::<usize>().ok()).filter(|n| (1..=8).contains(n)).unwrap_or(workers);
-        let mut a = eng.synthesize_text_in_order(&text, &id, &wav, workers, quick, order, cancel)?;
+        let mut a = eng.synthesize_text_in_order(&text, &id, &wav, workers, quick, order, timing, cancel)?;
         if (speed - 1.0).abs() >= 0.008 && !a.is_empty() {
             a = crate::stretch::stretch(&a, speed, tts::RATE);
         }
@@ -211,27 +213,38 @@ impl Speech {
     }
 }
 
-struct Turn<'a>(&'a (Mutex<usize>, std::sync::Condvar));
+struct Turn<'a>(&'a (Mutex<(usize, Vec<u64>)>, std::sync::Condvar));
 
 impl<'a> Turn<'a> {
     fn room() -> usize {
-        (std::thread::available_parallelism().map_or(4, |n| n.get()) / 2).clamp(1, 3)
+        let half_cores = std::thread::available_parallelism().map_or(4, |n| n.get()) / 2;
+        if cfg!(target_os = "android") { half_cores.clamp(1, 4) } else { half_cores.clamp(1, 3) }
     }
 
-    fn take(gate: &'a (Mutex<usize>, std::sync::Condvar)) -> Turn<'a> {
+    fn take(gate: &'a (Mutex<(usize, Vec<u64>)>, std::sync::Condvar), order: Option<u64>, cancel: &dyn Fn() -> bool) -> Result<Turn<'a>, String> {
         let mut n = gate.0.lock().unwrap_or_else(|e| e.into_inner());
-        while *n >= Turn::room() {
-            n = gate.1.wait(n).unwrap_or_else(|e| e.into_inner());
+        if let Some(ticket) = order { n.1.push(ticket); }
+        loop {
+            if cancel() {
+                if let Some(ticket) = order { if let Some(i) = n.1.iter().position(|v| *v == ticket) { n.1.remove(i); } }
+                gate.1.notify_all();
+                return Err("cancelled".into());
+            }
+            let first = order.map_or(n.1.is_empty(), |ticket| n.1.iter().min() == Some(&ticket));
+            if n.0 < Turn::room() && first { break; }
+            n = gate.1.wait_timeout(n, Duration::from_millis(100)).unwrap_or_else(|e| e.into_inner()).0;
         }
-        *n += 1;
-        Turn(gate)
+        if let Some(ticket) = order { if let Some(i) = n.1.iter().position(|v| *v == ticket) { n.1.remove(i); } }
+        n.0 += 1;
+        gate.1.notify_all();
+        Ok(Turn(gate))
     }
 }
 
 impl Drop for Turn<'_> {
     fn drop(&mut self) {
-        *self.0 .0.lock().unwrap_or_else(|e| e.into_inner()) -= 1;
-        self.0 .1.notify_one();
+        self.0 .0.lock().unwrap_or_else(|e| e.into_inner()).0 -= 1;
+        self.0 .1.notify_all();
     }
 }
 
@@ -905,6 +918,20 @@ impl App {
             let ctype = if path.ends_with(".js") { "text/javascript; charset=utf-8" } else { "text/css; charset=utf-8" };
             return Reply { status: 200, ctype, body: std::fs::read(web.join(&path[1..])).unwrap_or_default(), headers: Vec::new() };
         }
+        if method == "GET" {
+            let (file, ctype) = match path {
+                "/welcome-community.jpg" => ("welcome-community.jpg", "image/jpeg"),
+                "/welcome-community-portrait.jpg" => ("welcome-community-portrait.jpg", "image/jpeg"),
+                "/fish-realistic.png" => ("fish-realistic.png", "image/png"),
+                _ => ("", ""),
+            };
+            if !file.is_empty() {
+                return match std::fs::read(web.join(file)) {
+                    Ok(body) => Reply { status: 200, ctype, body, headers: Vec::new() },
+                    Err(_) => Reply { status: 404, ctype: "text/plain", body: Vec::new(), headers: Vec::new() },
+                };
+            }
+        }
         if method == "GET" && path == "/Vazirmatn.woff2" {
             return Reply { status: 200, ctype: "font/woff2", body: VAZIRMATN.to_vec(), headers: Vec::new() };
         }
@@ -1343,13 +1370,27 @@ impl App {
                 let dropped = move || asked_gen > 0 && asked_gen < TTS_GEN.load(Ordering::Relaxed);
                 speech().mark_play();
                 adapt_to_device_speed();
-                let (a, rate) = match speech().synthesize_in_order(&text, &voice, speed, quick, order, &dropped) {
+                let timing = tts::SegmentTiming::default();
+                let (a, rate) = match speech().synthesize_in_order(&text, &voice, speed, quick, order, &timing, &dropped) {
                     Ok(r) => r,
                     Err(_) if dropped() => return Err(bad("cancelled")),
                     Err(e) => return Err(ApiError::Internal(e)),
                 };
                 speech().mark_play();
-                Ok(Reply { status: 200, ctype: "audio/wav", body: audio::wav_bytes(&a, rate as u32), headers: Vec::new() })
+                #[cfg(feature = "dev-timing")]
+                let headers = vec![("X-Khana-Timing".into(), json!({
+                        "admission": timing.admission_ms.load(Ordering::Relaxed),
+                        "slot": timing.slot_ms.load(Ordering::Relaxed),
+                        "generation": timing.generation_ms.load(Ordering::Relaxed),
+                        "cooldown_ms": timing.cooldown_ms.load(Ordering::Relaxed),
+                        "model_ms": timing.model_ms.load(Ordering::Relaxed),
+                        "decode_ms": timing.decode_ms.load(Ordering::Relaxed),
+                        "asr_ms": timing.asr_ms.load(Ordering::Relaxed),
+                        "attempts": timing.attempts.load(Ordering::Relaxed)
+                    }).to_string())];
+                #[cfg(not(feature = "dev-timing"))]
+                let headers = Vec::new();
+                Ok(Reply { status: 200, ctype: "audio/wav", body: audio::wav_bytes(&a, rate as u32), headers })
             }
             "tts_gen_post" => {
                 let new_gen = body_json()?.get("gen").and_then(|v| v.as_u64()).unwrap_or(0);
