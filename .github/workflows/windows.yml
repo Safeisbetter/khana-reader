@@ -22,8 +22,7 @@ permissions:
 env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: v1.33-beta1
-  MODELS_RELEASE_ID: "454204685"
+  MODELS_RELEASE: v1.30
 
 jobs:
   build:
@@ -50,16 +49,16 @@ jobs:
           $dll | ForEach-Object { Copy-Item $_.FullName ort/ }
           Remove-Item -Recurse -Force ortpkg
 
-      - name: Models (from the Android download of the release)
+      - name: Models (from the public v1.30 Android packages)
         shell: pwsh
         env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader.apk" } else { "KhanaReader-lite.apk" }
           New-Item -ItemType Directory -Force apk | Out-Null
-          $modelAssetUrl = "https://github.com/Safeisbetter/khana-reader/releases/download/untagged-0c428c31ac6d8d81c655/$apk"
-          curl.exe --fail --silent --show-error --location $modelAssetUrl --output "apk/$apk"
+          gh release download $env:MODELS_RELEASE --repo $env:GITHUB_REPOSITORY -p $apk -D apk
           if ($LASTEXITCODE -ne 0) { throw "Model package download failed" }
-          $expected = if ("${{ matrix.edition }}" -eq "full") { "6abe49408041707c3be8ec0230315a8cd9fc4fbceda2f0bd100ca01354e24c65" } else { "d00111e35db05cd5c361c3863d13d4c6e24fdf37dc50d238026790d9141d1ddf" }
+          $expected = if ("${{ matrix.edition }}" -eq "full") { "aff28f5607c5b579f6b809c66f55f161e5a89b1d343769127508d28c489fbacf" } else { "2b5e3205beb1a7fd4eb47d847aa317924708c325918ab5f57541d531b2bae885" }
           if ((Get-FileHash "apk/$apk" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Model package checksum mismatch" }
           Move-Item "apk/$apk" apk/models.zip
           Expand-Archive apk/models.zip -DestinationPath apk/x
