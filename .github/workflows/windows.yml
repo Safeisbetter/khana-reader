@@ -226,8 +226,7 @@ jobs:
             export ASSET_NAME="$asset_name"
             existing="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" --jq '.[] | select(.name == env.ASSET_NAME) | [.id, (.digest // "")] | @tsv' | head -n 1)"
             if [ -n "$existing" ]; then
-              existing_digest="${existing#*
-\t'}"
+              existing_digest="$(printf '%s' "$existing" | cut -f 2)"
               existing_digest="${existing_digest#sha256:}"
               if [ "$existing_digest" = "$expected" ]; then
                 echo "Already present with matching digest: $asset_name"
