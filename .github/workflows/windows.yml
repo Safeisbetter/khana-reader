@@ -53,15 +53,11 @@ jobs:
       - name: Models (from the Android download of the release)
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader.apk" } else { "KhanaReader-lite.apk" }
-          $assetsJson = gh api "repos/$env:GITHUB_REPOSITORY/releases/$env:MODELS_RELEASE_ID/assets?per_page=100"
-          if ($LASTEXITCODE -ne 0) { throw "Could not list Android model assets" }
-          $asset = $assetsJson | ConvertFrom-Json | Where-Object { $_.name -eq $apk } | Select-Object -First 1
-          if (-not $asset) { throw "Android model package not found in draft release" }
           New-Item -ItemType Directory -Force apk | Out-Null
-          curl.exe --fail --silent --show-error --location -H "Accept: application/octet-stream" -H "Authorization: Bearer $env:GH_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/assets/$($asset.id)" --output "apk/$apk"
+          $modelAssetUrl = "https://github.com/Safeisbetter/khana-reader/releases/download/untagged-0c428c31ac6d8d81c655/$apk"
+          curl.exe --fail --silent --show-error --location $modelAssetUrl --output "apk/$apk"
           if ($LASTEXITCODE -ne 0) { throw "Model package download failed" }
           $expected = if ("${{ matrix.edition }}" -eq "full") { "6abe49408041707c3be8ec0230315a8cd9fc4fbceda2f0bd100ca01354e24c65" } else { "d00111e35db05cd5c361c3863d13d4c6e24fdf37dc50d238026790d9141d1ddf" }
           if ((Get-FileHash "apk/$apk" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Model package checksum mismatch" }
