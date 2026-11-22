@@ -1,8 +1,4 @@
-# The Windows app (experimental, not tried on a real PC). Built on GitHub's own Windows computers, in two editions:
-#   lite: no translator (about 0.5 GB); full: with the translator (CTranslate2, built here, and the 600M translation model; about 1.1 GB).
-# Both hold the program, ONNX Runtime 1.19.2 (Microsoft's published build) beside it, the page (web/) and the models (taken from the Android
-# downloads of the release, which hold the same files). A check of the core and of the window runs before a package is made.
-# Run by hand (Actions -> Windows -> Run workflow) or on a push to the branch windows-full.
+
 name: Windows
 
 on:
@@ -20,7 +16,6 @@ on:
   push:
     branches: [windows-full, release-review-1.21, release-review-1.22]
 
-# (the build may only read the repository; only the publishing job below may write to the release page)
 permissions:
   contents: read
 
@@ -28,6 +23,7 @@ env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
   MODELS_RELEASE: v1.33-beta1
+  MODELS_RELEASE_ID: "454204685"
 
 jobs:
   build:
@@ -44,8 +40,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Microsoft's onnxruntime page on GitHub is gone (2026-11-18), so the DLL is taken from Khana's own
-          # v1.30 Windows package, which carries onnxruntime.dll from the size-checked Microsoft 1.19.2 zip.
           gh release download v1.30 --repo $env:GITHUB_REPOSITORY -p KhanaReader-Windows-full-experimental.zip -D ortpkg
           if ($LASTEXITCODE -ne 0) { throw "ONNX Runtime package download failed" }
           if ((Get-FileHash ortpkg/KhanaReader-Windows-full-experimental.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne "6df163a220814887a2a5c30e4e0405cad851c6e3dab2cc7c50a15f86b3cf1acd") { throw "ONNX Runtime package checksum mismatch" }
@@ -62,11 +56,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader.apk" } else { "KhanaReader-lite.apk" }
-          $releasesJson = gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
-          if ($LASTEXITCODE -ne 0) { throw "Could not list releases" }
-          $release = $releasesJson | ConvertFrom-Json | Where-Object { $_.tag_name -eq $env:MODELS_RELEASE } | Select-Object -First 1
-          if (-not $release) { throw "Draft model release not found by tag in the authenticated release list" }
-          $assetsJson = gh api "repos/$env:GITHUB_REPOSITORY/releases/$($release.id)/assets?per_page=100"
+          $assetsJson = gh api "repos/$env:GITHUB_REPOSITORY/releases/$env:MODELS_RELEASE_ID/assets?per_page=100"
           if ($LASTEXITCODE -ne 0) { throw "Could not list Android model assets" }
           $asset = $assetsJson | ConvertFrom-Json | Where-Object { $_.name -eq $apk } | Select-Object -First 1
           if (-not $asset) { throw "Android model package not found in draft release" }
@@ -101,7 +91,6 @@ jobs:
         shell: pwsh
         run: |
           git clone --depth 1 --branch v$env:CT2_VERSION --recurse-submodules --shallow-submodules https://github.com/OpenNMT/CTranslate2.git ct2src
-          # (the tag must still be the commit it was when this was written: a tag can be moved, a commit cannot)
           if ((git -C ct2src rev-parse HEAD) -ne "383d063daf0bf338a22b491864cb2018eb8efd15") { throw "CTranslate2: the v$env:CT2_VERSION tag is not the expected commit" }
           cmake -S ct2src -B ct2build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DWITH_MKL=OFF -DWITH_RUY=ON -DOPENMP_RUNTIME=COMP -DBUILD_CLI=OFF -DBUILD_TESTS=OFF "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
           cmake --build ct2build --config Release --parallel 4
@@ -121,7 +110,6 @@ jobs:
           Copy-Item target/release/khana.exe "$out/KhanaReader.exe"
           Get-ChildItem -Recurse ort -Filter onnxruntime*.dll | ForEach-Object { Copy-Item $_.FullName $out }
           if ("${{ matrix.edition }}" -eq "full") { Copy-Item ct2build/Release/ctranslate2.dll $out }
-          # (Microsoft's runtime libraries, so that a PC without them can still run the program)
           foreach ($n in "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "vcomp140.dll") { if (Test-Path "C:\Windows\System32\$n") { Copy-Item "C:\Windows\System32\$n" $out } }
           Copy-Item web "$out/web" -Recurse
           Copy-Item pack/models "$out/models" -Recurse
@@ -213,11 +201,9 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           if [ -z "$TAG" ]; then echo "Set the 'tag' input to an existing release tag."; exit 1; fi
-          releases=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100")
-          release_id=$(printf '%s' "$releases" | jq -r --arg tag "$TAG" '.[] | select(.tag_name == $tag) | .id' | head -n 1)
-          if [ -z "$release_id" ]; then echo "Draft release not found by tag in the authenticated release list."; exit 1; fi
+          release_id="454204685"
+          if [ "$TAG" != "v1.33-beta1" ]; then echo "This workflow is configured only for draft release v1.33-beta1." >&2; exit 1; fi
 
-          # Keep a supplemental checksum file for the Windows packages; leave existing draft assets untouched.
           (cd zips && sha256sum *.zip) > SHA256SUMS-Windows-1.33-beta1.txt
           ls -la zips
           for file in zips/*.zip SHA256SUMS-Windows-1.33-beta1.txt; do
