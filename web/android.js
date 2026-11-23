@@ -69,13 +69,13 @@
   });
   document.querySelectorAll(".hint").forEach(el => { if (el.querySelector("kbd")) el.hidden = true; });
   say(document.querySelector(".privacy"), "با بستن برنامه پاک می‌شوند.",
-    "با بستن برنامه پاک می‌شوند. هر فایل MP3 و PDF را خودتان جایی که می‌خواهید ذخیره می‌کنید (صفحه‌ی «ذخیره» گوشی).");
+    "با بستن برنامه پاک می‌شوند. فایل‌های MP3 و PDF را خودتان جایی که می‌خواهید ذخیره می‌کنید (صفحه‌ی «ذخیره» گوشی).");
   // (why a saved file can take hours: with the app behind another one, or the screen off, Android leaves it only the slow cores)
   const st = $("mp3Status");
   if (st) {
     const tip = document.createElement("p");
     tip.className = "hint";
-    tip.textContent = "ساختن فایل با صفحه‌ی خاموش هم ادامه دارد. اگر سرعت مهم‌تر است، برنامه را روی صفحه نگه دارید؛ در پس‌زمینه ممکن است کندتر شود.";
+    tip.textContent = "ساخت فایل هنگام خاموش بودن صفحه نیز ادامه دارد. اگر سرعت مهم‌تر است، برنامه را روی صفحه نگه دارید؛ در پس‌زمینه ممکن است کندتر شود.";
     st.appendChild(tip);
   }
   // «کپی متن صفحه»: through the shell (Server.copySensitive), which marks the text as sensitive and takes it off the clipboard
@@ -83,8 +83,8 @@
   const copyBtn = $("copy");
   if (copyBtn) copyBtn.onclick = () => {
     const text = S.paras.join("\n\n");
-    if (!text) return toast("متنی برای کپی نیست.");
-    api("/api/clip", { method: "POST", body: text }).then(() => toast("متن صفحه کپی شد. پس از یک دقیقه و نیم از حافظه‌ی کپی پاک می‌شود."),
+    if (!text) return toast("متنی برای کپی کردن وجود ندارد.");
+    api("/api/clip", { method: "POST", body: text }).then(() => toast("متن صفحه کپی شد. پس از یک دقیقه و نیم از حافظه‌ی موقت پاک می‌شود."),
       () => toast("کپی نشد؛ متن را انتخاب و کپی کنید."));
   };
   // The screen guard (MainActivity.applyScreenGuard): on unless the reader switches it off here.
@@ -99,7 +99,7 @@
     box.checked = !!(S.settings && S.settings.allowScreenshots);
     box.onchange = () => setSetting("allowScreenshots", box.checked);
     const txt = document.createElement("span");
-    txt.textContent = "اجازه‌ی عکس و فیلم گرفتن از صفحه‌ی خوانا";
+    txt.textContent = "اجازه‌ی ثبت عکس و فیلم از صفحه‌ی خوانا";
     lab.append(box, txt);
     const tip = document.createElement("p");
     tip.className = "editnote";
@@ -121,7 +121,7 @@ if (window.KHANA_NO_MIC) {
   const box = document.querySelector(".myvoice");
   if (box) {
     const say = box.querySelector(".say"); if (say) say.hidden = true;
-    const hint = box.querySelector(".hint"); if (hint) hint.textContent = "خوانا می‌تواند با صدای خود شما بخواند. یک فایل صوتی کوتاه از صدای خودتان (۱۰ تا ۳۰ ثانیه، بدون سر و صدا) انتخاب کنید.";
+    const hint = box.querySelector(".hint"); if (hint) hint.textContent = "خوانا می‌تواند با صدای خود شما بخواند. یک فایل صوتی کوتاه از صدای خودتان (۱۰ تا ۳۰ ثانیه، بدون سروصدا) انتخاب کنید.";
   }
 }
 
@@ -157,16 +157,11 @@ if (window.KHANA_NO_MIC) {
   const pageStop = stopReading;
   let control = Promise.resolve(), timer = null, polling = false, lastPosition = null, finishing = false, startAt = null;
   let pageLoadMs = null, initialTextMs = 0, startupSummaryUntil = null;
-  let pendingWord = null;
   const setReadingStatus = (message, busy) => {
     const state = $('readingState');
     if (state.textContent !== message) state.textContent = message;
     state.setAttribute('aria-busy', String(!!busy));
     document.body.classList.toggle('reading-waiting', !!busy || performance.now() < startupSummaryUntil);
-  };
-  const clearPendingWord = () => {
-    if (pendingWord) pendingWord.classList.remove('read-pending');
-    pendingWord = null;
   };
   const showReadTiming = pos => {
     const tip = $('readingTip');
@@ -201,7 +196,7 @@ if (window.KHANA_NO_MIC) {
   function highlight(pos) {
     clearReadingMarks();
     if (pos.para < 0) return;
-    if (pendingWord && startAt && pos.page === startAt.page && pos.para === startAt.para && pos.end > pos.start) clearPendingWord();
+    if (reader.pendingWord && startAt && pos.page === startAt.page && pos.para === startAt.para && pos.end > pos.start && pos.duration > 0) clearPendingWord();
     const paragraph = document.querySelector(`.text p[data-i="${pos.para}"]`);
     if (!paragraph) return;
     paragraph.classList.add('reading');
@@ -222,7 +217,12 @@ if (window.KHANA_NO_MIC) {
     }
   }
   async function poll(run, waiting = 0) {
-    if (reader.run !== run || !reader.active || document.hidden || polling) return;
+    if (reader.run !== run || !reader.active || document.hidden) return;
+    if (polling) {
+      // The previous reading may still be finishing a status request during a handoff.
+      timer = setTimeout(() => poll(run, waiting), 50);
+      return;
+    }
     polling = true;
     try {
       const pos = await jget('/api/read_status');
@@ -244,25 +244,25 @@ if (window.KHANA_NO_MIC) {
       showReadTiming(pos);
       reader.paused = !!pos.paused; setPlayButton();
       const preparing = pos.waitingPage;
-      if (preparing) setReadingStatus(`آماده‌سازی کتاب، صفحه‌ی ${fa(preparing)} از ${fa(S.doc.pages)}؛ در حال آماده کردن صفحه‌ی اسکن‌شده`, true);
-      else if (reader.paused) setReadingStatus('خواندن مکث شده', false);
-      else if (!Number.isFinite(pos.firstTextMs)) setReadingStatus(`آماده‌سازی کتاب، صفحه‌ی ${fa(pos.page || S.page)} از ${fa(S.doc.pages)}؛ در حال آماده کردن متن`, true);
+      if (preparing) setReadingStatus(`آماده‌سازی کتاب، صفحه‌ی ${fa(preparing)} از ${fa(S.doc.pages)}؛ آماده‌سازی صفحه‌ی اسکن‌شده`, true);
+      else if (reader.paused) setReadingStatus('خواندن موقتاً متوقف است', false);
+      else if (reader.pendingWord) setReadingStatus(selectedWordWaitingMessage, true);
+      else if (!Number.isFinite(pos.firstTextMs)) setReadingStatus(`آماده‌سازی کتاب، صفحه‌ی ${fa(pos.page || S.page)} از ${fa(S.doc.pages)}؛ در حال آماده‌سازی متن`, true);
       else if (!Number.isFinite(pos.firstReadyMs)) {
-        setReadingStatus(pendingWord ? 'آماده کردن صدا از واژه‌ی انتخاب‌شده…' : 'آماده کردن صدای اول…', true);
+        setReadingStatus('آماده‌سازی صدای آغاز متن…', true);
       }
-      else if (pos.startupBuffering) setReadingStatus('آماده کردن صدا برای شروع خواندن…', true);
+      else if (pos.startupBuffering) setReadingStatus('آماده‌سازی صدا برای شروع خواندن…', true);
       else if (pos.waitingSpeech) {
         const seconds = fa(Math.floor((Number(pos.waitingSpeechMs) || 0) / 1000));
-        setReadingStatus(pendingWord ? `آماده کردن صدا از واژه‌ی انتخاب‌شده… ${seconds} ثانیه` : `آماده کردن جمله‌ی بعدی… ${seconds} ثانیه`, true);
+        setReadingStatus(`آماده‌سازی جمله‌ی بعدی… ${seconds} ثانیه`, true);
       }
-      else if (pendingWord) setReadingStatus('آماده کردن صدا از واژه‌ی انتخاب‌شده…', true);
       else setReadingStatus('در حال خواندن', false);
       highlight(pos);
     } catch (e) { if (reader.run === run) { stopReading(); toast(e.message); } }
     finally { polling = false; }
     if (reader.run === run && reader.active) timer = setTimeout(() => poll(run), 250);
   }
-  readFrom = async function (para, offset = 0) {
+  readFrom = async function (para, offset = 0, exactStart = false) {
     // (finishing: a new voice or speed: the phone ends the sentence being heard by itself, so it is not stopped here)
     const exact = finishing; finishing = false;
     if (exact) { pageStop(); clearTimeout(timer); lastPosition = null; reader.nativePosition = null; } else stopReading();
@@ -275,10 +275,8 @@ if (window.KHANA_NO_MIC) {
     let scanPlan = null;
     startAt = { page: first, para, start: offset, end: offset };
     reader.active = true; reader.paused = false; setPlayButton();
-    const paraEl = offset > 0 ? document.querySelector(`.text p[data-i="${para}"]`) : null;
-    pendingWord = paraEl ? [...paraEl.querySelectorAll('.w')].find(w => Number(w.dataset.s) === offset) || null : null;
-    if (pendingWord) pendingWord.classList.add('read-pending');
-    setReadingStatus('در حال آماده کردن متن…', true);
+    if (exactStart) markPendingWord(para, offset);
+    setReadingStatus(reader.pendingWord ? selectedWordWaitingMessage : 'در حال آماده‌سازی متن…', true);
     try {
       // The sandboxed PDF renderer needs a visible page to prepare scans. OCR them once before
       // native reading starts; no pictures or book files are written to shared storage.
@@ -287,7 +285,7 @@ if (window.KHANA_NO_MIC) {
         const last = settings.autoNext === false ? first : doc.pages;
         scanPlan = { lengths, last };
         if (lengths.letters[first - 1] < 0) {
-          setReadingStatus(`آماده کردن صفحه‌ی اسکن‌شده… ${fa(first)} از ${fa(last)}`, true);
+          if (!reader.pendingWord) setReadingStatus(`آماده‌سازی صفحه‌ی اسکن‌شده… ${fa(first)} از ${fa(last)}`, true);
           await pageReq(`/api/page?doc=${doc.id}&n=${first}&tr=false`, first, doc.id);
         }
       }
@@ -296,7 +294,7 @@ if (window.KHANA_NO_MIC) {
       initialTextMs = performance.now() - textStarted;
       const request = { doc: doc.id, pages: doc.pages, page: first, para, start: offset,
         voice: settings.voice, speed: Number(settings.speed) || 1, tr: !!(doc.canTranslate && settings.translate),
-        rev: !!settings.reversed, yeh: !!settings.persianYeh, autoNext: settings.autoNext !== false, announceEnd: !doc.isTyped, announceTitle, exact };
+        rev: !!settings.reversed, yeh: !!settings.persianYeh, autoNext: settings.autoNext !== false, announceEnd: !doc.isTyped, announceTitle, exact, exactStart, startImmediately: exactStart || offset > 0 };
       control = control.catch(() => {}).then(() => reader.run === run ? jpost('/api/read_start', request) : null);
       await control;
       if (reader.run === run) {
@@ -319,7 +317,7 @@ if (window.KHANA_NO_MIC) {
     try { await command('/api/read_pause', { paused }); } catch (e) { stopReading(); toast(e.message); }
   }
   $('play').onclick = () => {
-    if (!S.doc || !S.paras.length) return toast('متنی برای خواندن نیست.');
+    if (!S.doc || !S.paras.length) return toast('متنی برای خواندن وجود ندارد.');
     if (S.view !== 'text') { S.view = 'text'; syncChrome(); }
     if (reader.active) pause(!reader.paused); else readFrom(0);
   };
@@ -327,8 +325,9 @@ if (window.KHANA_NO_MIC) {
   restartReading = function () {
     clearTimeout(restartT);
     if (!reader.active) return;
+    const run = reader.run;
     restartT = setTimeout(async () => {
-      if (!reader.active) return;
+      if (!reader.active || reader.run !== run) return;
       // (1.29 deep check: before the phone reports a position, where this reading was started, not the top of the page)
       const pos = lastPosition || (startAt && startAt.page === S.page ? startAt : null), paused = reader.paused;
       if (pos && pos.para < 0) return;  // (the closing «پایان متن.»: nothing is left to read again)
@@ -336,8 +335,10 @@ if (window.KHANA_NO_MIC) {
       // reading goes on right after it (before, it was cut and the same sentence made again from nothing: a long silence).
       const finish = !paused && pos && pos.para >= 0 && pos.page === S.page && pos.end > pos.start;
       finishing = !!finish;
-      await readFrom(pos && pos.para >= 0 ? pos.para : 0, pos && pos.para >= 0 ? (finish ? pos.end : pos.start) : 0);
-      if (paused && reader.active) await pause(true);
+      const restart = readFrom(pos && pos.para >= 0 ? pos.para : 0, pos && pos.para >= 0 ? (finish ? pos.end : pos.start) : 0);
+      const restartedRun = reader.run;
+      await restart;
+      if (paused && reader.active && reader.run === restartedRun) await pause(true);
     }, 400);
   };
   document.addEventListener('visibilitychange', () => {

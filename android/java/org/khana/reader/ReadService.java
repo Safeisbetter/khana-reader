@@ -44,6 +44,7 @@ public final class ReadService extends Service {
                     .put("duration", r.duration).put("stalls", r.stalls).put("stalled", r.stalled)
                     .put("firstReadyMs", r.firstReadyMs < 0 ? JSONObject.NULL : r.firstReadyMs)
                     .put("firstTextMs", r.firstTextMs < 0 ? JSONObject.NULL : r.firstTextMs)
+                    .put("firstTiming", r.firstTiming == null ? JSONObject.NULL : r.firstTiming)
                     .put("lastStall", r.lastStall).put("waitingPage", r.waitingPage).put("waitingSpeech", r.waitingSpeech)
                     .put("waitingText", r.waitingText).put("waitingTextPage", r.waitingTextPage)
                     .put("waitingTextMs", r.waitingText ? SystemClock.elapsedRealtime() - r.waitingTextSince : 0)
@@ -55,6 +56,27 @@ public final class ReadService extends Service {
             }
         } catch (Exception ignored) { }
         return out.toString();
+    }
+    /** Numeric-only local timing diagnostics. Never logs page, document, voice, or speech text. */
+    private static void logTiming(String event, long waitMs, JSONObject timing) {
+        if (!MainActivity.DEV_TOOLS || timing == null) return;
+        android.util.Log.i("KhanaTiming", event + " wait_ms=" + waitMs
+            + " worker_ms=" + timing.optLong("worker")
+            + " admission_ms=" + timing.optLong("admission")
+            + " slot_ms=" + timing.optLong("slot")
+            + " generation_ms=" + timing.optLong("generation")
+            + " cooldown_ms=" + timing.optLong("cooldown_ms")
+            + " model_ms=" + timing.optLong("model_ms")
+            + " decode_ms=" + timing.optLong("decode_ms")
+            + " asr_ms=" + timing.optLong("asr_ms")
+            + " attempts=" + timing.optLong("attempts")
+            + " reject_pace=" + timing.optLong("reject_pace")
+            + " reject_quiet=" + timing.optLong("reject_quiet")
+            + " reject_low_speech=" + timing.optLong("reject_low_speech")
+            + " reject_dead_air=" + timing.optLong("reject_dead_air")
+            + " reject_pitch=" + timing.optLong("reject_pitch")
+            + " reject_words=" + timing.optLong("reject_words")
+            + " reject_duration=" + timing.optLong("reject_duration"));
     }
     private static final class Sound {
         JSONObject timing;
@@ -76,7 +98,9 @@ public final class ReadService extends Service {
     private static final class Run {
         final String id = UUID.randomUUID().toString();
         final JSONObject request;
-        final ExecutorService workers = Executors.newFixedThreadPool(4);
+        // Keep one fewer synthesis request active to leave room for audio
+        // playback and reduce contention between inference and pronunciation checks.
+        final ExecutorService workers = Executors.newFixedThreadPool(3);
         // (1.29: how many sentences are made ahead of the voice. It was 4: after a few short sentences that was only some eight seconds of
         // speech, less than a long sentence takes to make on a tablet or an older phone that has grown warm, and the voice stopped after
         // «…است.» or a number. Twelve are half a minute or more of speech; a sound waiting here is a few hundred kilobytes)
@@ -94,6 +118,7 @@ public final class ReadService extends Service {
         volatile long pausedTotalMs;
         final long startedAt = SystemClock.elapsedRealtime();
         volatile long firstReadyMs = -1, firstTextMs = -1;
+        volatile JSONObject firstTiming;
         volatile long pagePrepareMs, pageReadyLeadMs;
         volatile boolean pageQuick;
         volatile int waitingPage;
@@ -157,9 +182,9 @@ public final class ReadService extends Service {
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE);
         PendingIntent toggle = PendingIntent.getService(this, 10, new Intent(this, ReadService.class).setAction(paused ? "resume" : "pause"), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         PendingIntent stop = PendingIntent.getService(this, 11, new Intent(this, ReadService.class).setAction("stop"), PendingIntent.FLAG_IMMUTABLE);
-        Notification publicVersion = new Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_media_play).setContentTitle("خوانا").setContentText(paused ? "خواندن مکث شده" : "در حال خواندن").build();
+        Notification publicVersion = new Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_media_play).setContentTitle("خوانا").setContentText(paused ? "خواندن موقتاً متوقف است" : "در حال خواندن").build();
         return new Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_media_play).setContentTitle("خوانا")
-            .setContentText(paused ? "خواندن مکث شده" : "در حال خواندن").setContentIntent(open).setOngoing(!paused)
+            .setContentText(paused ? "خواندن موقتاً متوقف است" : "در حال خواندن").setContentIntent(open).setOngoing(!paused)
             .setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(publicVersion)
             .addAction(new Notification.Action.Builder(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause, paused ? "ادامه" : "مکث", toggle).build())
             .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel, "توقف", stop).build())
@@ -253,6 +278,8 @@ public final class ReadService extends Service {
             String options = "doc=" + doc + "&rev=" + q.optBoolean("rev") + "&yeh=" + q.optBoolean("yeh", true) + "&tr=" + q.optBoolean("tr");
             int first = q.getInt("page"), pages = q.getInt("pages"), firstPara = q.optInt("para"), offset = q.optInt("start");
             boolean exact = q.optBoolean("exact");
+            String sentencePause = q.optString("sentencePause", "normal");
+            double pauseScale = "short".equals(sentencePause) ? 0.45 : "long".equals(sentencePause) ? 1.4 : 1.0;
             int submittedPieces = 0;
             int lastPage = first - 1;
             for (int page = first; page <= pages && !r.cancelled; page++) {
@@ -279,14 +306,14 @@ public final class ReadService extends Service {
                     for (SpeechPieces.Piece whole : SpeechPieces.split(text)) {
                         if (page == first && p == firstPara && whole.end <= offset) continue;
                         // (exact: the reading goes on right after the part just heard, which may end at a comma inside the sentence)
-                        if (exact && page == first && p == firstPara && whole.start < offset) whole = new SpeechPieces.Piece(text, offset, whole.end);
+                        if ((exact || q.optBoolean("exactStart")) && page == first && p == firstPara && whole.start < offset) whole = new SpeechPieces.Piece(text, offset, whole.end);
                         // Prepare each page's opening piece early while the current page is still playing.
                         List<SpeechPieces.Piece> parts = pageSubmittedPieces == 0 ? SpeechPieces.head(text, whole) : Collections.singletonList(whole);
                         for (int k = 0; k < parts.size(); k++) {
                             SpeechPieces.Piece piece = parts.get(k);
                             boolean beginning = submittedPieces == 0;
                             if (beginning) r.firstTextMs = activeElapsed(r);
-                            double gap = k > 0 || piece.continuation ? 0.2 : beginning || pageSubmittedPieces == 0 ? 0 : paragraphStart ? 0.9 : 0.45;
+                            double gap = (k > 0 || piece.continuation ? 0.2 : beginning || pageSubmittedPieces == 0 ? 0 : paragraphStart ? 0.9 : 0.45) * pauseScale;
                             submit(r, piece.text, page, p, piece, gap, pageSubmittedPieces < 2);
                             submittedPieces++;
                             pageSubmittedPieces++;
@@ -310,8 +337,12 @@ public final class ReadService extends Service {
         try {
             // (the reading before this one is finishing its sentence: this one's voice starts when it ends)
             Run before = r.previous;
-            if (before != null && before.player != null) before.player.join(20000);
+            if (before != null && before.player != null) {
+                before.player.join(20000);
+                if (before.player.isAlive()) stopFinishing(before);
+            }
             r.previous = null;
+            if (r.cancelled) return;
             int min = AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
             r.track = new AudioTrack.Builder().setAudioAttributes(attributes()).setAudioFormat(new AudioFormat.Builder().setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
                 .setBufferSizeInBytes(Math.max(min * 2, RATE)).setTransferMode(AudioTrack.MODE_STREAM).build();
@@ -328,12 +359,18 @@ public final class ReadService extends Service {
                 Sound sound;
                 try { sound = next.get(); } finally { r.waitingSpeech = false; }
                 r.pending.remove(next);
-                if (r.firstReadyMs < 0) r.firstReadyMs = activeElapsed(r);
                 long waited = SystemClock.elapsedRealtime() - r.waitFrom;
+                if (r.firstReadyMs < 0) {
+                    r.firstReadyMs = activeElapsed(r);
+                }
                 if (!first && !r.paused && waited > 300) { r.stalls++; r.stalled += waited;
-                    if (sound.timing != null) r.lastStall = sound.timing.put("wait", waited); }
+                    if (sound.timing != null) {
+                        r.lastStall = sound.timing.put("wait", waited);
+                        logTiming("stall", waited, sound.timing);
+                    } }
                 try {
-                    if (first && !sound.endOfBook) {
+                    if (first && !sound.endOfBook && !r.request.optBoolean("exact")
+                            && !r.request.optBoolean("startImmediately")) {
                         long deadline = SystemClock.elapsedRealtime() + 5000;
                         r.startupBuffering = true;
                         try {
@@ -344,8 +381,14 @@ public final class ReadService extends Service {
                             }
                         } finally { r.startupBuffering = false; }
                     }
-                    first = false;
                     if (r.cancelled) break;
+                    if (first && !sound.endOfBook && sound.timing != null) {
+                        // Count the real startup wait, including any startup buffer.
+                        long firstAudioMs = activeElapsed(r);
+                        r.firstTiming = new JSONObject(sound.timing.toString()).put("wait", firstAudioMs);
+                        logTiming("first_audio", firstAudioMs, sound.timing);
+                    }
+                    first = false;
                     if (sound.endOfBook) { ui.post(() -> { if (run == r) stopSelf(); }); break; }
                     if (sound.page != lastPlayedPage) {
                         r.pagePrepareMs = sound.readyAt - sound.queuedAt;
@@ -368,10 +411,21 @@ public final class ReadService extends Service {
         finally { AudioTrack track = r.track; r.track = null; if (track != null) try { track.release(); } catch (RuntimeException ignored) { } }
     }
     private void fail(Run r) { ui.post(() -> { if (run == r) { lastError = "خواندن متوقف شد. صفحه را دوباره باز کنید و تلاش کنید."; stopSelf(); } }); }
+    private static void stopFinishing(Run previous) {
+        if (previous == null) return;
+        previous.finishing = false;
+        if (previous.player != null) previous.player.interrupt();
+        AudioTrack track = previous.track;
+        if (track != null) try { track.pause(); track.flush(); } catch (RuntimeException ignored) { }
+    }
+
     private void cancel() { cancel(false); }
     /** Ends the reading; finish: a new one takes over, and the sentence being heard is said to its end (not when paused). */
     private Run cancel(boolean finish) {
         Run r = run; run = null; if (r == null) return null;
+        // A rapid switch can cancel a run still waiting for its predecessor.
+        // Retire that predecessor too, so it cannot outlive the new playback.
+        stopFinishing(r.previous);
         boolean soft = finish && !r.paused && r.track != null && r.player != null;
         r.finishing = soft;
         r.cancelled = true;

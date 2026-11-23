@@ -120,11 +120,11 @@ pub fn heard_score(phonemes: &str, speech: &[f32], rate: usize) -> (Option<f64>,
         *said.entry(w.as_str()).or_default() += 1;
     }
     let mut heard_counts: Vec<(String, usize)> = Vec::new();
-    for h in split_ws(&heard) {
-        let s = skeleton_fa(h);
-        match heard_counts.iter_mut().find(|x| x.0 == s) {
+    let heard_words: Vec<String> = split_ws(&heard).iter().map(|word| skeleton_fa(word)).collect();
+    for s in &heard_words {
+        match heard_counts.iter_mut().find(|x| x.0 == *s) {
             Some(x) => x.1 += 1,
-            None => heard_counts.push((s, 1)),
+            None => heard_counts.push((s.clone(), 1)),
         }
     }
     for (w, n) in heard_counts {
@@ -133,7 +133,38 @@ pub fn heard_score(phonemes: &str, speech: &[f32], rate: usize) -> (Option<f64>,
             problems.push(format!("+{w}"));
         }
     }
+    for pair in heard_words.windows(2) {
+        let whole = pair[0].as_str();
+        let ending = pair[1].as_str();
+        if looks_like_repeated_ending(whole, ending)
+            && said.contains_key(whole)
+            && !said.contains_key(ending)
+        {
+            problems.push(format!("+{ending}"));
+        }
+    }
+    // The recognizer can split a compound into two tokens, then emit the ending again.
+    for triple in heard_words.windows(3) {
+        let prefix = triple[0].as_str();
+        let ending = triple[1].as_str();
+        if split_compound_repeat(prefix, ending, &triple[2], &said) {
+            problems.push(format!("+{ending}"));
+        }
+    }
     (Some(sm.ratio()), problems)
+}
+
+fn looks_like_repeated_ending(whole: &str, ending: &str) -> bool {
+    let ending_len = ending.chars().count();
+    ending_len >= 3 && whole.chars().count() >= ending_len + 2 && whole.ends_with(ending)
+}
+
+fn split_compound_repeat(prefix: &str, ending: &str, extra: &str, expected: &HashMap<&str, usize>) -> bool {
+    prefix.chars().count() >= 2
+        && ending.chars().count() >= 3
+        && ending == extra
+        && !expected.contains_key(ending)
+        && expected.contains_key(format!("{prefix}{ending}").as_str())
 }
 
 pub fn heard_ok(heard: Option<f64>, problems: &[String]) -> bool {
@@ -145,9 +176,20 @@ pub fn heard_ok(heard: Option<f64>, problems: &[String]) -> bool {
         && !missing.iter().any(|p| len(strip_chars(p, "-~$^")) >= 3 || p.ends_with('$') || p.ends_with('^'))
 }
 
+pub fn repeated_word_count(problems: &[String]) -> usize {
+    problems.iter().filter(|problem| {
+        problem.strip_prefix('+').is_some_and(|word| {
+            word.chars().count() >= 2 && !word.bytes().all(|byte| byte.is_ascii_digit())
+        })
+    }).count()
+}
+
 pub fn heard_clear_fault(heard: Option<f64>, problems: &[String]) -> bool {
     let Some(h) = heard else { return false };
-    h < 0.6 || problems.iter().any(|p| p.ends_with('^')) || problems.iter().filter(|p| p.starts_with('-')).count() >= 2
+    h < 0.6
+        || problems.iter().any(|p| p.ends_with('^'))
+        || repeated_word_count(problems) > 0
+        || problems.iter().filter(|p| p.starts_with('-')).count() >= 2
 }
 
 pub fn heard_bad(heard: Option<f64>, problems: &[String]) -> bool {
@@ -157,15 +199,31 @@ pub fn heard_bad(heard: Option<f64>, problems: &[String]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::heard_clear_fault;
+    use super::{heard_clear_fault, looks_like_repeated_ending, split_compound_repeat};
 
     fn problems(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| (*s).to_string()).collect()
     }
 
     #[test]
-    fn light_check_preserves_existing_extra_word_tolerance() {
-        assert!(!heard_clear_fault(Some(0.95), &problems(&["+sys"])));
+    fn repeated_ending_requires_a_distinct_word_prefix() {
+        assert!(looks_like_repeated_ending("bndgyr", "gyr"));
+        assert!(!looks_like_repeated_ending("gyr", "gyr"));
+        assert!(!looks_like_repeated_ending("bndgyr", "yr"));
+    }
+
+    #[test]
+    fn detects_repeated_ending_when_recognizer_splits_a_compound() {
+        let mut expected = std::collections::HashMap::from([("bndgyr", 1)]);
+        assert!(split_compound_repeat("bnd", "gyr", "gyr", &expected));
+        assert!(!split_compound_repeat("bnd", "gyr", "krd", &expected));
+        expected.insert("gyr", 1);
+        assert!(!split_compound_repeat("bnd", "gyr", "gyr", &expected));
+    }
+
+    #[test]
+    fn light_check_rejects_a_recognized_repeated_word() {
+        assert!(heard_clear_fault(Some(0.95), &problems(&["+sys"])));
     }
 
     #[test]

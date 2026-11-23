@@ -1,11 +1,10 @@
 # Khana Reader (خوانا)
 
-Reads books aloud in Farsi and translates foreign books into Farsi, entirely on your own device. Free, with no account, no ads,
-no tracking and no internet connection. For **Mac, Android and Windows** (Windows is experimental).
+Khana reads Persian text aloud. Editions with translation can also translate books into Persian. Both features run on your device. Khana is free, works offline, and requires no account. It has no ads or tracking. Available for **Mac, Android, and Windows**. The Windows edition is experimental.
 
 <div dir="rtl">
 
-خوانا کتاب‌ها را به فارسی با صدای بلند می‌خواند و کتاب‌های خارجی را به فارسی ترجمه می‌کند؛ همه‌چیز فقط روی دستگاه خود شما انجام می‌شود. رایگان است و حساب کاربری، تبلیغ، ردیابی و اتصال به اینترنت ندارد. برای **مک، اندروید و ویندوز** (نسخه‌ی ویندوز آزمایشی است).
+خوانا متن فارسی را با صدای بلند می‌خواند. نسخه‌های دارای قابلیت ترجمه، کتاب‌ها را به فارسی هم ترجمه می‌کنند. خواندن و ترجمه روی دستگاه شما و بدون اینترنت انجام می‌شوند. خوانا رایگان است، حساب کاربری نمی‌خواهد و تبلیغ یا ردیابی ندارد. برای **مک، اندروید و ویندوز** در دسترس است. نسخه‌ی ویندوز آزمایشی است.
 
 **[راهنمای فارسی پایین همین صفحه است.](#راهنمای-فارسی)**
 
@@ -70,8 +69,7 @@ from this source when Android asks. Both versions are signed with the same key, 
 
 - **Nothing in a PDF is ever run.** Scripts, forms, attachments and "launch" actions inside a PDF are ignored. Links are not
   opened: the app cannot open a web address at all.
-- **Nothing can be sent out.** The Android app has no internet permission; on every platform the app has no network code, and its
-  reading screen refuses every outside address. A hostile PDF cannot "phone home" through the app.
+- **Offline reading.** Android builds omit the internet permission. Reading and translation run locally, and the reading view blocks external navigation.
 - **The PDF is read in a locked room.** PDFs are opened by Mozilla's pdf.js, kept up to date, in a sandbox with no permissions. On
   the Mac it runs in a separate process with its own address, cut off from the reading screen and from your saved corrections.
 - **Limits protect the device:** a page that claims to be enormous is drawn smaller, huge pictures are refused, and a file over
@@ -259,7 +257,7 @@ GrapheneOS: the safety design of the PDF handling follows the [GrapheneOS PDF Vi
 **اگر یک PDF خراب، آلوده یا پر از تبلیغ باشد، خوانا چه می‌کند؟**
 
 - **هیچ چیزِ درون PDF اجرا نمی‌شود.** اسکریپت، فرم، پیوست و دستورهای «اجرا» در PDF نادیده گرفته می‌شوند. لینک‌ها باز نمی‌شوند: برنامه اصلاً نمی‌تواند نشانی اینترنتی باز کند.
-- **هیچ چیز بیرون فرستاده نمی‌شود.** برنامه‌ی اندروید اجازه‌ی اینترنت ندارد؛ در همه‌ی دستگاه‌ها برنامه کد شبکه ندارد و صفحه‌ی آن هر نشانی بیرونی را رد می‌کند. یک PDF آلوده نمی‌تواند از راه این برنامه با جایی تماس بگیرد.
+- **خواندن آفلاین.** نسخه‌ی اندروید مجوز دسترسی به اینترنت ندارد. خواندن و ترجمه روی دستگاه انجام می‌شوند و صفحه‌ی خواندن نشانی‌های بیرونی را باز نمی‌کند.
 - **PDF در یک اتاق قفل‌شده خوانده می‌شود.** PDF را pdf.js (ساخت موزیلا، به‌روز) در محیطی جداشده و بدون هیچ مجوزی باز می‌کند. در مک، این بخش در پردازه‌ای جدا اجرا می‌شود و به صفحه‌ی خواندن و ویرایش‌های شما دسترسی ندارد.
 - **محدودیت‌ها از دستگاه محافظت می‌کنند:** صفحه‌ای که ادعا می‌کند بسیار بزرگ است کوچک‌تر کشیده می‌شود، تصویر خیلی بزرگ پذیرفته نمی‌شود و فایل بزرگ‌تر از ۳۰۰ مگابایت باز نمی‌شود.
 - **تبلیغ و متن اضافه** (نشانی سایت روی هر صفحه، خط «دانلود شده از…») تا جایی که برنامه تشخیص دهد خوانده نمی‌شود؛ هر بند را هم خودتان می‌توانید با «✎ ویرایش متن» حذف کنید.

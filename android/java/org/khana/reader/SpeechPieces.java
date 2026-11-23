@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 final class SpeechPieces {
     // Keep Android's streaming TTS requests short enough that one slow generation cannot
     // leave the player silent for several seconds after a short comma-delimited lead-in.
-    private static final int MAX_PIECE = 80;
+    private static final int MAX_PIECE = 64;
     static final class Piece {
         final String text;
         final int start, end;
@@ -43,14 +43,17 @@ final class SpeechPieces {
     /** Keep the first clip after a jump or page turn short enough to prepare while the old page ends. */
     static List<Piece> head(String text, Piece p) {
         List<Piece> out = new ArrayList<>();
-        if (p.end - p.start > 60) {
-            int minCut = p.start + 30;
-            int targetCut = Math.min(p.end - 15, p.start + 50);
+        if (p.end - p.start > 42) {
+            // Start with a shorter lead-in so playback can begin while the rest of a
+            // medium-length sentence is synthesized. Preserve complete words and
+            // prefer punctuation to avoid cutting Persian phrases at arbitrary points.
+            int minCut = p.start + 20;
+            int targetCut = Math.min(p.end - 12, p.start + 34);
             for (int i = minCut; i < targetCut; i++) {
                 if ("،,؛;:".indexOf(text.charAt(i)) < 0) continue;
                 int cut = i + 1;
                 while (cut < p.end && Character.isWhitespace(text.charAt(cut))) cut++;
-                if (cut - p.start <= 55) {
+                if (cut - p.start <= 38) {
                     out.add(new Piece(text, p.start, cut));
                     out.add(new Piece(text, cut, p.end, true));
                     return out;
@@ -62,10 +65,17 @@ final class SpeechPieces {
                 cut = targetCut;
                 while (cut < p.end - 15 && !Character.isWhitespace(text.charAt(cut))) cut++;
             }
-            if (cut > minCut && cut < p.end) {
-                out.add(new Piece(text, p.start, cut));
-                out.add(new Piece(text, cut, p.end, true));
-                return out;
+            // The forward search can reach its limit in the middle of a long word.
+            // In that case keep the original piece so startup optimization cannot change pronunciation.
+            if (cut > minCut && cut < p.end
+                    && (Character.isWhitespace(text.charAt(cut - 1)) || Character.isWhitespace(text.charAt(cut)))) {
+                int rest = cut;
+                while (rest < p.end && Character.isWhitespace(text.charAt(rest))) rest++;
+                if (rest < p.end) {
+                    out.add(new Piece(text, p.start, rest));
+                    out.add(new Piece(text, rest, p.end, true));
+                    return out;
+                }
             }
         }
         out.add(p);

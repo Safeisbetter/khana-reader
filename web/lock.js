@@ -20,6 +20,7 @@
   const isShown = () => document.body.classList.contains("locked");
   function show(message) {
     if (isShown()) { if (message) $("lockErr").textContent = message; return; }
+    cancelMicrophonesForLock();
     try { stopReading(); } catch (e) { /* (nothing is being read yet) */ }
     // whatever was open is shut, and nothing under the screen can be reached by keyboard or by a screen reader
     document.querySelectorAll(".panel").forEach(p => { p.hidden = true; });
@@ -58,8 +59,8 @@
   $("lockGo").onclick = tryUnlock;
   $("lockPw").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); tryUnlock(); } });
   $("lockReset").onclick = async () => {
-    if (!confirm("همه‌ی اطلاعات خوانا (ویرایش‌ها، صدای ضبط‌شده، تنظیمات و خودِ قفل) از این دستگاه پاک شود؟ این کار برگشت ندارد.")) return;
-    if (!confirm("مطمئن هستید؟ بعد از این نمی‌شود آن‌ها را پس گرفت.")) return;
+    if (!confirm("همه‌ی اطلاعات خوانا (ویرایش‌ها، صدای ضبط‌شده، تنظیمات و خودِ قفل) از این دستگاه پاک شود؟ این کار قابل بازگشت نیست.")) return;
+    if (!confirm("مطمئن هستید؟ پس از حذف، این اطلاعات قابل بازیابی نیستند.")) return;
     try { await jpost("/api/forget", {}); location.reload(); } catch (e) { $("lockErr").textContent = e.message; }
   };
 
@@ -74,14 +75,14 @@
   /* ---------------- the card in Settings and its form ---------------- */
   function renderCard() {
     const on = !!st.enabled;
-    $("lockState").textContent = on ? "قفل روشن است." : "قفل خاموش است.";
+    $("lockState").textContent = on ? "قفل فعال است." : "قفل غیرفعال است.";
     $("lockOn").hidden = on;
     $("lockChange").hidden = !on; $("lockOff").hidden = !on; $("lockNow").hidden = !on; $("lockTimeoutRow").hidden = !on;
     if (on) $("lockTimeout").value = String(st.timeout);
   }
   function openForm(m) {
     mode = m;
-    $("lockFormTitle").textContent = m === "on" ? "روشن کردن قفل" : m === "change" ? "عوض کردن رمز" : "خاموش کردن قفل";
+    $("lockFormTitle").textContent = m === "on" ? "فعال کردن قفل" : m === "change" ? "تغییر رمز" : "غیرفعال کردن قفل";
     $("lockCurRow").hidden = m === "on";
     $("lockNewRow").hidden = m === "off";
     $("lockRepRow").hidden = m === "off";
@@ -94,7 +95,7 @@
     const cur = $("lockCur").value, nw = $("lockNew").value, rep = $("lockRep").value;
     const fail = m => { $("lockFormErr").textContent = m; };
     fail("");
-    if (mode !== "off" && nw !== rep) return fail("دو رمز یکی نیست.");
+    if (mode !== "off" && nw !== rep) return fail("دو رمز واردشده یکسان نیستند.");
     if (mode === "off" && !cur) return fail("رمز فعلی را وارد کنید.");
     $("lockFormOk").disabled = true;
     try {
@@ -103,7 +104,7 @@
       for (const id of ["lockCur", "lockNew", "lockRep"]) $(id).value = "";
       $("lockForm").hidden = true;
       renderCard();
-      toast(mode === "off" ? "قفل خاموش شد." : mode === "change" ? "رمز عوض شد." : "قفل روشن شد.");
+      toast(mode === "off" ? "قفل غیرفعال شد." : mode === "change" ? "رمز تغییر کرد." : "قفل فعال شد.");
     } catch (e) {
       fail(e.message);
     } finally {

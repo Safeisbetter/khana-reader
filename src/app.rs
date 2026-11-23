@@ -58,6 +58,40 @@ fn library_dir() -> Option<PathBuf> {
     if cfg!(shell) { Some(save_dir()) } else { None }
 }
 
+#[cfg(any(target_os = "android", test))]
+fn erase_pending_pdfs(dir: &Path) -> std::io::Result<()> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pdf")) && !entry.file_type()?.is_dir() {
+            match std::fs::remove_file(path) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e),
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn erase_pending_pdfs_leaves_other_files_alone() {
+    let dir = crate::private_fs::TempDir::new().unwrap();
+    let pdf = dir.join("pending.pdf");
+    let audio = dir.join("audio.wav");
+    std::fs::write(&pdf, b"synthetic").unwrap();
+    std::fs::write(&audio, b"synthetic").unwrap();
+    erase_pending_pdfs(pdf.parent().unwrap()).unwrap();
+    assert!(!pdf.exists());
+    assert!(audio.is_file());
+}
+
 fn output_stem(name: &std::path::Path) -> String {
     let s = name.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let clean: String = s.chars().map(|c| if c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') { '_' } else { c }).collect();
@@ -272,7 +306,7 @@ fn decode_16k(data: &[u8], ext: &str) -> Result<Vec<f32>, String> {
     })();
     let (a, rate) = res?;
     if a.is_empty() || rate == 0 {
-        return Err("در این فایل صدایی نیست.".into());
+        return Err("در این فایل صدایی پیدا نشد.".into());
     }
     Ok(audio::resample_poly(&a, 2, 3))
 }
@@ -552,7 +586,7 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
         if partial && *job.seconds.lock().unwrap() <= 0.0 { return Err("cancelled".into()); }
         if wav {
             if wav_bytes_written == 0 {
-                return Err("در این صفحه\u{200c}ها متنی برای خواندن نیست.".into());
+                return Err("در این صفحه\u{200c}ها متنی برای خواندن وجود ندارد.".into());
             }
             let mut h = Vec::with_capacity(44);
             h.extend_from_slice(b"RIFF");
@@ -570,7 +604,7 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
             out.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
             out.write_all(&h).map_err(|e| e.to_string())?;
         } else {
-            let Some(mut e) = enc else { return Err("در این صفحه\u{200c}ها متنی برای خواندن نیست.".into()) };
+            let Some(mut e) = enc else { return Err("در این صفحه\u{200c}ها متنی برای خواندن وجود ندارد.".into()) };
             out.write_all(&e.flush()).map_err(|e| e.to_string())?;
         }
         drop(out);
@@ -669,7 +703,9 @@ fn run_pdf_job(job: Arc<Job>, doc: Arc<Document>, first: usize, last: usize, opt
                 return Err("cancelled".into());
             }
             tts::wait_for_power(&|| job.cancelled.load(Ordering::SeqCst));
-            tts::cool_down();
+            if !tts::cool_down(&|| job.cancelled.load(Ordering::SeqCst)) {
+                return Err("cancelled".into());
+            }
             let paras: Vec<String> = doc.page_text(n, opts).into_iter().filter(|p| p != crate::doc::PICTURE_PAGE).collect();
             if !paras.is_empty() {
                 pages.push((format!("صفحه {}", fa_digits(n)), paras));
@@ -688,12 +724,27 @@ fn run_pdf_job(job: Arc<Job>, doc: Arc<Document>, first: usize, last: usize, opt
             blocks.push(Block::Paragraph(END_WORD));
         }
         let font = VAZIRMATN.to_vec();
-        let mut saved = unique_path(save_dir().join(&job.filename));
-        while std::fs::OpenOptions::new().write(true).create_new(true).open(&saved).is_err() {
-            if !saved.exists() { break; }
-            saved = unique_path(saved);
+        let _publication = job.publication.lock().unwrap();
+        if job.cancelled.load(Ordering::SeqCst) {
+            return Err("cancelled".into());
         }
-        crate::platform::farsi_pdf(&blocks, &font, &saved)?;
+        let (saved, mut output) = loop {
+            let path = unique_path(save_dir().join(&job.filename));
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
+            match options.open(&path) {
+                Ok(file) => break (path, file),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(e.to_string()),
+            }
+        };
+        if let Err(e) = crate::platform::farsi_pdf(&blocks, &font, &mut output) {
+            drop(output);
+            let _ = std::fs::remove_file(&saved);
+            return Err(e);
+        }
+        drop(output);
         crate::platform::saved(&saved, "pdf");
         *job.saved.lock().unwrap() = Some(saved);
         Ok(())
@@ -922,6 +973,11 @@ impl App {
             let (file, ctype) = match path {
                 "/welcome-community.jpg" => ("welcome-community.jpg", "image/jpeg"),
                 "/welcome-community-portrait.jpg" => ("welcome-community-portrait.jpg", "image/jpeg"),
+                "/welcome-village-clean.jpg" => ("welcome-village-clean.jpg", "image/jpeg"),
+                "/welcome-village.jpg" => ("welcome-village.jpg", "image/jpeg"),
+                "/welcome-illustrated-clean.jpg" => ("welcome-illustrated-clean.jpg", "image/jpeg"),
+                "/welcome-illustrated.jpg" => ("welcome-illustrated.jpg", "image/jpeg"),
+                "/fish-slim.png" => ("fish-slim.png", "image/png"),
                 "/fish-realistic.png" => ("fish-realistic.png", "image/png"),
                 _ => ("", ""),
             };
@@ -1050,13 +1106,18 @@ impl App {
                 Ok(reply_json(&json!({"ok": true})))
             }
             "forget_post" => {
-                *self.docs.lock().unwrap() = None;
-                for j in self.jobs.lock().unwrap().values() {
+                // Export admission uses the same lock order. An export cannot
+                // keep an old document and register after this cancellation pass.
+                let mut docs = self.docs.lock().unwrap();
+                *docs = None;
+                let mut jobs = self.jobs.lock().unwrap();
+                for j in jobs.values() {
                     let _publication = j.publication.lock().unwrap();
                     j.discard_partial.store(true, Ordering::SeqCst);
                     j.cancelled.store(true, Ordering::SeqCst);
                     j.cleanup();
                 }
+                jobs.clear();
                 let _ = std::fs::remove_dir_all(data_dir().join("edits"));
                 let _ = std::fs::remove_file(my_voice());
                 let _ = std::fs::remove_file(settings_file());
@@ -1069,6 +1130,10 @@ impl App {
                         }
                     }
                 }
+                #[cfg(target_os = "android")]
+                erase_pending_pdfs(&save_dir()).map_err(|_| ApiError::Internal(
+                    "یکی از فایل‌های موقت PDF پاک نشد. دوباره تلاش کنید.".into()
+                ))?;
                 sweep_temp(true);
                 self.lock.erase();
                 Ok(reply_json(&json!({"ok": true})))
@@ -1358,7 +1423,7 @@ impl App {
                 let req = body_json()?;
                 let text: String = strip(req.get("text").and_then(|v| v.as_str()).unwrap_or("")).chars().take(5000).collect();
                 if text.is_empty() {
-                    return Err(bad("متنی برای خواندن نیست."));
+                    return Err(bad("متنی برای خواندن وجود ندارد."));
                 }
                 let s = load_settings();
                 let voice = req.get("voice").and_then(|v| v.as_str()).filter(|v| !v.is_empty()).map(|v| v.to_string())
@@ -1386,7 +1451,14 @@ impl App {
                         "model_ms": timing.model_ms.load(Ordering::Relaxed),
                         "decode_ms": timing.decode_ms.load(Ordering::Relaxed),
                         "asr_ms": timing.asr_ms.load(Ordering::Relaxed),
-                        "attempts": timing.attempts.load(Ordering::Relaxed)
+                        "attempts": timing.attempts.load(Ordering::Relaxed),
+                        "reject_pace": timing.reject_pace.load(Ordering::Relaxed),
+                        "reject_quiet": timing.reject_quiet.load(Ordering::Relaxed),
+                        "reject_low_speech": timing.reject_low_speech.load(Ordering::Relaxed),
+                        "reject_dead_air": timing.reject_dead_air.load(Ordering::Relaxed),
+                        "reject_pitch": timing.reject_pitch.load(Ordering::Relaxed),
+                        "reject_words": timing.reject_words.load(Ordering::Relaxed),
+                        "reject_duration": timing.reject_duration.load(Ordering::Relaxed)
                     }).to_string())];
                 #[cfg(not(feature = "dev-timing"))]
                 let headers = Vec::new();
@@ -1407,7 +1479,8 @@ impl App {
             }
             "mp3_post" => {
                 let req = body_json()?;
-                let d = self.docs.lock().unwrap().clone();
+                let docs = self.docs.lock().unwrap();
+                let d = docs.clone();
                 let d = match d {
                     Some(d) if req.get("doc").and_then(|v| v.as_str()) == Some(d.id.as_str()) => d,
                     _ => return Err(ApiError::NotFound("سند پیدا نشد. فایل را دوباره باز کنید.".into())),
@@ -1429,6 +1502,7 @@ impl App {
                 let rng = if first == last { format!("{first}") } else { format!("{first}-{last}") };
                 let format = match req.get("format").and_then(|v| v.as_str()) { Some("wav") => "wav", Some("m4a") => "m4a", _ => "mp3" }.to_string();
                 let job = self.add_job(Job::new(format!("{stem} - p{rng}.{format}")));
+                drop(docs);
                 let info = job.info();
                 let fast = req.get("fast").and_then(|v| v.as_bool()).unwrap_or(false);
                 let end_word = req.get("endWord").and_then(|v| v.as_bool()).unwrap_or(last == d.n_pages && !d.is_typed.load(Ordering::Relaxed));
@@ -1438,13 +1512,14 @@ impl App {
             }
             "pdf_post" => {
                 let req = body_json()?;
-                let d = self.docs.lock().unwrap().clone();
+                let docs = self.docs.lock().unwrap();
+                let d = docs.clone();
                 let d = match d {
                     Some(d) if req.get("doc").and_then(|v| v.as_str()) == Some(d.id.as_str()) => d,
                     _ => return Err(ApiError::NotFound("سند پیدا نشد. فایل را دوباره باز کنید.".into())),
                 };
                 if !d.can_translate() {
-                    return Err(bad("این سند فارسی است و ترجمه لازم ندارد."));
+                    return Err(bad("این سند فارسی است و نیازی به ترجمه ندارد."));
                 }
                 let num = |k: &str, dflt: usize| req.get(k).and_then(|v| v.as_f64()).map(|x| x.max(0.0) as usize).unwrap_or(dflt);
                 let (first, last) = (num("first", 1).max(1), num("last", d.n_pages).min(d.n_pages));
@@ -1454,6 +1529,7 @@ impl App {
                 let stem = output_stem(std::path::Path::new(&d.name));
                 let rng = if first == 1 && last == d.n_pages { String::new() } else if first == last { format!(" - p{first}") } else { format!(" - p{first}-{last}") };
                 let job = self.add_job(Job::new(format!("{stem} - فارسی{rng}.pdf")));
+                drop(docs);
                 let info = job.info();
                 let opts = Opts { translate: true, ..Opts::default() };
                 std::thread::spawn(move || run_pdf_job(job, d, first, last, opts));
@@ -1461,7 +1537,7 @@ impl App {
             }
             "job_get" => {
                 let j = self.jobs.lock().unwrap().get(q.get("id").map(|s| s.as_str()).unwrap_or("")).cloned();
-                let j = j.ok_or_else(|| ApiError::NotFound("کار پیدا نشد.".into()))?;
+                let j = j.ok_or_else(|| ApiError::NotFound("درخواست ذخیره پیدا نشد.".into()))?;
                 Ok(reply_json(&j.info()))
             }
             "cancel_post" => {
@@ -1470,6 +1546,14 @@ impl App {
                     j.cancelled.store(true, Ordering::SeqCst);
                 }
                 Ok(reply_json(&json!({"ok": true})))
+            }
+            // The Android reader needs only to know which PDF pages require a
+            // rendered image for OCR. Do not extract and count text from every
+            // page on each reading start or voice change.
+            "scan_pages_get" => {
+                let d = self.doc(q)?;
+                let pages: Vec<usize> = (1..=d.n_pages).filter(|&n| d.needs_picture(n)).collect();
+                Ok(reply_json(&json!({"pages": pages})))
             }
             "lengths_get" => {
                 let d = self.doc(q)?;
@@ -1495,7 +1579,7 @@ impl App {
             "library_file_get" => {
                 let p = library_file(q.get("name").map(|s| s.as_str()).unwrap_or("")).ok_or_else(|| ApiError::NotFound("فایل پیدا نشد.".into()))?;
                 if p.metadata().map(|m| m.len()).unwrap_or(0) > 200 * 1024 * 1024 {
-                    return Err(bad("این فایل برای پخش در خودِ برنامه خیلی بزرگ است (بیشتر از ۲۰۰ مگابایت). آن را با «ذخیره در گوشی…» بیرون ببرید."));
+                    return Err(bad("این فایل برای پخش در خودِ برنامه خیلی بزرگ است (بیشتر از ۲۰۰ مگابایت). برای ذخیره‌ی آن در پوشه‌ای دیگر، «ذخیره در گوشی…» را انتخاب کنید."));
                 }
                 let data = std::fs::read(&p).map_err(|e| ApiError::Internal(e.to_string()))?;
                 Ok(Reply { status: 200, ctype: if p.extension().is_some_and(|e| e == "wav") { "audio/wav" } else { "audio/mpeg" }, body: data, headers: Vec::new() })

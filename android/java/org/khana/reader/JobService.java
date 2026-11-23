@@ -34,13 +34,13 @@ public final class JobService extends Service {
     public void onCreate() {
         super.onCreate();
         NotificationManager nm = getSystemService(NotificationManager.class);
-        nm.createNotificationChannel(new NotificationChannel(CHANNEL, "ساختن MP3 و PDF", NotificationManager.IMPORTANCE_LOW));
+        nm.createNotificationChannel(new NotificationChannel(CHANNEL, "ساخت فایل MP3 و PDF", NotificationManager.IMPORTANCE_LOW));
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_IMMUTABLE);
         Notification n = new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setContentTitle("خوانا")
-                .setContentText("در حال ساختن فایل… برای سرعت، خوانا را روی صفحه نگه دارید.")
+                .setContentText("در حال ساخت فایل… برای ساخت سریع‌تر، خوانا را باز نگه دارید.")
                 .setContentIntent(open)
                 .setOngoing(true)
                 .build();

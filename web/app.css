@@ -22,6 +22,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
 body { background: var(--paper); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.6; }
+html.boot-dark, html.boot-dark body { min-height: 100%; background: #000 !important; color: #fff !important; }
 [hidden] { display: none !important; }
 
 .bar { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); padding: 10px 16px; }
@@ -94,8 +95,9 @@ main { padding: 20px 16px 64px; }
 .text .w.read-pending {
   background: var(--hl-bg); color: var(--hl-ink); font-weight: 700;
   outline: 3px dashed var(--hl-ring); outline-offset: 2px; border-radius: 4px;
+  text-decoration: underline 2px; text-underline-offset: .16em;
 }
-.text .w.now mark { background: transparent; color: inherit; }
+.text .w.read-pending mark, .text .w.now mark { background: transparent; color: inherit; }
 /* «a frame»: the text keeps its own colours and a thick line is drawn just inside the edge of the word being read, so it
    never covers the next word */
 :root[data-hl="frame"] .text .w.now { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--frame-c, var(--ink)) 65%, transparent); border-radius: 7px; padding: 3px 6px; margin: -3px -6px; }
@@ -258,7 +260,7 @@ input[type="text"], input[type="search"], select, textarea { border-radius: var(
 @media (max-width: 600px) { .welcome .actions { width: 100%; flex-direction: column; } .welcome .big { width: 100%; justify-content: center; } }
 
 /* ---- the reading page like a book's page: warm paper, a comfortable line length, wide margins and airy lines ---- */
-:root { --page: #FCF8EE; --page-edge: #E6DDC8; }
+:root { --page: #FBFAF5; --page-edge: #E5E2D8; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --page: #1D1E22; --page-edge: #2D2F36; } }
 :root[data-theme="dark"] { --page: #1D1E22; --page-edge: #2D2F36; }
 .sheet { max-width: 980px; }
@@ -450,9 +452,9 @@ body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: 108p
   --lapis: #1F4FA0; --lapis-ink: #FFFFFF; --turq: #0E7F7B; --mark: #FFE08A; --mark-ink: #1A2130; --reading: #E3ECFB; --danger: #B3261E; --shade: rgba(16, 24, 40, .28);
 }
 :root[data-theme="glassdark"] {
-  --paper: #0B0D14; --surface: #171A22; --ink: #EEF0F5; --muted: #A9AFBD; --line: rgba(255, 255, 255, .14); --page: #12141B; --page-edge: rgba(255, 255, 255, .12);
-  --glass: rgba(30, 33, 44, .52); --glass-edge: rgba(255, 255, 255, .18); --glass-btn: rgba(255, 255, 255, .09); color-scheme: dark;
-  --lapis: #8FB4F7; --lapis-ink: #0B1220; --turq: #4CC2BC; --mark: #7A6418; --mark-ink: #FFF6D8; --reading: #1F2C44; --danger: #F2827A; --shade: rgba(0, 0, 0, .5);
+  --paper: #000000; --surface: #111111; --ink: #F1F1F3; --muted: #C3C3C8; --line: rgba(255, 255, 255, .24); --page: #000000; --page-edge: rgba(255, 255, 255, .2);
+  --glass: rgba(24, 24, 24, .76); --glass-edge: rgba(255, 255, 255, .34); --glass-btn: rgba(255, 255, 255, .10); color-scheme: dark;
+  --lapis: #E7D9B6; --lapis-ink: #15120A; --turq: #D9D0BC; --mark: #574A2D; --mark-ink: #FFF4D7; --reading: #202024; --danger: #F2827A; --shade: rgba(0, 0, 0, .64);
 }
 :root[data-theme="glass"] body {
   background: radial-gradient(900px 600px at 12% -10%, #BFD4FF 0%, transparent 60%), radial-gradient(800px 600px at 95% 10%, #FFD6E8 0%, transparent 55%),
@@ -460,8 +462,7 @@ body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: 108p
   background-attachment: fixed;
 }
 :root[data-theme="glassdark"] body {
-  background: radial-gradient(900px 600px at 12% -10%, #253B7A 0%, transparent 60%), radial-gradient(800px 600px at 95% 10%, #5A2450 0%, transparent 55%),
-    radial-gradient(900px 700px at 50% 110%, #134A44 0%, transparent 60%), var(--paper);
+  background: radial-gradient(700px 420px at 50% -12%, rgba(255,255,255,.09), transparent 70%), #000;
   background-attachment: fixed;
 }
 :root[data-theme^="glass"] .bar, :root[data-theme^="glass"] .dock, :root[data-theme^="glass"] .panel-body, :root[data-theme^="glass"] .welcome,
@@ -482,6 +483,17 @@ body.has-doc .toast, body.has-doc .fixbtn, body.has-doc .voicebox { bottom: 108p
 :root[data-theme^="glass"] .primary { background: var(--lapis); border-color: transparent; color: var(--lapis-ink); box-shadow: 0 6px 18px color-mix(in srgb, var(--lapis) 40%, transparent); }
 :root[data-theme^="glass"] .text { background: color-mix(in srgb, var(--page) 86%, transparent); border-color: var(--glass-edge); box-shadow: 0 14px 40px rgba(8, 12, 24, .16); }
 :root[data-theme^="glass"] .welcome { outline-color: var(--glass-edge); }
+/* Floating, translucent reader dock inspired by the supplied Liquid Glass reference. */
+:root[data-theme^="glass"] .dock {
+  gap: 8px 12px; padding: 10px 14px; border-radius: 30px;
+  background: color-mix(in srgb, var(--glass) 90%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.42), 0 12px 34px rgba(0,0,0,.24);
+}
+:root[data-theme^="glass"] .dock .transport { padding: 3px; border-radius: 999px; background: color-mix(in srgb, var(--glass-btn) 86%, transparent); }
+:root[data-theme^="glass"] #play { min-width: 132px; border-radius: 999px; box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 5px 15px rgba(0,0,0,.16); }
+:root[data-theme^="glass"] .pager, :root[data-theme^="glass"] .speedctl { border-radius: 999px; }
+:root[data-theme^="glass"] .dock :is(.pager input, .speedctl, .seg) { box-shadow: inset 0 1px 0 rgba(255,255,255,.22); }
+:root[data-theme="glassdark"] .dock, :root[data-theme="glassdark"] .bar { -webkit-backdrop-filter: blur(18px) saturate(135%); backdrop-filter: blur(18px) saturate(135%); }
 /* (under «increase contrast» the glass turns solid) */
 @media (prefers-contrast: more) {
   :root[data-theme^="glass"] .bar, :root[data-theme^="glass"] .dock, :root[data-theme^="glass"] .panel-body, :root[data-theme^="glass"] .welcome { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
@@ -1324,39 +1336,9 @@ html:root { --ic: 34px; }
 html:root .brand-mark, html:root .brand-icon { width: var(--ic); height: var(--ic); }
 @media (max-width: 600px) { .drop-hint { display: none; } }
 
-/* old paper, like the pages of an old book: warm cream, darker worn edges, faint fibres and a few age spots (light looks only; drawn with gradients, no picture) */
-html:root[data-theme="light"] body, html:root[data-theme="modern"] body, html:root[data-theme="depth"] body {
-  background-color: #EFE1BF;
-  background-image:
-    radial-gradient(ellipse at 50% 38%, rgba(255, 251, 238, .6) 0%, rgba(255, 251, 238, 0) 62%),
-    radial-gradient(ellipse at 0% 0%, rgba(150, 100, 40, .30) 0%, transparent 46%),
-    radial-gradient(ellipse at 100% 0%, rgba(150, 100, 40, .22) 0%, transparent 42%),
-    radial-gradient(ellipse at 0% 100%, rgba(135, 90, 35, .32) 0%, transparent 48%),
-    radial-gradient(ellipse at 100% 100%, rgba(135, 90, 35, .28) 0%, transparent 44%),
-    radial-gradient(circle at 18% 28%, rgba(160, 110, 50, .12) 0 7%, transparent 8%),
-    radial-gradient(circle at 82% 62%, rgba(160, 110, 50, .10) 0 9%, transparent 10%),
-    radial-gradient(circle at 40% 86%, rgba(160, 110, 50, .09) 0 6%, transparent 7%),
-    repeating-linear-gradient(0deg, rgba(110, 75, 35, .035) 0 1px, transparent 1px 3px);
-  background-attachment: fixed;
-}
-@media (prefers-color-scheme: light) {
-  html:root[data-theme="auto"] body {
-    background-color: #EFE1BF;
-    background-image:
-      radial-gradient(ellipse at 50% 38%, rgba(255, 251, 238, .6) 0%, rgba(255, 251, 238, 0) 62%),
-      radial-gradient(ellipse at 0% 0%, rgba(150, 100, 40, .30) 0%, transparent 46%),
-      radial-gradient(ellipse at 100% 0%, rgba(150, 100, 40, .22) 0%, transparent 42%),
-      radial-gradient(ellipse at 0% 100%, rgba(135, 90, 35, .32) 0%, transparent 48%),
-      radial-gradient(ellipse at 100% 100%, rgba(135, 90, 35, .28) 0%, transparent 44%),
-      radial-gradient(circle at 18% 28%, rgba(160, 110, 50, .12) 0 7%, transparent 8%),
-      radial-gradient(circle at 82% 62%, rgba(160, 110, 50, .10) 0 9%, transparent 10%),
-      radial-gradient(circle at 40% 86%, rgba(160, 110, 50, .09) 0 6%, transparent 7%),
-      repeating-linear-gradient(0deg, rgba(110, 75, 35, .035) 0 1px, transparent 1px 3px);
-    background-attachment: fixed;
-  }
-}
-html:root[data-theme="light"] .bar, html:root[data-theme="modern"] .bar, html:root[data-theme="depth"] .bar { background: rgba(248, 239, 216, .94); }
-html:root[data-theme="light"] .welcome, html:root[data-theme="modern"] .welcome, html:root[data-theme="depth"] .welcome { background: rgba(253, 247, 232, .9); }
+/* Keep the app canvas calm and neutral; reserve the soft paper tone for the reading page itself. */
+html:root[data-theme="light"] body, html:root[data-theme="modern"] body, html:root[data-theme="depth"] body,
+html:root[data-theme="auto"] body { background: var(--paper); background-image: none; background-attachment: initial; }
 
 /* the settings groups in one line (they scroll sideways if the screen is very narrow), all the same height */
 html:root .settabs { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 5px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
@@ -1472,6 +1454,55 @@ html:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-th
   border-radius: var(--ios-r) !important; box-shadow: none !important; padding: 14px 16px !important; }
 html:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > .field > label, html:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > .field > .lbl, html:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > .field > h3 { color: var(--ios-label); font-weight: 700; }
 html:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body .hint { color: var(--ios-label2) !important; }
+
+/* Glass is opt-in and confined to the fixed controls, keeping scroll-heavy reading surfaces inexpensive. */
+html:root[data-theme^="glass"] :is(.bar, .dock) {
+  background: var(--glass) !important;
+  border: 1px solid var(--glass-edge) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 10px 28px rgba(0,0,0,.18) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+  backdrop-filter: blur(14px) saturate(140%) !important;
+}
+html:root[data-theme^="glass"] .bar { border-width: 0 0 1px !important; }
+html:root[data-theme^="glass"] .dock { border-radius: 30px !important; }
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  html:root[data-theme^="glass"] :is(.bar, .dock) {
+    background: var(--surface) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  }
+}
+
+/* Voice pickers honor the same large / very large interface scale as the rest of Khana. */
+html:root .voice-choice {
+  min-height: calc(50px * var(--ui-scale, 1)) !important;
+  padding: 6px 10px !important;
+  font-size: calc(18px * var(--ui-scale, 1)) !important;
+}
+html:root .voice-choice option, html:root .voice-choice optgroup {
+  font-size: calc(18px * var(--ui-scale, 1)) !important;
+}
+html:root .quick-voice { gap: 8px; font-size: calc(17px * var(--ui-scale, 1)); }
+html:root .quick-voice-label { white-space: nowrap; }
+html:root .quick-voice .voice-choice { max-width: min(68vw, 360px); }
+@media (max-width: 600px) {
+  html:root .quick-voice .voice-choice { max-width: min(60vw, 260px); }
+}
+
+/* Typing-to-speak tools: choose the voice and enlarge the message right beside the text field. */
+html:root #typePanel .type-access-tools {
+  display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 12px 18px; margin: 4px 0 8px;
+}
+html:root #typePanel .type-voice { display: grid; flex: 1 1 240px; gap: 5px; font-size: calc(17px * var(--ui-scale, 1)); font-weight: 700; }
+html:root #typePanel .type-voice .voice-choice { width: 100%; max-width: 520px; }
+html:root #typePanel .type-text-size { display: flex; align-items: center; gap: 8px; font-size: calc(16px * var(--ui-scale, 1)); font-weight: 700; }
+html:root #typePanel .type-text-size button { min-width: calc(52px * var(--ui-scale, 1)); min-height: calc(50px * var(--ui-scale, 1)); padding: 6px 10px; font-size: calc(21px * var(--ui-scale, 1)); }
+html:root #typePanel .type-text-size output { min-width: 2.6em; text-align: center; font-size: calc(18px * var(--ui-scale, 1)); font-variant-numeric: tabular-nums; }
+html:root #typePanel .type-text-label { display: block; margin: 0 0 8px; font-size: calc(17px * var(--ui-scale, 1)); font-weight: 700; }
+html:root #typePanel #typeText { font-size: var(--fs, 21px); }
+@media (max-width: 520px) {
+  html:root #typePanel .type-access-tools { align-items: stretch; }
+  html:root #typePanel .type-voice, html:root #typePanel .type-text-size { flex: 1 1 100%; }
+  html:root #typePanel .type-text-size { justify-content: space-between; }
+}
 html:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body hr, html:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body .sep { border: 0; height: .5px; background: var(--ios-sep); }
 html:root:not([data-theme="black"]):not([data-theme="blackyellow"]):not([data-theme="night"]) .panel-body > .field + .field { margin-top: 2px; }
 
@@ -2112,9 +2143,8 @@ button, .btn, summary { min-height: 48px; font-size: 16px; }
 .text, #pageView, .panel-body { direction: rtl; }
 .panel-body { text-align: start; }
 
-/* One shared 48 px action frame and 26 px glyph for the top bar. */
-html:root { --top-action-size: 48px; --top-glyph-size: 26px; }
-@media (max-width: 300px) { html:root { --top-action-size: 44px; --top-glyph-size: 24px; } }
+/* One shared, accessible action frame and glyph size for the top bar. */
+html:root { --top-action-size: 48px; --top-glyph-size: 24px; }
 html:root .bar .top > .more-tools > summary,
 html:root .bar .top > .lowvision-top,
 html:root .bar .top > .top-save { width: var(--top-action-size); height: var(--top-action-size); min-width: var(--top-action-size); min-height: var(--top-action-size); padding: 0; margin-inline: 3px; box-sizing: border-box; }
@@ -2126,19 +2156,19 @@ html:root .bar .top > #openFileBtn { height: var(--top-action-size); min-height:
 /* Match the eye glyph beside Settings to the settings tile's graphite and silver tones. */
 html:root:not([data-lowvision="1"]) .bar .top > .lowvision-top svg { color: light-dark(#2C2C2E, #A9A9AE); }
 html:root .bar .top > .lowvision-top[aria-pressed="true"] svg { color: #000; }
-/* Make «Open file» the clear primary action: larger gold button, same aligned glyph. */
+/* Keep «Open file» prominent while matching the neighboring controls' height. */
 html:root:not([data-lowvision="1"]) .bar .top > #openFileBtn {
-  height: 52px !important; min-height: 52px !important; padding-inline: 20px !important; gap: 9px !important;
-  border: 1px solid #B88724 !important; border-radius: 16px !important; background: #E6B94F !important;
+  height: var(--top-action-size) !important; min-height: var(--top-action-size) !important; padding-inline: 16px !important; gap: 8px !important;
+  border: 1px solid #B88724 !important; border-radius: 14px !important; background: #E6B94F !important;
   background-image: none !important; color: #281C03 !important; box-shadow: 0 2px 8px rgba(116, 78, 4, .22) !important;
-  font-size: 17px !important; font-weight: 750;
+  font-size: 16px !important; font-weight: 750;
 }
 html:root:not([data-lowvision="1"]) .bar .top > #openFileBtn svg.ui-icon { color: #634400 !important; }
 @media (max-width: 420px) {
-  html:root:not([data-lowvision="1"]) .bar .top > #openFileBtn { height: 50px !important; min-height: 50px !important; padding-inline: 12px !important; gap: 7px !important; font-size: 16px !important; }
+  html:root:not([data-lowvision="1"]) .bar .top > #openFileBtn { padding-inline: 12px !important; gap: 7px !important; }
 }
 @media (max-width: 340px) {
-  html:root:not([data-lowvision="1"]) .bar .top > #openFileBtn { height: 48px !important; min-height: 48px !important; padding-inline: 8px !important; gap: 5px !important; font-size: 15px !important; }
+  html:root:not([data-lowvision="1"]) .bar .top > #openFileBtn { padding-inline: 8px !important; gap: 5px !important; font-size: 15px !important; }
 }
 
 /* Keep the top-bar action icons on one visual system: equal touch targets, 24 px outline glyphs, one theme-aware color. */
@@ -2174,7 +2204,7 @@ body.has-doc .selection-actions { bottom: calc(var(--dock-height, 180px) + 32px 
 html:root:not(#k1):not(#k2) .bar .top > .lowvision-top {
   display: inline-grid !important; grid-auto-flow: column; grid-template-columns: 22px auto; grid-template-rows: 24px;
   align-items: center; justify-content: center; column-gap: 4px;
-  width: auto !important; min-width: 78px !important; height: 52px !important; min-height: 52px !important;
+  width: auto !important; min-width: 78px !important; height: var(--top-action-size) !important; min-height: var(--top-action-size) !important;
   padding: 3px 9px !important; border: 2px solid #111 !important; border-radius: 12px !important;
   background: #111 !important; color: #FFD60A !important; box-shadow: none !important;
 }
@@ -2200,4 +2230,647 @@ html:root:not(#k1):not(#k2) .bar .top > .lowvision-top:focus-visible { outline: 
 }
 @media (prefers-reduced-motion: reduce) {
   html:root .bar .top .brand .logo { animation: none !important; transform: none !important; }
+}
+
+/* A quieter frame system: keep strong outlines for low-vision and high-contrast modes. */
+html:root:not([data-lowvision="1"]):not([data-theme="black"]):not([data-theme="blackyellow"]) .dock {
+  border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 6px 22px rgba(0, 0, 0, .12);
+}
+html:root:not([data-lowvision="1"]):not([data-theme="black"]):not([data-theme="blackyellow"]) :is(.more-menu, #zoomMenu) {
+  border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 8px 24px rgba(0, 0, 0, .14);
+}
+html:root:not([data-lowvision="1"]) .dock #pageInput {
+  width: calc(72px * var(--ui-scale, 1)) !important; min-height: 52px !important;
+  font-size: calc(23px * var(--ui-scale, 1)) !important; border: 1.5px solid var(--line) !important;
+  border-radius: 12px !important;
+}
+html:root:not([data-lowvision="1"]) .dock #speedChip {
+  min-width: calc(82px * var(--ui-scale, 1)) !important; border-width: 1.5px !important;
+}
+
+/* Night skin: solid black surfaces and warm controls/text, without blue-tinted app chrome. */
+html:root[data-theme="night"] {
+  --paper: #000000; --surface: #000000; --page: #000000; --ink: #F4DFC0; --muted: #D2B98F;
+  --line: #806A48; --lapis: #F2BD72; --lapis-ink: #171006; --turq: #E0B875; --reading: #21180B;
+  --mark: #5B3E12; --mark-ink: #FFE9C4; --hl-bg: #F2B24A; --hl-ink: #1A1105; --hl-ring: #F2B24A;
+  --sent-bg: rgba(242, 178, 74, .16); color-scheme: dark;
+}
+html:root[data-theme="night"] :is(body, .bar, .dock, .panel-body, .panel-head, .more-menu, .welcome, .text, #pageView, .note, .panel-body > .field, .reading-context #readingState, .search input, .pager input, .speedctl, .seg, select, select option, input[type="text"], input[type="number"], textarea) {
+  background: #000000 !important; color: var(--ink) !important; border-color: var(--line) !important; box-shadow: none !important;
+}
+html:root[data-theme="night"] :is(.primary, .seg button.on, .on) {
+  background: var(--lapis) !important; color: var(--lapis-ink) !important; border-color: var(--lapis) !important;
+}
+html:root[data-theme="night"] svg.ui-icon:not(.settings-app-icon) {
+  background: none !important; color: var(--lapis) !important; box-shadow: none !important; filter: none !important;
+}
+html:root[data-theme="night"] #welcome .jump-art::before { background: rgba(0, 0, 0, .45) !important; }
+
+/* On phones, keep the fish on the left and the tappable quotation in a separate, readable water panel. */
+@media (max-width: 760px) {
+  html:root:not(#k1):not(#k2) #welcome .jump-art > img.realistic-fish {
+    left: 4% !important; width: clamp(94px, 24vw, 145px) !important; bottom: 9% !important;
+  }
+  html:root:not(#k1):not(#k2) #welcome .jump-art .water-quote {
+    left: auto !important; right: 3.5% !important; top: auto !important; bottom: 3.5% !important;
+    width: min(53%, 25em) !important; padding: .5em .65em !important; border: 1px solid rgba(255,255,255,.3) !important;
+    border-radius: 12px !important; background: rgba(5, 13, 23, .9) !important; color: #FFFFFF !important;
+    font-size: clamp(11px, 4.2cqh, 16px) !important; line-height: 1.5 !important;
+  }
+}
+@media (max-width: 380px) {
+  html:root:not(#k1):not(#k2) #welcome .jump-art .water-quote { width: 55% !important; font-size: clamp(11px, 4cqh, 14px) !important; }
+}
+
+/* The text-tools disclosure uses the same compact silver icon tile as Settings. */
+html:root:not([data-theme="black"]):not([data-theme="blackyellow"]) .book-tools > summary {
+  min-height: 48px; gap: 9px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 14px;
+  background: var(--surface); color: var(--ink); box-shadow: none; font-weight: 700;
+}
+html:root .book-tools > summary > svg.text-tools-icon { width: 34px; height: 34px; flex: 0 0 34px; }
+html:root:not([data-theme="black"]):not([data-theme="blackyellow"]) .book-tools[open] > summary {
+  background: color-mix(in srgb, var(--reading) 72%, var(--surface)); border-color: var(--line);
+}
+html:root .contact-reveal > summary {
+  display: grid; place-items: center; width: 48px; min-width: 48px; height: 48px; min-height: 48px;
+  padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink);
+  list-style: none; cursor: pointer;
+}
+html:root .contact-reveal > summary::-webkit-details-marker { display: none; }
+html:root .contact-reveal > summary > svg.ui-icon { width: 24px; height: 24px; }
+html:root .contact-reveal[open] > summary { color: var(--lapis); background: var(--reading); }
+html:root .contact-reveal > p { margin: 8px 0 0; overflow-wrap: anywhere; }
+
+/* Dark and night displays use black app chrome; neither theme leaves a blue-tinted canvas. */
+html:root:is([data-theme="dark"], [data-theme="night"]) {
+  --paper: #000000; --surface: #000000; --page: #000000; --page-edge: #66666D;
+  --ink: #F1F1F3; --muted: #C3C3C8; --line: #77777F; --reading: #202024;
+  color-scheme: dark;
+}
+html:root[data-theme="dark"] {
+  --lapis: #E7D9B6; --lapis-ink: #15120A; --turq: #D9D0BC; --mark: #574A2D; --mark-ink: #FFF4D7;
+  --hl-bg: #E7D9B6; --hl-ink: #15120A; --hl-ring: #E7D9B6; --sent-bg: rgba(231, 217, 182, .15);
+}
+html:root[data-theme="night"] {
+  --ink: #F4DFC0; --muted: #D2B98F; --line: #806A48; --lapis: #F2BD72; --lapis-ink: #171006;
+  --turq: #E0B875; --reading: #21180B; --mark: #5B3E12; --mark-ink: #FFE9C4;
+  --hl-bg: #F2B24A; --hl-ink: #1A1105; --hl-ring: #F2B24A; --sent-bg: rgba(242, 178, 74, .16);
+}
+html:root:is([data-theme="dark"], [data-theme="night"]) :is(body, .bar, .dock, .panel-body, .panel-head, .more-menu, .welcome, .text, #pageView, .note, .panel-body > .field, .reading-context, .voicebox, #editBar, .confirm-box, .welcome-steps li, .book-tools > summary, .reading-context #readingState, .search input, .pager input, .speedctl, .seg, select, select option, input[type="text"], input[type="number"], textarea, button:not(.primary):not(.lowvision-top):not(.lowvision-btn):not(#visionBtn), .btn:not(.primary)) {
+  background: #000000 !important; color: var(--ink) !important; border-color: var(--line) !important; box-shadow: none !important;
+}
+html:root:is([data-theme="dark"], [data-theme="night"]) svg.ui-icon:not(.settings-app-icon) {
+  background: none !important; color: var(--lapis) !important; box-shadow: none !important; filter: none !important;
+}
+html:root:is([data-theme="dark"], [data-theme="night"]) #welcome .jump-art {
+  background-color: #222222 !important; background-blend-mode: luminosity !important;
+}
+html:root:is([data-theme="dark"], [data-theme="night"]) #welcome .jump-art::before {
+  background: rgba(0, 0, 0, .52) !important;
+}
+html:root:is([data-theme="dark"], [data-theme="night"]) #welcome .jump-art > svg.water-scene {
+  filter: grayscale(.78) brightness(.66) !important;
+}
+html:root:is([data-theme="dark"], [data-theme="night"]) #welcome .jump-art .water-quote {
+  background: rgba(0, 0, 0, .94) !important; color: var(--ink) !important; border-color: var(--line) !important;
+}
+
+/* Return to the fully illustrated, animated village scene. The only raster layer is the
+   existing fish artwork; the same offline asset is clipped by the SVG waterline on its dive. */
+html:root:not(#k1):not(#k2) #welcome .jump-art { background: transparent !important; background-image: none !important; }
+html:root:not(#k1):not(#k2) #welcome .jump-art > svg.water-scene {
+  display: block !important; visibility: visible !important; filter: none !important; pointer-events: none;
+}
+html:root:not(#k1):not(#k2) #welcome .jump-art > svg.water-scene > * { visibility: visible !important; }
+html:root:not(#k1):not(#k2) #welcome .jump-art > svg.water-scene > g[clip-path] > .fish-leap { display: none !important; }
+html:root:not(#k1):not(#k2) #welcome .jump-art > svg.beta-fish-overlay {
+  display: block !important; position: absolute !important; inset: 0; width: 100% !important; height: 100% !important;
+  z-index: 3; overflow: hidden; pointer-events: none; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.38));
+}
+html:root:not(#k1):not(#k2) #welcome .jump-art > svg.people-overlay {
+  display: block !important; position: absolute !important; inset: 0; width: 100% !important; height: 100% !important;
+  z-index: 2; overflow: hidden; pointer-events: none; filter: drop-shadow(0 .5px 1px rgba(24,17,12,.42));
+}
+html:root:not(#k1):not(#k2) #welcome .jump-art > svg.village-overlay {
+  display: block !important; position: absolute !important; inset: 0; width: 100% !important; height: 100% !important;
+  z-index: 1; overflow: hidden; pointer-events: none; filter: drop-shadow(0 .5px 1px rgba(36,24,16,.28));
+}
+
+@keyframes distant-chair-roll {
+  0%, 100% { transform: translate(160px,78px) scale(.62); }
+  50% { transform: translate(146px,77.4px) scale(.62); }
+}
+@keyframes distant-cane-walk {
+  0%, 100% { transform: translate(193px,79px) scale(.62); }
+  50% { transform: translate(182px,78.5px) scale(.62); }
+}
+@keyframes distant-baloch-walk {
+  0%, 100% { transform: translate(226px,79px) scale(.58); }
+  50% { transform: translate(217px,78.5px) scale(.58); }
+}
+@keyframes distant-woman-walk {
+  0%, 100% { transform: translate(253px,79px) scale(.58); }
+  50% { transform: translate(261px,78.5px) scale(.58); }
+}
+/* The closed curve keeps heading and speed continuous through both underwater turns. */
+@keyframes beta-fish-swim {
+  from { offset-distance: 0%; }
+  to { offset-distance: 100%; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .distant-wheelchair { animation: distant-chair-roll 70s ease-in-out infinite; }
+  .distant-cane-walker { animation: distant-cane-walk 52s ease-in-out infinite; }
+  .distant-baloch-walker { animation: distant-baloch-walk 64s ease-in-out infinite; }
+  .distant-woman-walker { animation: distant-woman-walk 72s ease-in-out infinite; }
+  .beta-fish-leap {
+    offset-path: path("M 270 113 C 305 113 269 72 239 60 C 204 46 167 55 144 86 C 119 121 158 113 270 113") view-box;
+    offset-anchor: center;
+    offset-rotate: auto;
+    animation: beta-fish-swim 22s linear infinite -2s;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .distant-wheelchair, .distant-cane-walker, .distant-baloch-walker, .distant-woman-walker { animation: none !important; }
+  .beta-fish-leap { animation: none !important; transform: translate(0, 2px) !important; }
+}
+html:root:is([data-theme="dark"], [data-theme="night"]) #welcome .jump-art::before { background: rgba(0,0,0,.28) !important; }
+
+/* The Android welcome screen keeps the illustration, explanation and primary actions together
+   on one viewport; secondary format/drop hints yield space first on shorter displays. */
+@media (max-height: 760px) {
+  html:root.android-reader body:not(.has-doc) #welcome {
+    min-height: calc(100dvh - 68px) !important; box-sizing: border-box; padding: 4px 14px 8px !important;
+    gap: clamp(4px, 1dvh, 8px) !important; align-content: center;
+  }
+  html:root.android-reader body:not(.has-doc) #welcome .hero { display: none !important; }
+  html:root.android-reader body:not(.has-doc) #welcome .jump-art {
+    height: clamp(150px, 32dvh, 280px) !important; min-height: 0 !important; margin: 0 0 2px !important;
+  }
+  html:root.android-reader body:not(.has-doc) #welcome .welcome-badge { font-size: clamp(20px, 3vw, 27px) !important; line-height: 1.35 !important; }
+  html:root.android-reader body:not(.has-doc) #welcome > p { font-size: clamp(15px, 2.1vw, 18px) !important; line-height: 1.55 !important; }
+  html:root.android-reader body:not(.has-doc) #welcome .welcome-actions { gap: 7px !important; }
+  html:root.android-reader body:not(.has-doc) #welcome .welcome-actions button { min-height: 50px !important; padding-block: 7px !important; }
+  html:root.android-reader body:not(.has-doc) #welcome .formats,
+  html:root.android-reader body:not(.has-doc) #welcome .drop-hint { display: none !important; }
+}
+@media (max-height: 600px) {
+  html:root.android-reader body:not(.has-doc) #welcome .jump-art { height: clamp(100px, 20dvh, 150px) !important; }
+  html:root.android-reader body:not(.has-doc) #welcome .type-hint { display: none !important; }
+}
+
+/* A hidden welcome screen has no scene rendering or running CSS animations. */
+#welcome[hidden] { display: none !important; }
+
+/* Keep the village artwork still. Animate the fish on its own layer. */
+#welcome .living-village {
+  width: 100%; height: 100%; display: block; pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fish-route { animation: fish-close-to-water 24s linear infinite -2.4s; }
+}
+
+/* Move isolated subjects and highlights, never translated copies of the landscape. */
+.river-glint { opacity: .2; }
+@keyframes river-glint-drift {
+  0% { transform: translateX(-18px); opacity: 0; }
+  25%, 65% { opacity: .78; }
+  100% { transform: translateX(20px); opacity: 0; }
+}
+/* Restart after the child and hoop clear the left edge. */
+.hoop-player { transform: translateX(-145px); }
+@keyframes hoop-player-cross {
+  0% { opacity: 0; transform: translateX(-145px); }
+  6% { opacity: 1; }
+  78%, 100% { opacity: 1; transform: translateX(-248px); }
+}
+@keyframes child-stride {
+  from { transform: translateY(0); }
+  to { transform: translateY(-.38px); }
+}
+@keyframes hoop-roll { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: no-preference) {
+  .river-glint { animation: river-glint-drift 9s linear infinite -3s; }
+  .river-glint-near { animation-duration: 7s; animation-delay: -4s; }
+  .river-glint-mid { animation-duration: 11s; animation-delay: -6s; }
+  .hoop-player { animation: hoop-player-cross 39s linear infinite -4s; }
+  .child-stride { animation: child-stride .32s ease-in-out infinite alternate; }
+  .rolling-hoop { transform-box: fill-box; transform-origin: center; animation: hoop-roll 12s linear infinite; }
+}
+
+/* Fit the whole panorama so nearby buildings and figures don't dominate narrow screens. */
+html:root:not(#k1):not(#k2) #welcome .jump-art:has(.living-village) {
+  width: min(80vw, 980px) !important;
+  margin-inline: auto !important;
+  justify-self: center;
+  align-self: center;
+  height: auto !important;
+  aspect-ratio: 3 / 1 !important;
+}
+@keyframes standing-resident-cross {
+  0% { opacity: 0; transform: translateX(var(--walk-start)); }
+  12%, 82% { opacity: 1; }
+  94%, 100% { opacity: 0; transform: translateX(var(--walk-end)); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .standing-resident { animation: standing-resident-cross 26s linear infinite; }
+  .water-carrier { --walk-start: -4px; --walk-end: 6px; animation-delay: -6s; }
+  .cane-walker { --walk-start: -3px; --walk-end: 7px; animation-delay: -13s; }
+}
+
+/* Loop the carrier only after the entire figure and shadow leave the visible road. */
+@keyframes water-carrier-cross {
+  from { transform: translate(-78px, -2px); }
+  to { transform: translate(242px, 3px); }
+}
+.leaf-tip-sway { display: none; }
+@keyframes leaf-tip-sway {
+  from { transform: rotate(-.45deg); }
+  to { transform: rotate(.65deg); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .standing-resident.water-carrier { animation: water-carrier-cross 105s linear infinite -18s; }
+  .leaf-tip-sway {
+    display: inline;
+    transform-box: fill-box;
+    transform-origin: left bottom;
+    animation: leaf-tip-sway 3.8s ease-in-out infinite alternate;
+  }
+}
+
+/* Dusty tones and soft reflections for the illustrated welcome scene. */
+.weathered-village-art {
+  filter: saturate(.4) sepia(.19) contrast(.92) brightness(.93);
+}
+#welcome .jump-art .river-glints { stroke: #bbaa8a; }
+
+.forge-animation { display: none; }
+@keyframes forge-flicker {
+  0%, 100% { transform: scale(.91, .83); opacity: .77; }
+  23% { transform: scale(.95, 1.07); opacity: .93; }
+  49% { transform: scale(1.04, .92); opacity: .83; }
+  74% { transform: scale(.95, 1.16); opacity: 1; }
+}
+@keyframes forge-smoke-rise {
+  0% { transform: translate(.1px, 1px); opacity: 0; }
+  28% { opacity: .65; }
+  100% { transform: translate(-2.6px, -4.5px); opacity: 0; }
+}
+/* Travel along the lane, then approach the lesson mat. */
+.illustrated-child { transform: translate(135px, 5px); }
+@keyframes illustrated-child-walk {
+  0% { transform: translate(135px, 5px); opacity: 0; }
+  5% { opacity: 1; }
+  78% { transform: translate(-14px, 5px); opacity: 1; }
+  82%, 100% { transform: translate(-19px, 4px); opacity: 0; }
+}
+@keyframes illustrated-child-step {
+  to { transform: translateY(-.27px); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .forge-animation { display: inline; }
+  .forge-flame {
+    transform-box: fill-box;
+    transform-origin: bottom center;
+    animation: forge-flicker 1.17s ease-in-out infinite;
+  }
+  .forge-smoke { animation: forge-smoke-rise 4.8s linear infinite; }
+  .forge-smoke-late { animation-delay: -2.4s; }
+  .illustrated-child { animation: illustrated-child-walk 64s linear infinite -3.2s; }
+  .illustrated-child-step { animation: illustrated-child-step .32s ease-in-out infinite alternate; }
+}
+
+/* A small wake and droplets mark the fish's return to the surface. */
+.fish-wake, .fish-splash {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes fish-wake-spread {
+  0%, 56% { opacity: 0; transform: scale(.4); }
+  59% { opacity: .75; }
+  72%, 100% { opacity: 0; transform: scale(1.9, 1.45); }
+}
+@keyframes fish-splash-rise {
+  0%, 55%, 65%, 100% { opacity: 0; }
+  58% { opacity: .8; transform: translateY(-.6px); }
+  64% { transform: translateY(.3px); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fish-wake { animation: fish-wake-spread 24s ease-out infinite -2.4s; }
+  .fish-splash { animation: fish-splash-rise 24s linear infinite -2.4s; }
+}
+
+/* Charcoal body with enough contrast to read over the muddy water. */
+.shallow-swim { filter: saturate(.2) brightness(.72) contrast(1.12); }
+
+/* High, soft dust keeps the horizon readable and leaves the landscape still. */
+.sky-dust { display: none; }
+@keyframes sky-dust-drift {
+  0% { transform: translateX(-18px); opacity: 0; }
+  25%, 68% { opacity: .32; }
+  100% { transform: translateX(27px); opacity: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sky-dust { display: inline; }
+  .sky-dust-bank { animation: sky-dust-drift 32s linear infinite -6s; }
+  .sky-dust-late { animation-duration: 43s; animation-delay: -24s; }
+}
+
+/* SVG coordinates keep the sprite and the waterline in the same space. */
+.fish-route { transform: translate(160px, 82px) rotate(180deg); transform-origin: 0 0; }
+@keyframes fish-close-to-water {
+  0% { transform: translate(163px, 96px) rotate(0deg); }
+  15% { transform: translate(172px, 95px) rotate(-25deg); }
+  21% { transform: translate(174px, 94px) rotate(-79deg); }
+  28% { transform: translate(171px, 89px) rotate(-124deg); }
+  36% { transform: translate(164px, 82px) rotate(-158deg); }
+  45% { transform: translate(154px, 81.5px) rotate(-187deg); }
+  57% { transform: translate(145px, 86px) rotate(-211deg); }
+  68% { transform: translate(143px, 93px) rotate(-313deg); }
+  81% { transform: translate(151px, 96px) rotate(-352deg); }
+  100% { transform: translate(163px, 96px) rotate(-360deg); }
+}
+
+/* Align the welcome artwork and toolbar to the same centered column. */
+html:root {
+  --welcome-frame-width: min(calc(100vw - 24px), 980px);
+}
+html:root:not(#k1):not(#k2) #welcome .jump-art:has(.living-village) {
+  width: var(--welcome-frame-width) !important;
+  max-width: 100% !important;
+  container-type: inline-size !important;
+}
+html:root:not(#k1):not(#k2) body:not(.has-doc) .bar .top {
+  width: var(--welcome-frame-width);
+  max-width: 100%;
+  margin-inline: auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: clamp(4px, 1vw, 12px);
+}
+html:root:not(#k1):not(#k2) body:not(.has-doc) .bar .top > .brand {
+  flex: 1 1 0;
+  min-width: 0;
+}
+html:root:not(#k1):not(#k2) body:not(.has-doc) .bar .top > :is(.more-tools, .lowvision-top, #openFileBtn) {
+  flex-shrink: 0;
+  margin-inline: 0 !important;
+  align-self: center;
+}
+html:root:not(#k1):not(#k2) body:not(.has-doc) .bar .top > .more-tools > summary {
+  margin-inline: 0 !important;
+}
+html:root:not(#k1):not(#k2) body:not(.has-doc) .bar .top > #openFileBtn {
+  max-width: 46%;
+}
+#openFileLabel { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 420px) {
+  html:root:not(#k1):not(#k2) body:not(.has-doc) .bar .top > .brand .logo { font-size: 20px !important; }
+  html:root:not(#k1):not(#k2) body:not(.has-doc) .bar .top > #openFileBtn {
+    padding-inline: 8px !important;
+    font-size: 14px !important;
+  }
+}
+html:root:not(#k1):not(#k2) #welcome .jump-art .water-quote {
+  inset-inline: 8px !important;
+  bottom: 5px !important;
+  width: fit-content !important;
+  max-width: min(95%, 60ch);
+  margin: 0 auto !important;
+  font-size: clamp(15px, 2.1cqw, 22px) !important;
+  line-height: 1.42 !important;
+  color: #fff8e8 !important;
+  background: #211c15ed !important;
+  padding: 4px 12px !important;
+  border-radius: 10px;
+  visibility: hidden;
+}
+html:root:not(#k1):not(#k2) #welcome .jump-art.show-quote .water-quote { visibility: visible; }
+html:root:not(#k1):not(#k2) #welcome .jump-art .water-quote br { display: none; }
+@media (max-width: 740px) {
+  html:root:not(#k1):not(#k2) #welcome .jump-art:has(.living-village) { aspect-ratio: auto !important; }
+  #welcome .living-village { height: auto; aspect-ratio: 3 / 1; }
+  html:root:not(#k1):not(#k2) #welcome .jump-art .water-quote {
+    position: relative !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: none;
+    font-size: calc(16px * var(--ui-scale, 1)) !important;
+    border-radius: 0;
+    display: none;
+  }
+  html:root:not(#k1):not(#k2) #welcome .jump-art.show-quote .water-quote { display: block; }
+}
+/* Keep enlarged text in flow at any screen width. */
+html[data-lowvision="1"]:root:not(#k1):not(#k2) #welcome .jump-art:has(.living-village) { aspect-ratio: auto !important; }
+html[data-lowvision="1"] #welcome .living-village { height: auto; aspect-ratio: 3 / 1; }
+html[data-lowvision="1"]:root:not(#k1):not(#k2) #welcome .jump-art .water-quote {
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
+  max-width: none;
+  font-size: calc(16px * var(--ui-scale, 1)) !important;
+  display: none;
+}
+html[data-lowvision="1"]:root:not(#k1):not(#k2) #welcome .jump-art.show-quote .water-quote { display: block; }
+
+html:root:not(#k1):not(#k2) #welcome:has(.living-village) {
+  width: var(--welcome-frame-width) !important;
+  margin-inline: auto !important;
+  padding-inline: 0 !important;
+  align-items: center;
+}
+html:root:not(#k1):not(#k2) body:not(.has-doc) .bar { padding-inline: 0; }
+html:root:not(#k1):not(#k2) body:not(.has-doc) .bar .top > .brand { order: 0; margin: 0; }
+html:root:not(#k1):not(#k2) body:not(.has-doc) .bar .top > #openFileBtn { order: 1; flex: 0 1 auto; min-width: 0; }
+html:root:not(#k1):not(#k2) body:not(.has-doc) .bar .top > .lowvision-top { order: 2; }
+html:root:not(#k1):not(#k2) body:not(.has-doc) .bar .top > .more-tools { order: 3; }
+@media (max-width: 420px) {
+  html:root:not(#k1):not(#k2) body:not(.has-doc) .bar .top > .lowvision-top {
+    width: 48px !important;
+    min-width: 48px !important;
+    flex: 0 0 48px;
+  }
+  html:root:not(#k1):not(#k2) body:not(.has-doc) .bar .top > .lowvision-top .lowvision-top-label { display: none; }
+}
+html:root:not(#k1):not(#k2) #welcome .jump-art .water-quote {
+  transform: none !important;
+  transition: none;
+}
+@media (min-width: 741px) {
+  html:root:not([data-lowvision="1"]):not(#k1):not(#k2) #welcome .jump-art .water-quote {
+    width: 94% !important;
+    max-width: none;
+    font-size: clamp(16px, 1.9cqw, 20px) !important;
+    line-height: 1.35 !important;
+  }
+}
+
+/* Share the same available width, including when a desktop scrollbar is present. */
+html:root:not(#k1):not(#k2) body:not(.has-doc) #mainContent { padding-inline: 0 !important; }
+html:root:not(#k1):not(#k2) body:not(.has-doc) .bar .bar-inner { max-width: none; }
+html:root:not(#k1):not(#k2) body:not(.has-doc) :is(#mainContent > .sheet, .bar .top) {
+  width: min(calc(100% - 24px), 980px);
+  max-width: none;
+  margin-inline: auto;
+}
+html:root:not(#k1):not(#k2) #welcome:has(.living-village),
+html:root:not(#k1):not(#k2) #welcome .jump-art:has(.living-village) { width: 100% !important; }
+html:root:not(#k1):not(#k2) body:not(.has-doc) #mainContent > .sheet { margin-inline: auto !important; }
+
+/* Toolbar controls share a softly lit surface and distinct states. */
+html:root:not(#k1):not(#k2) body .bar .top > .more-tools > summary,
+html:root:not(#k1):not(#k2) body .bar .top > .top-save,
+html:root:not(#k1):not(#k2) body .bar .top > .lowvision-top {
+  border-radius: 15px !important;
+  border: 1px solid var(--line) !important;
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+  box-shadow: inset 0 1px 0 #ffffff2e, 0 2px 5px #00000014 !important;
+}
+html:root:not(#k1):not(#k2) body .bar .top > .more-tools[open] > summary {
+  background: var(--reading) !important;
+  border-color: var(--lapis) !important;
+}
+html:root:not(#k1):not(#k2) body .bar .top > .lowvision-top[aria-pressed="true"] {
+  background: #FFD60A !important;
+  color: #17140b !important;
+  border-color: #17140b !important;
+}
+html:root:not([data-lowvision="1"]):not(#k1):not(#k2) body .bar .top > #openFileBtn {
+  border-radius: 15px !important;
+  background: linear-gradient(180deg, #f7d77c, #e4b340) !important;
+  box-shadow: inset 0 1px 0 #fff6ce, 0 2px 5px #51360326 !important;
+}
+html:root:not(#k1):not(#k2) body .bar .top :is(#openFileBtn, .lowvision-top, .more-tools > summary):focus-visible {
+  outline: 2px solid var(--lapis) !important;
+  outline-offset: 3px;
+}
+@media (forced-colors: active) {
+  html:root:not(#k1):not(#k2) body .bar .top :is(#openFileBtn, .lowvision-top, .more-tools > summary) {
+    box-shadow: none !important;
+  }
+}
+
+/* The brand and text-size tiles use the Settings tile's visual weight. */
+.welcome-brand-glyph { display: none; }
+html:root:not(#k1):not(#k2) body .bar .top .brand-about {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  box-sizing: border-box;
+  border-radius: 15px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: inset 0 1px 0 #ffffff2e, 0 2px 5px #00000014;
+}
+html:root:not(#k1):not(#k2) body .bar .top .brand-about .brand-mark {
+  width: 24px;
+  height: 24px;
+  color: inherit;
+  background: transparent;
+}
+html:root:not(#k1):not(#k2) body .bar .top .brand-about .brand-icon { display: none; }
+html:root:not(#k1):not(#k2) body .bar .top .welcome-brand-glyph {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+html:root:not(#k1):not(#k2) body .bar .top > .lowvision-top {
+  width: 48px !important;
+  min-width: 48px !important;
+  flex-basis: 48px;
+}
+html:root:not(#k1):not(#k2) body .bar .top > .lowvision-top .lowvision-top-label { display: none; }
+
+#typeSpeechStatus:empty { display: none; }
+body:has(#typePanel:not([hidden])) #welcome .living-village * { animation-play-state: paused !important; }
+
+/* Give the reading column a continuous page surface and a single clear dock divider. */
+html:root:not(#k1):not(#k2) body.has-doc.view-text #mainContent {
+  padding-inline: 0 !important;
+  background: var(--page);
+}
+html:root:not(#k1):not(#k2) body.has-doc.view-text #mainContent > .sheet {
+  width: 100%;
+  max-width: none !important;
+  margin-inline: auto !important;
+}
+html:root:not(#k1):not(#k2) body.has-doc.view-text #textView.text {
+  width: 100% !important;
+  margin-inline: auto !important;
+  padding-inline: max(calc(clamp(16px, 5vw, 76px) * var(--pm, 1)), calc((100% - var(--pw, 46em)) / 2)) !important;
+}
+html:root:not(#k1):not(#k2) body.has-doc.view-text #note.note {
+  width: 100% !important;
+  margin-inline: auto !important;
+  padding-inline: max(16px, calc((100% - var(--pw, 46em)) / 2)) !important;
+}
+html:root:not(#k1):not(#k2) #textView.text p[data-i] { padding-inline: .2em; }
+#pageView .pageimg {
+  outline: 1px solid var(--page-edge);
+  box-shadow: 0 2px 9px #0000001a;
+}
+html:root:is([data-theme="black"], [data-theme="blackyellow"], [data-theme="dark"], [data-theme="night"]) #pageView .pageimg {
+  box-shadow: none;
+}
+html:root:not(#k1):not(#k2) body.has-doc .dock { border-top: 1px solid var(--line) !important; }
+html:root:not(#k1):not(#k2) .dock :is(.transport .ui-icon, .pager .pg-ic) {
+  width: calc(24px * var(--ui-scale, 1)) !important;
+  height: calc(24px * var(--ui-scale, 1)) !important;
+  flex: none;
+}
+html:root:not(#k1):not(#k2) .dock .pager .pg-ic path { stroke-width: 2.35; }
+html:root:not(#k1):not(#k2) .dock :is(button, input, select):focus-visible {
+  outline: 2px solid var(--lapis) !important;
+  outline-offset: 2px;
+}
+
+/* Preserve a compact, readable toolbar when the document adds an export action. */
+html:root:not(#k1):not(#k2) body.has-doc .bar .top > :is(.top-save, .lowvision-top, .more-tools) {
+  flex-shrink: 0;
+  margin-inline: 0 !important;
+}
+html:root:not(#k1):not(#k2) body .bar .top > .more-tools > summary { margin-inline: 0 !important; }
+html:root:not(#k1):not(#k2) body.has-doc .bar .top .brand .file {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 400px) {
+  html:root:not(#k1):not(#k2) body.has-doc .bar .top { gap: 4px; }
+  html:root:not(#k1):not(#k2) body.has-doc .bar .top > #openFileBtn {
+    width: 48px !important;
+    min-width: 48px !important;
+    padding-inline: 0 !important;
+    justify-content: center;
+  }
+  body.has-doc #openFileLabel { display: none; }
+}
+
+/* Distinguish the top actions by their silhouettes and labels in every theme. */
+html:root:not(#k1):not(#k2) .bar .top :is(#moreTools > summary, #settingsBtn, #bookTools > summary, #mp3TopBtn) {
+  min-width: 48px;
+  min-height: 48px;
+  box-sizing: border-box;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 52%, var(--surface)) !important;
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+}
+html:root:not(#k1):not(#k2) .bar .top :is(.top-action-glyph, #mp3TopBtn > .ui-icon, #openFileBtn > .ui-icon) {
+  width: 24px !important;
+  height: 24px !important;
+  flex: 0 0 24px !important;
+  background: none !important;
+  color: inherit !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+html:root:not(#k1):not(#k2) .bar .top :is(#moreTools > summary, #settingsBtn, #bookTools > summary, #mp3TopBtn):focus-visible {
+  outline: 3px solid var(--ink) !important;
+  outline-offset: 2px;
 }

@@ -77,12 +77,12 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         super.onConfigurationChanged(c);
         // (the activity is not recreated for a change of mode: the colours around the page change here)
         boolean n = night();
-        if (outer != null) outer.setBackgroundColor(startupLoading ? Color.BLACK : n ? DARK_PAPER : Color.WHITE);
-        if (root != null) root.setBackgroundColor(startupLoading ? Color.BLACK : n ? DARK_PAPER : Color.WHITE);
-        if (web != null) web.setBackgroundColor(n ? DARK_PAPER : Color.WHITE);
+        if (outer != null) outer.setBackgroundColor(startupLoading || !pageBarPainted ? Color.BLACK : barGround);
+        if (root != null) root.setBackgroundColor(startupLoading || !pageBarPainted ? Color.BLACK : barGround);
+        if (web != null) web.setBackgroundColor(Color.BLACK);
         // Keep a chosen page theme until the page supplies its updated colours. Resetting to
         // green here left the bar green when the page's colour had not changed (and was cached).
-        if (outer != null) applyBarColors(startupLoading ? Color.BLACK : pageBarPainted ? barGround : defaultBarGround(), startupLoading ? Color.WHITE : pageBarPainted ? barInk : defaultBarInk());
+        if (outer != null) applyBarColors(startupLoading || !pageBarPainted ? Color.BLACK : barGround, startupLoading || !pageBarPainted ? Color.WHITE : barInk);
         applyFullScreen();
     }
 
@@ -125,7 +125,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         web.evaluateJavascript("(function(s){s.setProperty('--cut-l','" + Math.round(cutLeft / d) + "px');s.setProperty('--cut-r','" + Math.round(cutRight / d) + "px');})(document.documentElement.style)", null);
     }
 
-    private int defaultBarGround() { return night() ? Color.rgb(24, 30, 40) : Color.WHITE; }
+    private int defaultBarGround() { return Color.BLACK; }
     private int defaultBarInk() { return night() ? Color.rgb(231, 235, 242) : Color.rgb(26, 33, 48); }
 
     @Override
@@ -240,10 +240,10 @@ public final class MainActivity extends Activity implements Exporter.Asker {
 
     private String webViewTooOld() {
         PackageInfo p = WebView.getCurrentWebViewPackage();
-        if (p == null) return "Android System WebView روی این گوشی نیست.";
+        if (p == null) return "Android System WebView روی این دستگاه نصب نشده است.";
         try {
             int major = Integer.parseInt(p.versionName.split("\\.")[0]);
-            if (major < MIN_WEBVIEW_MAJOR) return "WebView این گوشی قدیمی است (" + p.versionName + "). لطفاً Android System WebView را به‌روز کنید.";
+            if (major < MIN_WEBVIEW_MAJOR) return "نسخه‌ی WebView این دستگاه قدیمی است (" + p.versionName + "). لطفاً Android System WebView را به‌روز کنید.";
         } catch (RuntimeException ignored) {
             // (a version name not in the usual form: tried anyway)
         }
@@ -282,11 +282,11 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     private void showPage() {
         if (web != null) return;
         startupLoading = false;
-        outer.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
-        applyBarColors(pageBarPainted ? barGround : defaultBarGround(), pageBarPainted ? barInk : defaultBarInk());
+        outer.setBackgroundColor(pageBarPainted ? barGround : Color.BLACK);
+        applyBarColors(pageBarPainted ? barGround : Color.BLACK, pageBarPainted ? barInk : Color.WHITE);
         CookieManager.getInstance().setAcceptCookie(false);
         web = new WebView(this);
-        web.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
+        web.setBackgroundColor(Color.BLACK);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setBlockNetworkLoads(true);
@@ -373,9 +373,9 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     private final class Chrome extends WebChromeClient {
         @Override
         public boolean onConsoleMessage(android.webkit.ConsoleMessage m) {
-            // (the page's and pdf.js's console lines are not passed to the system log, which would otherwise keep them, in the public
-            // download: true says «handled». A developer's own build lets them through.)
-            return !DEV_TOOLS;
+            // The page or PDF.js could include document-derived values in a console message.
+            // Consume these in every build; the developer timing panel uses numeric headers instead.
+            return true;
         }
 
         @Override
@@ -413,9 +413,20 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         }
     }
 
+    static void dismissExportPicker(boolean erased) {
+        MainActivity activity = current;
+        if (activity != null) activity.runOnUiThread(() -> {
+            if (activity.saving != null && (erased || Server.isLocked())) activity.finishActivity(SAVE);
+        });
+    }
+
     /** Exporter.Asker: the «save as» screen for a file the core made. */
     @Override
     public void ask(Exporter.Saved s) {
+        if (saving != null || isFinishing() || isDestroyed() || !Exporter.canOffer(s)) {
+            Exporter.defer(s);
+            return;
+        }
         saving = s;
         Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(s.mime())
                 .putExtra(Intent.EXTRA_TITLE, s.file.getName());

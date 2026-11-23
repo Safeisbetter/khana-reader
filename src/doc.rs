@@ -641,7 +641,7 @@ pub fn textutil_paragraphs(data: &[u8], ext: &str) -> Result<Vec<String>, String
     let res = (|| {
         std::fs::write(&src, data).map_err(|e| e.to_string())?;
         let mut child = std::process::Command::new("/usr/bin/textutil")
-            .args(["-convert", "txt", "-encoding", "UTF-8", "-output"])
+            .args(["-noload", "-convert", "txt", "-encoding", "UTF-8", "-output"])
             .arg(&dst)
             .arg(&src)
             .stdin(std::process::Stdio::null())

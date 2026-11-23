@@ -35,7 +35,7 @@ fn menu() -> muda::Menu {
     let file = Submenu::new("پرونده", true);
     let _ = file.append_items(&[
         &item("mp3", "ذخیره‌ی صدا…", cmd, Code::KeyS),
-        &item("pdf", "ذخیره‌ی ترجمه‌ی فارسی به صورت PDF…", cmd | Modifiers::SHIFT, Code::KeyS),
+        &item("pdf", "ذخیره‌ی ترجمه‌ی فارسی در قالب PDF…", cmd | Modifiers::SHIFT, Code::KeyS),
     ]);
     let edit = Submenu::new("ویرایش", true);
     let _ = edit.append_items(&[

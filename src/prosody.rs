@@ -59,18 +59,12 @@ pub fn shape(x: Vec<f32>, sample_rate: usize, kind: Kind) -> Vec<f32> {
     if x.len() < sample_rate / 2 {
         return x;
     }
-    let (tail, end) = match kind {
-        Kind::Question => (0.50, 1.18),
-        Kind::Exclaim => (0.40, 0.95),
-        Kind::Continues => (0.35, 1.10),
-        Kind::Title => (0.35, 0.96),
-        Kind::Statement => (0.40, 0.93),
-    };
+    // Keep the final phoneme at its natural rate and pitch. A varispeed tail
+    // changes both together and can make the last letter sound unnaturally
+    // low, stretched, or synthetic.
     let start = if kind == Kind::Exclaim { 1.04 } else { 1.0 };
-    varispeed(&x, sample_rate, |t, len| {
-        let at_start = 1.0 + (start - 1.0) * (1.0 - smooth(t / 0.5));
-        let into_tail = smooth((t - (len - tail)) / tail);
-        at_start + (end - 1.0) * into_tail
+    varispeed(&x, sample_rate, |t, _len| {
+        1.0 + (start - 1.0) * (1.0 - smooth(t / 0.5))
     })
 }
 

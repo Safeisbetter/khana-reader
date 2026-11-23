@@ -205,12 +205,25 @@ final class Server {
                 return json(200, "{\"ok\":true}");
             }
             if ("POST".equals(method) && tokenOk(tok) && ("/api/open".equals(path) || "/api/open_layout".equals(path) || "/api/open_pages".equals(path) || "/api/close".equals(path) || "/api/lock_now".equals(path) || "/api/forget".equals(path) || "/api/lock_erase".equals(path))) ReadService.stop(ctx);
-            Native.Reply r = new Native.Reply(Native.handle(Native.utf8(method), Native.utf8(path), Native.utf8(query), Native.utf8(tok), body));
+            Native.Reply r;
+            if ("POST".equals(method) && "/api/forget".equals(path) && tokenOk(tok)) {
+                synchronized (Exporter.PUBLICATION) {
+                    r = nativeReply(method, path, query, tok, body);
+                    if (r.status == 200) Exporter.clearAfterErase();
+                }
+            } else {
+                r = nativeReply(method, path, query, tok, body);
+            }
             if (body != null) Arrays.fill(body, (byte) 0); // (the document's bytes: the core has its own copy now)
             if ("/api/tts".equals(path)) lastSpeech = android.os.SystemClock.elapsedRealtime();
             if (r.status == 200 && "POST".equals(method) && ("/api/settings".equals(path) || "/api/forget".equals(path) || "/api/unlock".equals(path))) MainActivity.applyScreenGuard(); // (after an unlock too: the setting could not be read while the app was locked)
             if (r.status == 200 && "POST".equals(method) && ("/api/mp3".equals(path) || "/api/pdf".equals(path))) {
                 JobService.start(ctx);
+            }
+            if (r.status == 200 && "POST".equals(method) && "/api/forget".equals(path)) {
+                MainActivity.dismissExportPicker(true);
+            } else if (("/api/lock_status".equals(path) || "/api/lock_now".equals(path)) && isLocked()) {
+                MainActivity.dismissExportPicker(false);
             }
             if (path.startsWith("/api/")) Exporter.drain(ctx);
             return response(r);
@@ -219,12 +232,16 @@ final class Server {
         }
     }
 
-    /** Whether the app lock is on and the app locked now (the core says so; it refuses the request itself otherwise). */
-    private static boolean isLocked() {
+    private static Native.Reply nativeReply(String method, String path, String query, String token, byte[] body) {
+        return new Native.Reply(Native.handle(Native.utf8(method), Native.utf8(path), Native.utf8(query), Native.utf8(token), body));
+    }
+
+    /** Query the core lock, treating unavailable or malformed status as locked. */
+    static boolean isLocked() {
         try {
             Native.Reply r = new Native.Reply(Native.handle(Native.utf8("GET"), Native.utf8("/api/lock_status"), Native.utf8(""), Native.token(), null));
-            return Native.text(r.body).replace(" ", "").contains("\"locked\":true");
-        } catch (RuntimeException e) {
+            return r.status != 200 || new org.json.JSONObject(Native.text(r.body)).optBoolean("locked", true);
+        } catch (Exception e) {
             return true; // (cannot tell: shut)
         }
     }

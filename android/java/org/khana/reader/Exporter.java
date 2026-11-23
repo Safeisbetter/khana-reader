@@ -52,6 +52,23 @@ final class Exporter {
     private static final Handler main = new Handler(Looper.getMainLooper());
     private static Asker asker;
     private static boolean asking;
+    static final Object PUBLICATION = new Object();
+    private static volatile long eraseGeneration;
+
+    static synchronized void clearAfterErase() {
+        eraseGeneration++;
+        waiting.clear();
+        byPath.clear();
+        asking = false;
+    }
+
+    static synchronized boolean canOffer(Saved s) {
+        return waiting.contains(s) && s.file.isFile() && !Server.isLocked();
+    }
+
+    static synchronized void defer(Saved s) {
+        if (waiting.contains(s)) asking = false;
+    }
 
     private Exporter() {}
 
@@ -81,10 +98,11 @@ final class Exporter {
             String kind = line.substring(0, tab);
             File f = new File(line.substring(tab + 1));
             if (kind.equals("mp3") || kind.equals("wav")) {
+                if (!f.isFile()) continue;
                 // (kept inside the app: no «save as» screen until the reader asks for a copy, «ذخیره در گوشی…»)
                 byPath.put(f.getPath(), new Saved(f, kind));
             } else if (kind.equals("pdf")) {
-                add(new Saved(f, kind));
+                if (f.isFile()) add(new Saved(f, kind));
             } else if (kind.equals("reveal")) {
                 Saved s = byPath.get(f.getPath());
                 if (s == null && f.isFile() && (f.getName().endsWith(".mp3") || f.getName().endsWith(".wav"))) {
@@ -112,7 +130,9 @@ final class Exporter {
     }
 
     private static void askNext() {
-        if (asker == null || asking || waiting.isEmpty()) return;
+        if (asker == null || asking) return;
+        while (!waiting.isEmpty() && !waiting.peek().file.isFile()) waiting.remove();
+        if (waiting.isEmpty() || Server.isLocked()) return;
         asking = true;
         Saved s = waiting.peek();
         Asker a = asker;
@@ -121,9 +141,16 @@ final class Exporter {
 
     /** The «save as» screen's answer: the place chosen, or null (cancelled: kept, offered again later). */
     static void chosen(Context ctx, Saved s, Uri u) {
+        final long generation;
         synchronized (Exporter.class) {
+            if (!waiting.contains(s)) return;
+            if (Server.isLocked()) {
+                defer(s);
+                return;
+            }
             waiting.remove(s);
             asking = false;
+            generation = eraseGeneration;
         }
         if (u == null) {
             Toast.makeText(ctx, s.kind.equals("pdf") ? "فایل ذخیره نشد. با «ذخیره / باز کردن» دوباره امتحان کنید." : "رونوشت ذخیره نشد. فایل در «فایل‌های من» می‌ماند.", Toast.LENGTH_LONG).show();
@@ -134,23 +161,30 @@ final class Exporter {
             String msg;
             WRITING.incrementAndGet();
             try {
-                write(app, s, u);
-                if (s.kind.equals("pdf")) {
-                    synchronized (Exporter.class) {
-                        s.uri = u;
+                synchronized (PUBLICATION) {
+                    if (generation != eraseGeneration || !s.file.isFile()) return;
+                    if (Server.isLocked()) {
+                        synchronized (Exporter.class) {
+                            if (!waiting.contains(s)) waiting.addFirst(s);
+                        }
+                        return;
                     }
-                    //noinspection ResultOfMethodCallIgnored
-                    s.file.delete();
-                    msg = "ذخیره شد.";
-                } else {
-                    // (the app keeps its own copy, in «فایل‌های من», until the reader deletes it there)
-                    msg = "یک رونوشت ذخیره شد. فایل در «فایل‌های من» هم می‌ماند.";
+                    write(app, s, u);
+                    if (s.kind.equals("pdf")) {
+                        synchronized (Exporter.class) { s.uri = u; }
+                        //noinspection ResultOfMethodCallIgnored
+                        s.file.delete();
+                        msg = "ذخیره شد.";
+                    } else {
+                        msg = "یک رونوشت ذخیره شد. فایل در «فایل‌های من» هم می‌ماند.";
+                    }
                 }
             } catch (Exception e) {
                 Log.w("Khana", "saving failed: " + e.getClass().getSimpleName()); // (not the message: it can hold the file's name)
                 msg = "ذخیره نشد: " + e.getMessage();
+            } finally {
+                WRITING.decrementAndGet();
             }
-            WRITING.decrementAndGet();
             final String m = msg;
             main.post(() -> {
                 Toast.makeText(app, m, Toast.LENGTH_LONG).show();

@@ -47,9 +47,9 @@ mod imp {
             .unwrap_or(false)
     }
 
-    pub fn farsi_pdf(blocks: &[crate::ffi::typeset::Block], font: &[u8], path: &Path) -> Result<(), String> {
+    pub fn farsi_pdf(blocks: &[crate::ffi::typeset::Block], font: &[u8], output: &mut std::fs::File) -> Result<(), String> {
         let pdf = crate::ffi::typeset::farsi_pdf(blocks, font)?;
-        std::fs::write(path, pdf).map_err(|e| e.to_string())
+        std::io::Write::write_all(output, &pdf).map_err(|e| e.to_string())
     }
 }
 
@@ -95,7 +95,7 @@ mod imp {
         false
     }
 
-    pub fn farsi_pdf(_blocks: &[crate::ffi::typeset::Block], _font: &[u8], _path: &Path) -> Result<(), String> {
+    pub fn farsi_pdf(_blocks: &[crate::ffi::typeset::Block], _font: &[u8], _output: &mut std::fs::File) -> Result<(), String> {
         Err("ساختن PDF ترجمه در ویندوز هنوز ممکن نیست.".into())
     }
 }
@@ -200,7 +200,7 @@ mod imp {
         if b == 0 { a } else { gcd(b, a % b) }
     }
 
-    pub fn farsi_pdf(blocks: &[crate::ffi::typeset::Block], _font: &[u8], path: &Path) -> Result<(), String> {
-        std::fs::write(path, crate::ffi::typeset::records(blocks)).map_err(|e| e.to_string())
+    pub fn farsi_pdf(blocks: &[crate::ffi::typeset::Block], _font: &[u8], output: &mut std::fs::File) -> Result<(), String> {
+        std::io::Write::write_all(output, &crate::ffi::typeset::records(blocks)).map_err(|e| e.to_string())
     }
 }

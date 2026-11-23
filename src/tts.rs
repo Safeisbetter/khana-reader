@@ -35,19 +35,41 @@ pub fn heat() -> u8 {
     HEAT.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-pub fn cool_down() {
-    match heat() {
-        0 => {}
-        1 => std::thread::sleep(std::time::Duration::from_millis(300)),
-        2 => std::thread::sleep(std::time::Duration::from_millis(1500)),
-        _ => {
-            for _ in 0..150 {
-                if heat() < 3 {
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_secs(2));
-            }
+pub fn cool_down(cancel: &dyn Fn() -> bool) -> bool {
+    use std::time::{Duration, Instant};
+    let level = heat();
+    let wait = match level {
+        0 => return !cancel(),
+        1 => Duration::from_millis(300),
+        2 => Duration::from_millis(1500),
+        _ => Duration::from_secs(300),
+    };
+    let deadline = Instant::now() + wait;
+    loop {
+        if cancel() {
+            return false;
         }
+        if level >= 3 && heat() < 3 {
+            return true;
+        }
+        let now = Instant::now();
+        if now >= deadline {
+            return true;
+        }
+        std::thread::sleep((deadline - now).min(Duration::from_millis(100)));
+    }
+}
+
+#[cfg(test)]
+mod cool_down_tests {
+    #[test]
+    fn cancellation_interrupts_a_thermal_wait_promptly() {
+        super::set_heat(3);
+        let started = std::time::Instant::now();
+        let completed = super::cool_down(&|| started.elapsed() >= std::time::Duration::from_millis(20));
+        super::set_heat(0);
+        assert!(!completed);
+        assert!(started.elapsed() < std::time::Duration::from_millis(250));
     }
 }
 
@@ -264,6 +286,20 @@ pub struct SegmentTiming {
     pub decode_ms: std::sync::atomic::AtomicU64,
     pub asr_ms: std::sync::atomic::AtomicU64,
     pub attempts: std::sync::atomic::AtomicU64,
+    #[cfg(feature = "dev-timing")]
+    pub reject_pace: std::sync::atomic::AtomicU64,
+    #[cfg(feature = "dev-timing")]
+    pub reject_quiet: std::sync::atomic::AtomicU64,
+    #[cfg(feature = "dev-timing")]
+    pub reject_low_speech: std::sync::atomic::AtomicU64,
+    #[cfg(feature = "dev-timing")]
+    pub reject_dead_air: std::sync::atomic::AtomicU64,
+    #[cfg(feature = "dev-timing")]
+    pub reject_pitch: std::sync::atomic::AtomicU64,
+    #[cfg(feature = "dev-timing")]
+    pub reject_words: std::sync::atomic::AtomicU64,
+    #[cfg(feature = "dev-timing")]
+    pub reject_duration: std::sync::atomic::AtomicU64,
 }
 
 struct Voice<'a> {
@@ -272,6 +308,7 @@ struct Voice<'a> {
     cache: &'a [f32],
     off: usize,
     quick: bool,
+    android_stream: bool,
 }
 
 impl Engine {
@@ -436,11 +473,14 @@ impl Engine {
         Ok(v)
     }
 
-    fn decode_all(&self, latents: &[Vec<f32>]) -> Result<Vec<f32>, String> {
+    fn decode_all(&self, latents: &[Vec<f32>], cancel: &dyn Fn() -> bool) -> Result<Vec<f32>, String> {
         let mut st: Vec<ort::DynValue> = self.dec_init.iter().map(value_of).collect();
         let mut out = Vec::new();
         let mut off = 0;
         for lt in latents {
+            if cancel() {
+                return Err("cancelled".into());
+            }
             let un: Vec<f32> = (0..self.ldim).map(|k| lt[k] * self.emb_std[k] + self.emb_mean[k]).collect();
             let mut feeds: Vec<(String, ort::SessionInputValue)> = vec![("latent".into(), Tensor::from_array(([1, 1, self.ldim], un)).unwrap().into_dyn().into())];
             for (i, s) in st.iter().enumerate() {
@@ -682,12 +722,19 @@ impl Engine {
         };
         let expected_loose = tokens as f64 / self.tps_est;
         let mut best: Option<Vec<f32>> = None;
-        let mut best_key: Option<[f64; 9]> = None;
+        let mut best_key: Option<[f64; 10]> = None;
         let mut best_heard: Option<(Option<f64>, Vec<String>)> = None;
         let mut cut_short = 0;
         let mut last_wrong: Option<(Vec<String>, bool, bool, bool)> = None;
-        let tries = MAX_TRIES.load(std::sync::atomic::Ordering::Relaxed);
-        for take in 0..if voice.quick { tries.min(2) } else { tries } {
+        let mut tries = MAX_TRIES.load(std::sync::atomic::Ordering::Relaxed);
+        if voice.android_stream && depth > 0 {
+            // The whole phrase has already been retried. Repair each half once so
+            // playback does not wait through another full set of retries per half.
+            tries = 1;
+        } else if voice.quick {
+            tries = tries.min(2);
+        }
+        for take in 0..tries {
             PROFILE[5].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             if take == 0 {
                 PROFILE[4].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -696,15 +743,20 @@ impl Engine {
                 return Err("cancelled".to_string());
             }
             let t_cooldown = std::time::Instant::now();
-            cool_down();
+            if !cool_down(cancel) {
+                return Err("cancelled".to_string());
+            }
             voice.timing.cooldown_ms.fetch_add(t_cooldown.elapsed().as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
             voice.timing.attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let t_model = std::time::Instant::now();
             let latents = self.generate_chunk(voice, chunk, rng, cancel)?;
             lap(0, t_model);
             voice.timing.model_ms.fetch_add(t_model.elapsed().as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
+            if cancel() {
+                return Err("cancelled".to_string());
+            }
             let t_decode = std::time::Instant::now();
-            let a = self.decode_all(&latents)?;
+            let a = self.decode_all(&latents, cancel)?;
             lap(1, t_decode);
             voice.timing.decode_ms.fetch_add(t_decode.elapsed().as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
             let t_check = std::time::Instant::now();
@@ -733,13 +785,16 @@ impl Engine {
                 _ => true,
             };
             lap(2, t_check);
+            if cancel() {
+                return Err("cancelled".to_string());
+            }
             let t_asr = std::time::Instant::now();
             let (heard, missing) = if loud_ok && !voice.quick && LISTEN.load(std::sync::atomic::Ordering::Relaxed) { asr::heard_score(chunk, &speech, RATE) } else { (None, Vec::new()) };
             lap(3, t_asr);
             voice.timing.asr_ms.fetch_add(t_asr.elapsed().as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
             let words_ok = if LISTEN_LIGHT.load(std::sync::atomic::Ordering::Relaxed) { !asr::heard_clear_fault(heard, &missing) } else { asr::heard_ok(heard, &missing) };
             let b = |x: bool| if x { 1.0 } else { 0.0 };
-            let key = [b(loud_ok), b(same_voice), b(words_ok), b(dur_ok), b(pace_ok), -(missing.len() as f64), heard.unwrap_or(1.0),
+            let key = [b(loud_ok), b(same_voice), -(asr::repeated_word_count(&missing) as f64), b(words_ok), b(dur_ok), b(pace_ok), -(missing.len() as f64), heard.unwrap_or(1.0),
                        -(1.0 - ratio).abs(), if dead <= 0.35 { 0.0 } else { -dead }];
             if best_key.map_or(true, |bk| key.partial_cmp(&bk) == Some(std::cmp::Ordering::Greater)) {
                 best = Some(speech.clone());
@@ -750,7 +805,9 @@ impl Engine {
             if heard_clean {
                 dur_ok = solid <= 1.6 * expected_loose;
             }
-            let solid_ok = frac >= 0.55 || heard_clean && frac >= 0.40;
+            // Short startup clips can have a larger share of quiet consonants and edge padding.
+            let min_solid = if voice.quick { 0.50 } else { 0.55 };
+            let solid_ok = frac >= min_solid || heard_clean && frac >= 0.40;
             if loud_ok && same_voice && words_ok && dur_ok && (pace_ok || heard_clean) && solid_ok && dead <= 0.35 {
                 if pace_ok && tokens >= 6 && solid > 0.2 {
                     let mut p = self.pace.lock().unwrap();
@@ -772,8 +829,23 @@ impl Engine {
                         }
                     }
                 }
-                return Ok(best.unwrap());
+                return Ok(speech);
             }
+            // Multiple checks can reject the same candidate. Count each failing check.
+            #[cfg(feature = "dev-timing")]
+            if !(pace_ok || heard_clean) { voice.timing.reject_pace.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
+            #[cfg(feature = "dev-timing")]
+            if !loud_ok { voice.timing.reject_quiet.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
+            #[cfg(feature = "dev-timing")]
+            if !solid_ok { voice.timing.reject_low_speech.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
+            #[cfg(feature = "dev-timing")]
+            if dead > 0.35 { voice.timing.reject_dead_air.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
+            #[cfg(feature = "dev-timing")]
+            if !same_voice { voice.timing.reject_pitch.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
+            #[cfg(feature = "dev-timing")]
+            if !words_ok { voice.timing.reject_words.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
+            #[cfg(feature = "dev-timing")]
+            if !dur_ok { voice.timing.reject_duration.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
             if missing.len() == 1 && missing[0].ends_with('$') && heard.map_or(false, |h| h >= 0.85) {
                 cut_short += 1;
             }
@@ -811,7 +883,10 @@ impl Engine {
                 joined.extend(std::iter::repeat(0f32).take((RATE as f64 * 0.06) as usize));
                 joined.extend(b);
                 let (heard, missing) = asr::heard_score(chunk, &joined, RATE);
-                if heard.is_some() && missing.len() <= m.len() {
+                if heard.is_some()
+                    && missing.len() <= m.len()
+                    && asr::repeated_word_count(&missing) <= asr::repeated_word_count(m)
+                {
                     return Ok(joined);
                 }
             }
@@ -868,7 +943,10 @@ impl Engine {
             return Ok(Vec::new());
         }
         let vc = self.voice_cache(wav)?;
-        let voice = Voice { timing, id: voice_id, cache: &vc.0, off: vc.1, quick };
+        let voice = Voice {
+            timing, id: voice_id, cache: &vc.0, off: vc.1, quick,
+            android_stream: cfg!(target_os = "android") && order.is_some(),
+        };
         let chunker = Chunker { tok: &self.sp };
         let mut jobs: Vec<(usize, String, f64)> = Vec::new();
         for (si, (_, plan, _)) in sentences.iter().enumerate() {
