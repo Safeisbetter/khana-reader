@@ -27,7 +27,7 @@ permissions:
 env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: v1.30
+  MODELS_RELEASE: v1.35
 
 jobs:
   build:
@@ -41,18 +41,12 @@ jobs:
 
       - name: ONNX Runtime for Windows
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          # Microsoft's onnxruntime page on GitHub is gone (2026-11-18), so the DLL is taken from Khana's own
-          # v1.30 Windows package, which carries onnxruntime.dll from the size-checked Microsoft 1.19.2 zip.
-          gh release download v1.30 --repo $env:GITHUB_REPOSITORY -p KhanaReader-Windows-full-experimental.zip -D ortpkg
-          if ($LASTEXITCODE -ne 0) { throw "ONNX Runtime package download failed" }
-          if ((Get-FileHash ortpkg/KhanaReader-Windows-full-experimental.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne "6df163a220814887a2a5c30e4e0405cad851c6e3dab2cc7c50a15f86b3cf1acd") { throw "ONNX Runtime package checksum mismatch" }
-          Expand-Archive ortpkg/KhanaReader-Windows-full-experimental.zip -DestinationPath ortpkg/x
-          New-Item -ItemType Directory -Force ort | Out-Null
-          $dll = Get-ChildItem -Recurse ortpkg/x -Filter onnxruntime*.dll
-          if (-not $dll) { throw "onnxruntime.dll not found in the v1.30 package" }
+          New-Item -ItemType Directory -Force ortpkg, ort | Out-Null
+          Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/$env:ORT_VERSION" -OutFile "ortpkg/ort.nupkg.zip"
+          Expand-Archive ortpkg/ort.nupkg.zip -DestinationPath ortpkg/x
+          $dll = Get-ChildItem -Path "ortpkg/x/runtimes/win-x64/native" -Filter "onnxruntime*.dll"
+          if (-not $dll) { throw "onnxruntime.dll not found in NuGet package" }
           $dll | ForEach-Object { Copy-Item $_.FullName ort/ }
           Remove-Item -Recurse -Force ortpkg
 
@@ -61,10 +55,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader.apk" } else { "KhanaReader-lite.apk" }
+          $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader-Android-next.apk" } else { "KhanaReader-Android-next-lite.apk" }
           gh release download $env:MODELS_RELEASE --repo $env:GITHUB_REPOSITORY -p $apk -D apk
           if ($LASTEXITCODE -ne 0) { throw "Model package download failed" }
-          $expected = if ("${{ matrix.edition }}" -eq "full") { "aff28f5607c5b579f6b809c66f55f161e5a89b1d343769127508d28c489fbacf" } else { "2b5e3205beb1a7fd4eb47d847aa317924708c325918ab5f57541d531b2bae885" }
+          $expected = if ("${{ matrix.edition }}" -eq "full") { "642690879fca1a73dc492a861c815fc2540fc5ba3d22ac5f6a4a9730ee306d98" } else { "77a4293a61b30217d5a1e831eeaf80d5353189639d45871d36a2aad087ee6725" }
           if ((Get-FileHash "apk/$apk" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Model package checksum mismatch" }
           Move-Item "apk/$apk" apk/models.zip
           Expand-Archive apk/models.zip -DestinationPath apk/x
