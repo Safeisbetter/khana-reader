@@ -27,7 +27,7 @@ permissions:
 env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: v1.35
+  MODELS_RELEASE: v1.36
 
 jobs:
   build:
@@ -35,9 +35,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [full]
+        edition: [light, full]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: ONNX Runtime for Windows
         shell: pwsh
@@ -58,7 +60,7 @@ jobs:
           $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader-Android-next.apk" } else { "KhanaReader-Android-next-lite.apk" }
           gh release download $env:MODELS_RELEASE --repo $env:GITHUB_REPOSITORY -p $apk -D apk
           if ($LASTEXITCODE -ne 0) { throw "Model package download failed" }
-          $expected = if ("${{ matrix.edition }}" -eq "full") { "642690879fca1a73dc492a861c815fc2540fc5ba3d22ac5f6a4a9730ee306d98" } else { "77a4293a61b30217d5a1e831eeaf80d5353189639d45871d36a2aad087ee6725" }
+          $expected = if ("${{ matrix.edition }}" -eq "full") { "2f1f3f292ada50ace6fd29ba3690fcc76637a5c984eee44e2d50402f586d4aaa" } else { "e464b805b84538e8ed24a761e2efbfb9fa02d126112ef4e626874a1c74387269" }
           if ((Get-FileHash "apk/$apk" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Model package checksum mismatch" }
           Move-Item "apk/$apk" apk/models.zip
           Expand-Archive apk/models.zip -DestinationPath apk/x
@@ -74,12 +76,12 @@ jobs:
           Get-ChildItem pack/models | Select-Object Name
 
       - name: CTranslate2 (cache)
-        if: matrix.edition == 'full'
+        if: matrix.edition == 'full' && !inputs.release
         id: ct2cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ct2build
-          key: ct2-${{ env.CT2_VERSION }}-ruy-1
+          key: ct2-${{ env.CT2_VERSION }}-ruy-${{ hashFiles('.github/workflows/windows.yml') }}
 
       - name: CTranslate2 for Windows
         if: matrix.edition == 'full' && steps.ct2cache.outputs.cache-hit != 'true'
@@ -182,12 +184,14 @@ jobs:
 
   release:
     needs: build
-    if: ${{ inputs.release }}
+    if: ${{ inputs.release && github.ref == 'refs/heads/main' && github.repository == 'Safeisbetter/khana-reader' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: zips
@@ -198,6 +202,7 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           if [ -z "$TAG" ]; then echo "Set the 'tag' input to an existing release tag."; exit 1; fi
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+(\.[0-9]+)?$'; then echo "Invalid release tag format: $TAG"; exit 1; fi
           if ! gh release view "$TAG" >/dev/null 2>&1; then echo "No release named $TAG. Create it first; this step does not create releases."; exit 1; fi
           ls -la zips
-          gh release upload "$TAG" zips/*.zip --clobber
+          gh release upload "$TAG" -- zips/*.zip
