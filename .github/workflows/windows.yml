@@ -1,176 +1,9 @@
-# The Windows app (experimental, not tried on a real PC). Built on GitHub's own Windows computers, in two editions:
-#   light: no translator (about 0.5 GB); full: with the translator (CTranslate2, built here, and the 600M translation model; about 1.1 GB).
-# Both hold the program, ONNX Runtime 1.19.2 (Microsoft's published build) beside it, the page (web/) and the models (taken from the Android
-# downloads of the release, which hold the same files). A check of the core and of the window runs before a package is made.
-# Run by hand (Actions -> Windows -> Run workflow) or on a push to the branch windows-full.
-name: Windows
-
-on:
-  workflow_dispatch:
-    inputs:
-      release:
-        description: "Also upload the packages to the release named in 'tag' (the release must already exist)"
-        type: boolean
-        default: false
-      tag:
-        description: "Existing release tag to upload the Windows packages to, for example v1.23"
-        type: string
-        required: false
-        default: ""
-  push:
-    branches: [windows-full, release-review-1.21, release-review-1.22]
-
-# (the build may only read the repository; only the publishing job below may write to the release page)
-permissions:
-  contents: read
-
-env:
-  ORT_VERSION: "1.19.2"
-  CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: v1.30
-
-jobs:
-  build:
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        edition: [full]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: ONNX Runtime for Windows
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Microsoft's onnxruntime page on GitHub is gone (2026-11-18), so the DLL is taken from Khana's own
-          # v1.30 Windows package, which carries onnxruntime.dll from the size-checked Microsoft 1.19.2 zip.
-          gh release download v1.30 --repo $env:GITHUB_REPOSITORY -p KhanaReader-Windows-full-experimental.zip -D ortpkg
-          if ($LASTEXITCODE -ne 0) { throw "ONNX Runtime package download failed" }
-          if ((Get-FileHash ortpkg/KhanaReader-Windows-full-experimental.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne "6df163a220814887a2a5c30e4e0405cad851c6e3dab2cc7c50a15f86b3cf1acd") { throw "ONNX Runtime package checksum mismatch" }
-          Expand-Archive ortpkg/KhanaReader-Windows-full-experimental.zip -DestinationPath ortpkg/x
-          New-Item -ItemType Directory -Force ort | Out-Null
-          $dll = Get-ChildItem -Recurse ortpkg/x -Filter onnxruntime*.dll
-          if (-not $dll) { throw "onnxruntime.dll not found in the v1.30 package" }
-          $dll | ForEach-Object { Copy-Item $_.FullName ort/ }
-          Remove-Item -Recurse -Force ortpkg
-
-      - name: Models (from the Android download of the release)
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader.apk" } else { "KhanaReader-lite.apk" }
-          gh release download $env:MODELS_RELEASE --repo $env:GITHUB_REPOSITORY -p $apk -D apk
-          if ($LASTEXITCODE -ne 0) { throw "Model package download failed" }
-          $expected = if ("${{ matrix.edition }}" -eq "full") { "aff28f5607c5b579f6b809c66f55f161e5a89b1d343769127508d28c489fbacf" } else { "2b5e3205beb1a7fd4eb47d847aa317924708c325918ab5f57541d531b2bae885" }
-          if ((Get-FileHash "apk/$apk" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Model package checksum mismatch" }
-          Move-Item "apk/$apk" apk/models.zip
-          Expand-Archive apk/models.zip -DestinationPath apk/x
-          New-Item -ItemType Directory -Force pack/models | Out-Null
-          foreach ($d in "parsigo", "ocr") { Copy-Item "apk/x/assets/app/models/$d" "pack/models/$d" -Recurse }
-          Copy-Item "apk/x/assets/app/models/cmudict.dict" "pack/models/"
-          Copy-Item "apk/x/assets/app/models/LICENSE" "pack/models/" -ErrorAction SilentlyContinue
-          if ("${{ matrix.edition }}" -eq "full") {
-            New-Item -ItemType Directory -Force pack/models/translate | Out-Null
-            Copy-Item "apk/x/assets/app/models/translate/nllb-200-600M" "pack/models/translate/nllb-200-600M" -Recurse
-          }
-          Remove-Item apk -Recurse -Force
-          Get-ChildItem pack/models | Select-Object Name
-
-      - name: CTranslate2 (cache)
-        if: matrix.edition == 'full'
-        id: ct2cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ct2build
-          key: ct2-${{ env.CT2_VERSION }}-ruy-1
-
-      - name: CTranslate2 for Windows
-        if: matrix.edition == 'full' && steps.ct2cache.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          git clone --depth 1 --branch v$env:CT2_VERSION --recurse-submodules --shallow-submodules https://github.com/OpenNMT/CTranslate2.git ct2src
-          # (the tag must still be the commit it was when this was written: a tag can be moved, a commit cannot)
-          if ((git -C ct2src rev-parse HEAD) -ne "383d063daf0bf338a22b491864cb2018eb8efd15") { throw "CTranslate2: the v$env:CT2_VERSION tag is not the expected commit" }
-          cmake -S ct2src -B ct2build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DWITH_MKL=OFF -DWITH_RUY=ON -DOPENMP_RUNTIME=COMP -DBUILD_CLI=OFF -DBUILD_TESTS=OFF "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
-          cmake --build ct2build --config Release --parallel 4
-          Get-ChildItem -Recurse ct2build -Include ctranslate2.dll, ctranslate2.lib | Select-Object FullName
-
-      - name: Build
-        shell: pwsh
-        run: |
-          if ("${{ matrix.edition }}" -eq "full") { $env:KHANA_CT2_DIR = "${{ github.workspace }}\ct2build\Release" }
-          cargo build --release --bin khana
-
-      - name: Package
-        shell: pwsh
-        run: |
-          $out = "KhanaReader-Windows"
-          New-Item -ItemType Directory -Force $out | Out-Null
-          Copy-Item target/release/khana.exe "$out/KhanaReader.exe"
-          Get-ChildItem -Recurse ort -Filter onnxruntime*.dll | ForEach-Object { Copy-Item $_.FullName $out }
-          if ("${{ matrix.edition }}" -eq "full") { Copy-Item ct2build/Release/ctranslate2.dll $out }
-          # (Microsoft's runtime libraries, so that a PC without them can still run the program)
-          foreach ($n in "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "vcomp140.dll") { if (Test-Path "C:\Windows\System32\$n") { Copy-Item "C:\Windows\System32\$n" $out } }
-          Copy-Item web "$out/web" -Recurse
-          Copy-Item pack/models "$out/models" -Recurse
-          Copy-Item LICENSE, THIRD_PARTY_NOTICES.md $out
-          Copy-Item windows/README-Windows.txt $out
-          $zip = "KhanaReader-Windows-${{ matrix.edition }}-experimental.zip"
-          Compress-Archive -Path $out -DestinationPath $zip -CompressionLevel Optimal
-          Get-Item $zip | Select-Object Name, Length
-
-      - name: Window smoke test (does the window open and load the page?)
-        shell: pwsh
-        run: |
-          $dl = "$env:USERPROFILE\Downloads"
-          New-Item -ItemType Directory -Force $dl | Out-Null
-          $env:KHANA_SMOKE = "1"
-          $p = Start-Process -FilePath ".\KhanaReader-Windows\KhanaReader.exe" -PassThru -RedirectStandardError err.txt -RedirectStandardOutput out.txt
-          $ok = $false
-          for ($i = 0; $i -lt 60; $i++) {
-            Start-Sleep 2
-            if ((Test-Path err.txt) -and (Select-String -Path err.txt -Pattern "SMOKE page loaded 200" -Quiet)) { $ok = $true; break }
-          }
-          Get-Content err.txt -ErrorAction SilentlyContinue | Select-Object -First 8
-          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-          if (-not $ok) { throw "the window did not load the page" }
-
-      - name: Split full package for size-limited artifact transfers
-        if: matrix.edition == 'full'
-        shell: pwsh
-        run: |
-          $inputStream = [System.IO.File]::OpenRead('KhanaReader-Windows-full-experimental.zip')
-          try {
-            $buffer = New-Object byte[] (1024 * 1024)
-            $part = 0
-            while ($inputStream.Position -lt $inputStream.Length) {
-              $part++
-              $outputStream = [System.IO.File]::Create("windows-full-part-$part.bin")
-              try {
-                $remaining = 480L * 1024 * 1024
-                while ($remaining -gt 0) {
-                  $count = $inputStream.Read($buffer, 0, [int][Math]::Min($remaining, $buffer.Length))
-                  if ($count -eq 0) { break }
-                  $outputStream.Write($buffer, 0, $count)
-                  $remaining -= $count
-                }
-              } finally { $outputStream.Dispose() }
-            }
-            if ($part -ne 2) { throw 'Unexpected transfer part count' }
-          } finally { $inputStream.Dispose() }
-          Get-FileHash KhanaReader-Windows-full-experimental.zip -Algorithm SHA256
-
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: matrix.edition == 'full'
         with:
           name: Windows-full-transfer-1
           path: windows-full-part-1.bin
           compression-level: 0
           retention-days: 14
-
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: matrix.edition == 'full'
         with:
@@ -178,14 +11,12 @@ jobs:
           path: windows-full-part-2.bin
           compression-level: 0
           retention-days: 14
-
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: KhanaReader-Windows-${{ matrix.edition }}-experimental
           path: KhanaReader-Windows-${{ matrix.edition }}-experimental.zip
           retention-days: 14
           compression-level: 0
-
   release:
     needs: build
     if: ${{ inputs.release }}
