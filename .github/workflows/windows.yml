@@ -27,7 +27,7 @@ permissions:
 env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: v1.35
+  MODELS_RELEASE: v1.30
 
 jobs:
   build:
@@ -39,14 +39,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-           - name: ONNX Runtime for Windows
+      - name: ONNX Runtime for Windows
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          New-Item -ItemType Directory -Force ortpkg, ort | Out-Null
-          Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/$env:ORT_VERSION" -OutFile "ortpkg/ort.nupkg.zip"
-          Expand-Archive ortpkg/ort.nupkg.zip -DestinationPath ortpkg/x
-          $dll = Get-ChildItem -Path "ortpkg/x/runtimes/win-x64/native" -Filter "onnxruntime*.dll"
-          if (-not $dll) { throw "onnxruntime.dll not found in NuGet package" }
+          # Microsoft's onnxruntime page on GitHub is gone (2026-11-18), so the DLL is taken from Khana's own
+          # v1.30 Windows package, which carries onnxruntime.dll from the size-checked Microsoft 1.19.2 zip.
+          gh release download v1.30 --repo $env:GITHUB_REPOSITORY -p KhanaReader-Windows-full-experimental.zip -D ortpkg
+          if ($LASTEXITCODE -ne 0) { throw "ONNX Runtime package download failed" }
+          if ((Get-FileHash ortpkg/KhanaReader-Windows-full-experimental.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne "6df163a220814887a2a5c30e4e0405cad851c6e3dab2cc7c50a15f86b3cf1acd") { throw "ONNX Runtime package checksum mismatch" }
+          Expand-Archive ortpkg/KhanaReader-Windows-full-experimental.zip -DestinationPath ortpkg/x
+          New-Item -ItemType Directory -Force ort | Out-Null
+          $dll = Get-ChildItem -Recurse ortpkg/x -Filter onnxruntime*.dll
+          if (-not $dll) { throw "onnxruntime.dll not found in the v1.30 package" }
           $dll | ForEach-Object { Copy-Item $_.FullName ort/ }
           Remove-Item -Recurse -Force ortpkg
 
