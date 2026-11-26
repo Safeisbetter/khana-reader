@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::sync::{Arc, Mutex};
 
-pub const TEXTUTIL_TYPES: &[&str] = &[".doc", ".rtf", ".odt", ".wordml", ".webarchive", ".html", ".htm"];
+pub const TEXTUTIL_TYPES: &[&str] = &[".doc", ".rtf"];
 
 #[derive(Clone, Copy, Debug)]
 pub struct Opts {
@@ -76,6 +76,7 @@ pub struct Document {
     pub id: String,
     pub name: String,
     pub is_typed: std::sync::atomic::AtomicBool,
+    pub is_finglish: std::sync::atomic::AtomicBool,
     pub n_pages: usize,
     pub had_scans: bool,
     pub pictures: HashSet<usize>,
@@ -94,6 +95,7 @@ pub struct Document {
     pub edits: Mutex<crate::edits::Edits>,
     pub edit_undo: Mutex<Option<crate::edits::Edits>>,
     pub edits_file: std::path::PathBuf,
+    para_boxes: Vec<(f64, f64, Vec<Vec<[f64; 5]>>)>,
 }
 
 pub fn ext_of(name: &str) -> String {
@@ -152,6 +154,7 @@ impl Document {
             id: new_id(),
             name: name.to_string(),
             is_typed: std::sync::atomic::AtomicBool::new(false),
+            is_finglish: std::sync::atomic::AtomicBool::new(false),
             n_pages,
             had_scans,
             pictures,
@@ -170,6 +173,7 @@ impl Document {
             edits: Mutex::new(crate::edits::Edits::load_book(&edits_file)),
             edit_undo: Mutex::new(None),
             edits_file,
+            para_boxes: Vec::new(),
         });
         let mut first: Vec<usize> = doc.st.lock().unwrap().scanned.iter().copied().collect();
         first.sort();
@@ -190,6 +194,23 @@ impl Document {
         };
         let _ = doc.lang.set(lang);
         doc
+    }
+
+    pub fn page_boxes(&self, n: usize) -> Option<&(f64, f64, Vec<Vec<[f64; 5]>>)> {
+        self.para_boxes.get(n.saturating_sub(1)).filter(|b| !b.2.is_empty())
+    }
+
+    /// Returns exact 1-to-1 paragraph boxes aligned with translated paragraphs (so if any source
+    /// paragraph translated to empty and was skipped, subsequent paragraph indices never drift!).
+    pub fn translated_boxes(&self, n: usize, raw_tr: &[String]) -> Option<(f64, f64, Vec<Vec<[f64; 5]>>)> {
+        let (w, h, all) = self.page_boxes(n)?;
+        let mut aligned = Vec::with_capacity(raw_tr.len());
+        for (i, p) in raw_tr.iter().enumerate() {
+            if !repair_default(p).is_empty() {
+                aligned.push(all.get(i).cloned().unwrap_or_default());
+            }
+        }
+        Some((*w, *h, aligned))
     }
 
     pub fn raw(self: &Arc<Self>, n: usize, ahead: bool) -> Vec<String> {
@@ -313,13 +334,14 @@ impl Document {
         if paras.is_empty() && self.pdfjs && self.st.lock().unwrap().scanned.contains(&n) {
             return Vec::new();
         }
+        let batch_cap = if cfg!(shell) { 450 } else { 1500 };
         let mut done: Vec<String> = Vec::with_capacity(paras.len());
         let mut i = 0;
         while i < paras.len() {
             let mut j = i + 1;
             if i > 0 {
                 let mut size = len(&paras[i]);
-                while j < paras.len() && size + len(&paras[j]) <= 1500 {
+                while j < paras.len() && size + len(&paras[j]) <= batch_cap {
                     size += len(&paras[j]);
                     j += 1;
                 }
@@ -341,13 +363,14 @@ impl Document {
         done
     }
 
-    pub fn page_text_so_far(self: &Arc<Self>, n: usize) -> (Vec<String>, bool) {
-        let (paras, done) = {
+    pub fn page_text_so_far(self: &Arc<Self>, n: usize) -> (Vec<String>, bool, usize, Option<(f64, f64, Vec<Vec<[f64; 5]>>)>) {
+        let (paras, done, total) = {
             let st = self.st.lock().unwrap();
+            let total = st.pages.get(n.saturating_sub(1)).map_or(0, |p| p.len());
             match (st.translated.get(&n), st.partial.get(&n)) {
-                (Some(t), _) => (Some(t.clone()), true),
-                (None, Some(p)) => (Some(p.clone()), false),
-                _ => (None, false),
+                (Some(t), _) => (Some(t.clone()), true, total.max(t.len())),
+                (None, Some(p)) => (Some(p.clone()), false, total),
+                _ => (None, false, total),
             }
         };
         let paras = paras.unwrap_or_else(|| {
@@ -357,7 +380,8 @@ impl Document {
             });
             Vec::new()
         });
-        (self.edits.lock().unwrap().apply(paras.iter().map(|p| repair_default(p)).filter(|t| !t.is_empty()).collect()), done)
+        let boxes = self.translated_boxes(n, &paras);
+        (self.edits.lock().unwrap().apply(paras.iter().map(|p| repair_default(p)).filter(|t| !t.is_empty()).collect()), done, total, boxes)
     }
 
     pub fn page_text(self: &Arc<Self>, n: usize, opts: Opts) -> Vec<String> {
@@ -391,6 +415,13 @@ impl Document {
     }
 
     pub fn page_text_base(self: &Arc<Self>, n: usize, opts: Opts) -> Vec<String> {
+        if self.is_typed.load(std::sync::atomic::Ordering::Relaxed) {
+            let raw = self.raw(n, false);
+            if self.is_finglish.load(std::sync::atomic::Ordering::Relaxed) {
+                return raw.into_iter().map(|p| strip(&p).to_string()).filter(|t| !t.is_empty()).collect();
+            }
+            return raw.into_iter().map(|p| repair(&p, opts.reversed, opts.persian_yeh)).filter(|t| !t.is_empty()).collect();
+        }
         if opts.translate && self.can_translate() {
             let raw = self.translated_page(n);
             return raw.iter().map(|p| repair_default(p)).filter(|t| !t.is_empty()).collect();
@@ -443,16 +474,25 @@ fn local(n: &roxmltree::Node) -> String {
     n.tag_name().name().to_string()
 }
 
-fn t_text(n: roxmltree::Node) -> String {
-    n.descendants()
-        .filter(|d| d.is_element() && d.tag_name().name() == "t" && d.tag_name().namespace().is_some())
-        .map(|d| d.text().unwrap_or(""))
-        .collect()
+fn t_text(n: roxmltree::Node, remaining: &mut usize) -> Result<String, String> {
+    let mut text = String::new();
+    for node in n.descendants().filter(|d| d.is_element() && d.tag_name().name() == "t" && d.tag_name().namespace().is_some()) {
+        let fragment = node.text().unwrap_or("");
+        *remaining = remaining.checked_sub(fragment.len())
+            .ok_or_else(|| "متن فایل Word خیلی بزرگ است.".to_string())?;
+        text.push_str(fragment);
+    }
+    Ok(text)
 }
 
-const ZIP_PART_LIMIT: u64 = 64 * 1024 * 1024;
+const ZIP_PART_LIMIT: u64 = 32 * 1024 * 1024;
+const MAX_TEXT_BYTES: usize = 64 * 1024 * 1024;
+const MAX_PPTX_SLIDES: usize = 1_000;
 
 fn zip_read(z: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>, name: &str) -> Option<String> {
+    if name.split('/').any(|s| s == "..") {
+        return None;
+    }
     let f = z.by_name(name).ok()?;
     let mut s = String::new();
     f.take(ZIP_PART_LIMIT).read_to_string(&mut s).ok()?;
@@ -462,6 +502,9 @@ fn zip_read(z: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>, name: &str) -> Opti
 pub fn docx_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
     let bad = || "این فایل Word باز نشد. شاید خراب باشد.".to_string();
     let mut z = zip::ZipArchive::new(std::io::Cursor::new(data)).map_err(|_| bad())?;
+    if z.len() > crate::ebook::MAX_ZIP_ENTRIES {
+        return Err("این فایل Word خیلی بزرگ یا غیرعادی است.".into());
+    }
     let mut main = "word/document.xml".to_string();
     if let Some(rels) = zip_read(&mut z, "_rels/.rels") {
         if let Ok(x) = roxmltree::Document::parse_with_options(&rels, crate::ebook::xml_options(false)) {
@@ -473,17 +516,18 @@ pub fn docx_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
         }
     }
     let xml = zip_read(&mut z, &main).ok_or_else(bad)?;
-    let opt = crate::ebook::xml_options(true);
+    let opt = crate::ebook::xml_options(false);
     let x = roxmltree::Document::parse_with_options(&xml, opt).map_err(|_| bad())?;
     if crate::ebook::too_deep(&x) {
         return Err(bad());
     }
     let body = x.descendants().find(|n| n.is_element() && n.tag_name().name() == "body").ok_or_else(bad)?;
     let mut out = Vec::new();
+    let mut remaining = MAX_TEXT_BYTES;
     for child in body.children().filter(|n| n.is_element()) {
         let tag = local(&child);
         if tag == "p" {
-            let text = t_text(child);
+            let text = t_text(child, &mut remaining)?;
             if !strip(&text).is_empty() {
                 out.push(strip(&text).to_string());
             }
@@ -491,7 +535,7 @@ pub fn docx_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
             for row in child.descendants().filter(|n| n.is_element() && n.tag_name().name() == "tr") {
                 let mut cells = Vec::new();
                 for cell in row.children().filter(|n| n.is_element() && n.tag_name().name() == "tc") {
-                    let ct = strip(&t_text(cell)).to_string();
+                    let ct = strip(&t_text(cell, &mut remaining)?).to_string();
                     if !ct.is_empty() {
                         cells.push(ct);
                     }
@@ -508,24 +552,28 @@ pub fn docx_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
 pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
     let mut z = zip::ZipArchive::new(std::io::Cursor::new(data))
         .map_err(|_| "این فایل پاورپوینت باز نشد. فایل را در PowerPoint یا Keynote با فرمت pptx دوباره ذخیره کنید.".to_string())?;
+    if z.len() > crate::ebook::MAX_ZIP_ENTRIES {
+        return Err("این فایل پاورپوینت خیلی بزرگ یا غیرعادی است.".into());
+    }
     let mut total = 0u64;
     let mut names: HashSet<String> = HashSet::new();
     for i in 0..z.len() {
         if let Ok(f) = z.by_index_raw(i) {
             let fname = f.name().map(|s| s.to_string()).unwrap_or_default();
             if fname.ends_with(".xml") {
-                total += f.size();
+                total = total.saturating_add(f.size());
             }
             names.insert(fname);
         }
     }
-    if total > 200 * 1024 * 1024 {
+    if total > 80 * 1024 * 1024 {
         return Err("این فایل پاورپوینت باز نشد. شاید خراب باشد.".into());
     }
     const A: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
     const R: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     const P: &str = "http://schemas.openxmlformats.org/presentationml/2006/main";
     let mut slides: Vec<String> = Vec::new();
+    let mut referenced = HashSet::new();
     (|| -> Option<()> {
         let rels_xml = zip_read(&mut z, "ppt/_rels/presentation.xml.rels")?;
         let pres_xml = zip_read(&mut z, "ppt/presentation.xml")?;
@@ -538,14 +586,16 @@ pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
             .map(|r| (r.attribute("Id").unwrap_or("").to_string(), r.attribute("Target").unwrap_or("").to_string()))
             .collect();
         for s in pres.descendants().filter(|n| n.is_element() && n.tag_name().name() == "sldId" && n.tag_name().namespace() == Some(P)) {
-            let target = s.attribute((R, "id")).and_then(|id| map.get(id)).cloned().unwrap_or_default();
+            let Some(target) = s.attribute((R, "id")).and_then(|id| map.get(id)) else { continue };
+            if target.len() > 4096 { continue; }
             let path = if !target.starts_with("/ppt/") {
                 format!("ppt/{}", target.trim_start_matches('/').replacen("ppt/", "", 1))
             } else {
                 target[1..].to_string()
             };
-            if names.contains(&path) {
+            if names.contains(&path) && referenced.insert(path.clone()) {
                 slides.push(path);
+                if slides.len() > MAX_PPTX_SLIDES { break; }
             }
         }
         Some(())
@@ -558,8 +608,9 @@ pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
         s.sort();
         slides = s.into_iter().map(|x| x.1).collect();
     }
-    let mut once: HashSet<String> = HashSet::new();
-    slides.retain(|s| once.insert(s.clone()));
+    if slides.len() > MAX_PPTX_SLIDES {
+        return Err("این فایل پاورپوینت خیلی بزرگ است (بیش از ۱۰۰۰ اسلاید).".into());
+    }
     let is = |n: &roxmltree::Node, tag: &str| n.is_element() && n.tag_name().name() == tag && n.tag_name().namespace() == Some(A);
     let ptext = |p: roxmltree::Node| -> String {
         p.descendants().filter(|t| is(t, "t")).map(|t| t.text().unwrap_or("")).collect()
@@ -569,7 +620,7 @@ pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
     for path in slides {
         let xml = zip_read(&mut z, &path).unwrap_or_default();
         read_total += xml.len() as u64;
-        if read_total > 200 * 1024 * 1024 {
+        if read_total > 80 * 1024 * 1024 {
             return Err("این فایل پاورپوینت باز نشد. شاید خراب باشد.".into());
         }
         let Ok(root) = roxmltree::Document::parse_with_options(&xml, crate::ebook::xml_options(false)) else {
@@ -619,14 +670,261 @@ pub fn pptx_pages(data: &[u8]) -> Result<Vec<Vec<String>>, String> {
     Ok(pages)
 }
 
+fn decode_html_entities(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let b = s.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'&' {
+            if let Some(semi) = b[i + 1..b.len().min(i + 16)].iter().position(|&c| c == b';') {
+                let ent = &s[i + 1..i + 1 + semi];
+                let rep: Option<char> = match ent {
+                    "amp" => Some('&'),
+                    "lt" => Some('<'),
+                    "gt" => Some('>'),
+                    "quot" => Some('"'),
+                    "apos" | "#39" => Some('\''),
+                    "nbsp" => Some(' '),
+                    "zwnj" => Some('\u{200c}'),
+                    "zwj" => Some('\u{200d}'),
+                    "laquo" => Some('«'),
+                    "raquo" => Some('»'),
+                    "ndash" => Some('–'),
+                    "mdash" => Some('—'),
+                    "hellip" => Some('…'),
+                    "lsquo" => Some('‘'),
+                    "rsquo" => Some('’'),
+                    "ldquo" => Some('“'),
+                    "rdquo" => Some('”'),
+                    _ if ent.starts_with("#x") || ent.starts_with("#X") => {
+                        u32::from_str_radix(&ent[2..], 16).ok().and_then(char::from_u32)
+                    }
+                    _ if ent.starts_with('#') => ent[1..].parse::<u32>().ok().and_then(char::from_u32),
+                    _ => None,
+                };
+                if let Some(ch) = rep {
+                    out.push(ch);
+                    i += semi + 2;
+                    continue;
+                }
+            }
+        }
+        let ch = s[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
+/// Pure-Rust offline HTML text extractor: never invokes WebKit, textutil, or any network/file loader.
+pub fn html_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
+    if data.len() > MAX_TEXT_BYTES {
+        return Err("این فایل HTML خیلی بزرگ است (بیشتر از ۶۴ مگابایت).".into());
+    }
+    let raw = decode_text(data);
+    let mut out = String::with_capacity(raw.len().min(4 * 1024 * 1024));
+    let bytes = raw.as_bytes();
+    let mut i = 0;
+    let mut skip_end: Option<&[u8]> = None;
+    while i < bytes.len() {
+        if let Some(end_tag) = skip_end {
+            if bytes[i] == b'<' && i + end_tag.len() <= bytes.len()
+                && bytes[i..i + end_tag.len()].eq_ignore_ascii_case(end_tag)
+            {
+                i += end_tag.len();
+                while i < bytes.len() && bytes[i] != b'>' {
+                    i += 1;
+                }
+                if i < bytes.len() {
+                    i += 1;
+                }
+                skip_end = None;
+                continue;
+            }
+            i += 1;
+            continue;
+        }
+        if bytes[i] == b'<' {
+            if bytes[i..].starts_with(b"<!--") {
+                i += 4;
+                while i + 2 < bytes.len() && &bytes[i..i + 3] != b"-->" {
+                    i += 1;
+                }
+                i = (i + 3).min(bytes.len());
+                continue;
+            }
+            let start = i + 1;
+            let mut j = start;
+            let mut quote: u8 = 0;
+            while j < bytes.len() {
+                let c = bytes[j];
+                if quote != 0 {
+                    if c == quote {
+                        quote = 0;
+                    }
+                } else if c == b'"' || c == b'\'' {
+                    quote = c;
+                } else if c == b'>' {
+                    break;
+                }
+                j += 1;
+            }
+            let tag_raw = raw[start..j].trim_start();
+            let closing = tag_raw.starts_with('/');
+            let name_part = tag_raw.trim_start_matches('/');
+            let name_end = name_part
+                .find(|c: char| c.is_ascii_whitespace() || c == '/' || c == '>')
+                .unwrap_or(name_part.len());
+            let tag = name_part[..name_end].to_ascii_lowercase();
+            if !closing {
+                match tag.as_str() {
+                    "script" => skip_end = Some(b"</script"),
+                    "style" => skip_end = Some(b"</style"),
+                    "head" => skip_end = Some(b"</head"),
+                    "noscript" => skip_end = Some(b"</noscript"),
+                    "svg" => skip_end = Some(b"</svg"),
+                    "br" | "hr" => out.push_str("\n\n"),
+                    _ => {}
+                }
+            }
+            if matches!(
+                tag.as_str(),
+                "p" | "div" | "li" | "tr" | "blockquote" | "pre" | "section" | "article" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
+            ) {
+                out.push_str("\n\n");
+            }
+            i = if j < bytes.len() { j + 1 } else { bytes.len() };
+            continue;
+        }
+        let next_lt = bytes[i..].iter().position(|&c| c == b'<').map_or(bytes.len(), |off| i + off);
+        out.push_str(&raw[i..next_lt]);
+        i = next_lt;
+    }
+    let decoded = decode_html_entities(&out);
+    let paras = split_paragraphs(&decoded);
+    if paras.is_empty() {
+        return Err("در این فایل HTML متنی پیدا نشد.".into());
+    }
+    Ok(paras)
+}
+
+fn odt_text(
+    node: roxmltree::Node<'_, '_>,
+    text: &mut String,
+    remaining: &mut usize,
+) -> Result<(), String> {
+    // The XML depth check bounds recursion. Nested blocks are extracted in their own pass.
+    for child in node.children() {
+        let fragment = match child.tag_name().name() {
+            "p" | "h" => continue,
+            "s" | "tab" | "line-break" => " ",
+            _ if child.is_text() => child.text().unwrap_or(""),
+            _ => {
+                odt_text(child, text, remaining)?;
+                continue;
+            }
+        };
+        *remaining = remaining.checked_sub(fragment.len())
+            .ok_or_else(|| "این فایل ODT خیلی بزرگ است.".to_string())?;
+        text.push_str(fragment);
+        if child.is_element() {
+            odt_text(child, text, remaining)?;
+        }
+    }
+    Ok(())
+}
+
+/// Pure-Rust offline ODT extractor: parses `content.xml` without invoking external tools.
+pub fn odt_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
+    let bad = || "این فایل ODT باز نشد. شاید خراب باشد.".to_string();
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(data)).map_err(|_| bad())?;
+    if z.len() > crate::ebook::MAX_ZIP_ENTRIES {
+        return Err("این فایل ODT خیلی بزرگ یا غیرعادی است.".into());
+    }
+    let xml = zip_read(&mut z, "content.xml").ok_or_else(bad)?;
+    let x = roxmltree::Document::parse_with_options(&xml, crate::ebook::xml_options(false)).map_err(|_| bad())?;
+    if crate::ebook::too_deep(&x) {
+        return Err(bad());
+    }
+    let mut out = Vec::new();
+    let mut remaining = MAX_TEXT_BYTES;
+    for node in x.descendants().filter(|n| n.is_element() && matches!(n.tag_name().name(), "p" | "h")) {
+        let mut t = String::new();
+        odt_text(node, &mut t, &mut remaining)?;
+        let mut normalized = String::new();
+        for word in t.split(is_space).filter(|word| !word.is_empty()) {
+            if !normalized.is_empty() {
+                normalized.push(' ');
+            }
+            normalized.push_str(word);
+        }
+        if !normalized.is_empty() {
+            out.push(normalized);
+            if out.len() >= crate::ebook::MAX_PARAGRAPHS {
+                break;
+            }
+        }
+    }
+    if out.is_empty() {
+        return Err("در این فایل ODT متنی پیدا نشد.".into());
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod odt_tests {
+    use super::*;
+    use std::io::{Cursor, Write};
+    use zip::write::SimpleFileOptions;
+
+    #[test]
+    fn odt_preserves_inline_text_and_extracts_nested_paragraph_once() {
+        let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        zip.start_file("content.xml", SimpleFileOptions::default()).unwrap();
+        zip.write_all(br#"<body><h>Title</h><p>Hello<span> world</span><tab/>again<frame><p>Caption</p></frame></p></body>"#)
+            .unwrap();
+        let data = zip.finish().unwrap().into_inner();
+        assert_eq!(odt_paragraphs(&data).unwrap(), ["Title", "Hello world again", "Caption"]);
+    }
+
+    #[test]
+    fn odt_checks_remaining_bytes_before_appending() {
+        let xml = roxmltree::Document::parse("<p>hello</p>").unwrap();
+        let mut text = String::new();
+        let mut remaining = 4;
+        assert!(odt_text(xml.root_element(), &mut text, &mut remaining).is_err());
+        assert!(text.is_empty());
+        assert_eq!(remaining, 4);
+    }
+}
+
 pub fn textutil_paragraphs(data: &[u8], ext: &str) -> Result<Vec<String>, String> {
+    // Strictly verify binary/RTF magic bytes and pass an explicit `-format` flag so macOS
+    // `textutil` can never sniff disguised HTML/WebArchive content or invoke WebKit importers.
+    let fmt = match ext {
+        ".doc" => {
+            const OLE2_MAGIC: &[u8] = &[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+            if !data.starts_with(OLE2_MAGIC) {
+                return Err("این فایل Word معتبر نیست (قالب باینری doc ندارد).".to_string());
+            }
+            "doc"
+        }
+        ".rtf" => {
+            let trimmed = data.iter().position(|b| !b.is_ascii_whitespace()).map_or(&[][..], |i| &data[i..]);
+            if !trimmed.starts_with(b"{\\rtf") {
+                return Err("این فایل RTF معتبر نیست.".to_string());
+            }
+            "rtf"
+        }
+        _ => return Err("این نوع فایل پشتیبانی نمی‌شود.".to_string()),
+    };
     let tmp = crate::private_fs::TempDir::new().map_err(|e| e.to_string())?;
     let src = tmp.join(format!("input{ext}"));
     let dst = tmp.join("output.txt");
     let res = (|| {
         std::fs::write(&src, data).map_err(|e| e.to_string())?;
         let st = std::process::Command::new("/usr/bin/textutil")
-            .args(["-convert", "txt", "-encoding", "UTF-8", "-output"])
+            .args(["-format", fmt, "-convert", "txt", "-encoding", "UTF-8", "-output"])
             .arg(&dst)
             .arg(&src)
             .output()
@@ -640,7 +938,7 @@ pub fn textutil_paragraphs(data: &[u8], ext: &str) -> Result<Vec<String>, String
     res
 }
 
-pub fn open_document_layout(name: &str, mut pages: Vec<(Vec<LayoutItem>, f64, bool)>, engines: Arc<Engines>) -> Arc<Document> {
+pub fn open_document_layout(name: &str, mut pages: Vec<(Vec<LayoutItem>, f64, f64, bool)>, engines: Arc<Engines>) -> Arc<Document> {
     let mut items: Vec<Vec<LayoutItem>> = pages.iter_mut().map(|p| std::mem::take(&mut p.0)).collect();
     crate::text::mend_reversed_numbers(&mut items);
     for page in items.iter_mut() {
@@ -649,15 +947,33 @@ pub fn open_document_layout(name: &str, mut pages: Vec<(Vec<LayoutItem>, f64, bo
     for (p, it) in pages.iter_mut().zip(items) {
         p.0 = it;
     }
-    let images: Vec<bool> = pages.iter().map(|p| p.2).collect();
-    let mut lines: Vec<(Vec<LLine>, f64)> = pages.iter().map(|(items, h, _)| (layout_lines(items, *h), *h)).collect();
+    let dims: Vec<(f64, f64)> = pages.iter().map(|p| (p.1, p.2)).collect();
+    let images: Vec<bool> = pages.iter().map(|p| p.3).collect();
+    let mut lines: Vec<(Vec<LLine>, f64)> = pages.iter().map(|(items, _w, h, _)| (layout_lines(items, *h), *h)).collect();
     drop_running_lines(&mut lines);
     let marks: Vec<Vec<u32>> = lines.iter_mut().map(|(l, h)| drop_footnote_lines(l, *h)).collect();
-    let mut paras: Vec<Vec<String>> = lines.iter().map(|(l, _)| paragraphs_from_lines(l)).collect();
+    let mut paras: Vec<Vec<String>> = Vec::with_capacity(lines.len());
+    let mut boxes: Vec<Vec<Vec<[f64; 5]>>> = Vec::with_capacity(lines.len());
+    for (l, _) in &lines {
+        let (p, b) = paragraphs_with_boxes(l);
+        paras.push(p);
+        boxes.push(b);
+    }
     drop_imprint_pages(&mut paras);
     drop_back_matter(&mut paras);
-    let (paras, fix) = fix_font_symbols(join_across_pages(paras));
-    Document::new(name, paras, fix, marks, engines, Some(images))
+    for (p, b) in paras.iter().zip(boxes.iter_mut()) {
+        if p.is_empty() {
+            b.clear();
+        }
+    }
+    let (paras, boxes) = join_across_pages_with_boxes(paras, boxes);
+    let (paras, fix) = fix_font_symbols(paras);
+    let para_boxes: Vec<(f64, f64, Vec<Vec<[f64; 5]>>)> = dims.into_iter().zip(boxes).map(|((w, h), b)| (w, h, b)).collect();
+    let mut doc = Document::new(name, paras, fix, marks, engines, Some(images));
+    if let Some(d) = Arc::get_mut(&mut doc) {
+        d.para_boxes = para_boxes;
+    }
+    doc
 }
 
 pub fn open_document(name: &str, data: &[u8], engines: Arc<Engines>) -> Result<Arc<Document>, String> {
@@ -677,13 +993,64 @@ pub fn open_document(name: &str, data: &[u8], engines: Arc<Engines>) -> Result<A
     if ext == ".docx" {
         return Ok(Document::new(name, chunk_text_pages(docx_paragraphs(data)?), Vec::new(), Vec::new(), engines, None));
     }
+    if ext == ".odt" {
+        return Ok(Document::new(name, chunk_text_pages(odt_paragraphs(data)?), Vec::new(), Vec::new(), engines, None));
+    }
+    if ext == ".html" || ext == ".htm" {
+        return Ok(Document::new(name, chunk_text_pages(html_paragraphs(data)?), Vec::new(), Vec::new(), engines, None));
+    }
     if TEXTUTIL_TYPES.contains(&ext.as_str()) {
         return Ok(Document::new(name, chunk_text_pages(textutil_paragraphs(data, &ext)?), Vec::new(), Vec::new(), engines, None));
     }
     if [".txt", ".md", ".text", ""].contains(&ext.as_str()) {
+        if data.len() > MAX_TEXT_BYTES {
+            return Err("این فایل متنی خیلی بزرگ است (بیشتر از ۶۴ مگابایت).".into());
+        }
         return Ok(Document::new(name, chunk_text_pages(split_paragraphs(&decode_text(data))), Vec::new(), Vec::new(), engines, None));
     }
     Err("این نوع فایل پشتیبانی نمی\u{200c}شود. PDF، Word (doc/docx)، PowerPoint (pptx)، EPUB، FB2، RTF، ODT یا TXT باز کنید.".into())
+}
+
+/// Opens user-typed text from "نوشتن متن" verbatim (preserving every line and Finglish text
+/// without book-cleanup filters like drop_imprint_pages, drop_addresses, or latin_only_paragraph).
+pub fn open_typed(name: &str, text: &str, finglish: bool, engines: Arc<Engines>) -> Arc<Document> {
+    let paras: Vec<String> = text
+        .lines()
+        .map(|l| strip(l).to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+    let pages = chunk_text_pages(paras);
+    let n_pages = pages.len();
+    let words = DocWords::count(&pages);
+    let edits_file = crate::edits::file_for(name, n_pages, &crate::edits::fingerprint(&pages));
+    let lang = if finglish { "fa" } else { detect_language(&pages) };
+    let doc = Arc::new(Document {
+        id: new_id(),
+        name: name.to_string(),
+        is_typed: std::sync::atomic::AtomicBool::new(true),
+        is_finglish: std::sync::atomic::AtomicBool::new(finglish),
+        n_pages,
+        had_scans: false,
+        pictures: HashSet::new(),
+        lang: std::sync::OnceLock::new(),
+        figs: std::sync::OnceLock::new(),
+        font_fix: Vec::new(),
+        words,
+        note_marks: Vec::new(),
+        st: Mutex::new(State { pages, scanned: HashSet::new(), notes_after: HashMap::new(), translated: HashMap::new(), partial: HashMap::new(), title_fa: None }),
+        ocr_lock: Mutex::new(()),
+        mt_lock: Mutex::new(()),
+        mt_prefetch: std::sync::atomic::AtomicBool::new(false),
+        engines,
+        pdfjs: false,
+        given: Mutex::new(HashMap::new()),
+        edits: Mutex::new(crate::edits::Edits::default()),
+        edit_undo: Mutex::new(None),
+        edits_file,
+        para_boxes: Vec::new(),
+    });
+    let _ = doc.lang.set(lang);
+    doc
 }
 
 pub fn open_pages(name: &str, pages: Vec<Vec<String>>, engines: Arc<Engines>) -> Arc<Document> {

@@ -44,19 +44,19 @@ pub fn parse_command(text: &str) -> Option<Command> {
 
 pub fn command_word(text: &str) -> Option<&'static str> {
     let t = plain(text);
-    if search(r"بند", &t) && search(r"(?:عوض|تغییر|تبدیل|بنویس|بازنویسی|جایگزین)", &t) {
+    if search(r"بند", &t) && search(r"(?:عوض|تغییر|تبدیل|بنویس|بازنویسی|جایگزین|جدید|دوباره)", &t) {
         Some("rewrite")
-    } else if search(r"اضافه", &t) {
+    } else if search(r"(?:اضافه|کسره)", &t) {
         Some("ezafe")
     } else if search(r"جدا", &t) {
         Some("split")
-    } else if search(r"(?:تلفظ|جور|جوری|بخوان|خوانده)", &t) {
+    } else if search(r"(?:تلفظ|جور|جوری|بخوان|خوانده|اصلاح|درست)", &t) {
         Some("say")
     } else if search(r"بند", &t) && search(r"(?:حذف|پاک)", &t) {
         Some("paragraph")
     } else if search(r"(?:حذف|پاک)", &t) {
         Some("delete")
-    } else if search(r"(?:عوض|تبدیل|تغییر)", &t) {
+    } else if search(r"(?:عوض|تبدیل|تغییر|جایگزین)", &t) {
         Some("replace")
     } else {
         None
@@ -65,6 +65,6 @@ pub fn command_word(text: &str) -> Option<&'static str> {
 
 pub fn is_yes(text: &str) -> bool {
     let t = plain(text);
-    !search(r"(?:نه|خیر|نادرست|لغو|غلط)", &t) && search(r"(?:^|\s)(?:بله|آره|اره|بلی|درست|تایید|تأیید|باشه|انجام\s+بده|انجام\s+بدهید)(?:\s|$)", &t)
+    !search(r"(?:نه|خیر|نادرست|لغو|غلط)", &t) && search(r"(?:^|\s)(?:بله|آره|اره|آری|بلی|درست|تایید|تأیید|باشه|قبول|انجام\s+بده|انجام\s+بدهید)(?:\s|$)", &t)
 }
 

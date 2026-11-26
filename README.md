@@ -18,12 +18,12 @@ many readers every megabyte is expensive. **If your connection is slow or costly
 
 | Device | File | Size | What it has |
 |---|---|---|---|
-| Android, light | `KhanaReader-Android-lite.apk` | about 0.26 GB | Reads Farsi books, pictures and typed text aloud; saves sound. **No translation.** |
-| Android, full | `KhanaReader-Android.apk` | about 0.86 GB | The same, and translates foreign books into Farsi. |
+| Android, light (new app) | `KhanaReader-Android-next-lite.apk` | about 0.26 GB | Reads Farsi books, pictures and typed text aloud; saves sound. **No translation.** |
+| Android, full (new app) | `KhanaReader-Android-next.apk` | about 0.86 GB | The same, and translates foreign books into Farsi. |
 | Mac, light | `KhanaReader-Mac-lite.dmg` | about 0.45 GB, one file | Reads Farsi aloud, saves sound, reads scanned pages. **No translation, no dictation.** |
 | Mac, medium | `KhanaReader-Mac-medium.dmg` | about 1 GB, one file | The same, and translates with the smaller model (the one the phone uses). |
 | Mac, full | `KhanaReader-Mac.dmg` **and** every `KhanaReader-Mac.00x.dmgpart` | about 5 GB, three files | The best translation model and dictation (speech to text). |
-| Windows, light (experimental) | `KhanaReader-Windows-light-experimental.zip` | about 0.2 GB | No translation. |
+| Windows, light (experimental) | `KhanaReader-Windows-lite-experimental.zip` | about 0.2 GB | No translation. |
 | Windows, full (experimental) | `KhanaReader-Windows-full-experimental.zip` | about 0.75 GB | With translation (the smaller model). |
 
 **Mac:** an Apple Silicon Mac (M1 or newer) with macOS 13 or newer. For the full download put all three files in one folder, then
@@ -38,7 +38,7 @@ Cancelling audio export keeps completed audio as a playable file marked «ناق
 Text editing keeps your reading position, and «بازگرداندن آخرین ویرایش» reverses the last paragraph or word change while the book stays open.
 
 **Android:** an arm64 phone with Android 8 or newer and Android System WebView 133 or newer. Open the file and allow installing
-from this source when Android asks. Both versions are signed with the same key, so one can be installed over the other.
+from this source when Android asks. Both new editions use the same new key and package name (`org.khana.reader.next`), so they can update each other. The earlier `org.khana.reader` app stays installed separately. Its books, settings, and corrections do not move automatically into the new app. Keep the old app until you have exported what you need.
 
 **Windows:** Windows 10 or 11 (64-bit) with Microsoft's Edge WebView2 (Windows 11 has it). Unzip the whole folder and double-click
 `KhanaReader.exe`. It saves WAV instead of MP3 and has no translated PDF yet.
@@ -52,9 +52,9 @@ from this source when Android asks. Both versions are signed with the same key, 
 1. **Download only from this GitHub page** (`github.com/Safeisbetter/khana-reader`), not from channels, groups or other sites.
 2. **Compare the file's SHA-256 with `SHA256SUMS.txt` of the same release.** On a Mac or Linux: `shasum -a 256 FILE`. On Windows
    (PowerShell): `Get-FileHash FILE`. The two codes must be exactly the same.
-3. **Android:** every APK of ours is signed with one key. Its certificate's SHA-256 fingerprint is
-   `32:44:BB:08:80:95:34:D3:42:78:5A:FD:CA:E9:C8:16:03:B9:B2:63:FC:7B:C2:3D:E5:78:32:D5:C1:D9:E0:F9`
-   (`apksigner verify --print-certs FILE.apk` shows it). Android refuses to install an update signed with another key.
+3. **Android:** the new `org.khana.reader.next` APKs share one key. Its certificate's SHA-256 fingerprint is
+   `EA:5A:BD:6B:BA:AC:8D:EB:50:DF:CA:F1:4F:71:0D:02:7E:50:02:14:C3:84:98:00:F1:22:79:42:90:74:95:0F`
+   (`apksigner verify --print-certs FILE.apk` shows it). The older `org.khana.reader` release has a different signing certificate. Android refuses to install an update signed with another key.
 
 ## Staying safe with books and PDFs
 
@@ -221,17 +221,18 @@ GrapheneOS: the safety design of the PDF handling follows the [GrapheneOS PDF Vi
 
 | دستگاه | فایل | حجم | چه دارد |
 |---|---|---|---|
-| اندروید، سبک | `KhanaReader-Android-lite.apk` | حدود ۰٫۲۶ گیگابایت | کتاب فارسی، عکس و متن تایپ‌شده را می‌خواند و صدا ذخیره می‌کند. **بدون ترجمه.** |
-| اندروید، کامل | `KhanaReader-Android.apk` | حدود ۰٫۸۶ گیگابایت | همان، به‌اضافه‌ی ترجمه‌ی کتاب‌های خارجی به فارسی. |
+| اندروید، سبک (برنامهٔ جدید) | `KhanaReader-Android-next-lite.apk` | حدود ۰٫۲۶ گیگابایت | کتاب فارسی، عکس و متن تایپ‌شده را می‌خواند و صدا ذخیره می‌کند. **بدون ترجمه.** |
+| اندروید، کامل (برنامهٔ جدید) | `KhanaReader-Android-next.apk` | حدود ۰٫۸۶ گیگابایت | همان، به‌اضافه‌ی ترجمه‌ی کتاب‌های خارجی به فارسی. |
 | مک، سبک | `KhanaReader-Mac-lite.dmg` | حدود ۰٫۴۵ گیگابایت، یک فایل | فارسی را می‌خواند، صدا ذخیره می‌کند، صفحه‌ی اسکن‌شده را می‌خواند. **بدون ترجمه و بدون تبدیل گفتار به نوشته.** |
 | مک، متوسط | `KhanaReader-Mac-medium.dmg` | حدود ۱ گیگابایت، یک فایل | همان، به‌اضافه‌ی ترجمه با مدل کوچک‌تر (همان مدل گوشی). |
 | مک، کامل | `KhanaReader-Mac.dmg` **و** همه‌ی فایل‌های `KhanaReader-Mac.00x.dmgpart` | حدود ۵ گیگابایت، سه فایل | بهترین مدل ترجمه و تبدیل گفتار به نوشته. |
-| ویندوز، سبک (آزمایشی) | `KhanaReader-Windows-light-experimental.zip` | حدود ۰٫۲ گیگابایت | بدون ترجمه. |
+| ویندوز، سبک (آزمایشی) | `KhanaReader-Windows-lite-experimental.zip` | حدود ۰٫۲ گیگابایت | بدون ترجمه. |
 | ویندوز، کامل (آزمایشی) | `KhanaReader-Windows-full-experimental.zip` | حدود ۰٫۷۵ گیگابایت | با ترجمه (مدل کوچک‌تر). |
 
 - **مک:** مک با تراشه‌ی اپل (M1 یا جدیدتر) و macOS 13 یا جدیدتر. برای نسخه‌ی کامل هر سه فایل را در یک پوشه بگذارید و بعد `.dmg` را باز کنید. بار اول macOS هشدار می‌دهد، چون این برنامه‌ی رایگان امضای پولی اپل ندارد: برنامه را باز کنید، بعد در **System Settings → Privacy & Security** گزینه‌ی **Open Anyway** را بزنید.
 - **اندروید:** خواندن و ساخت MP3 با صفحه‌ی خاموش ادامه دارد. برای فایل اسکن‌شده، تا آماده‌شدن متن صفحه‌ها برنامه را باز نگه دارید. ساخت صدا با صفحه‌ی روشن ممکن است سریع‌تر باشد. اگر ساخت صدا را لغو کنید، بخش آماده‌شده در یک فایل قابل‌پخش با نام «ناقص» می‌ماند؛ اگر هنوز صدایی آماده نشده باشد، فایلی ذخیره نمی‌شود.
 - **اندروید:** گوشی ۶۴ بیتی (arm64) با اندروید ۸ یا بالاتر و «Android System WebView» نسخه‌ی ۱۳۳ یا جدیدتر. هنگام نصب، اندروید اجازه‌ی «نصب از این منبع» را می‌خواهد.
+- **برنامهٔ جدید اندروید:** شناسهٔ `org.khana.reader.next` دارد و کنار برنامهٔ قدیمی نصب می‌شود. کتاب‌ها، تنظیمات و اصلاح‌ها خودکار منتقل نمی‌شوند. تا زمانی که داده‌های موردنیازتان را خروجی نگرفته‌اید، برنامهٔ قدیمی را پاک نکنید.
 - **ویندوز:** ویندوز ۱۰ یا ۱۱ (۶۴ بیتی). پوشه را کامل از حالت فشرده درآورید و `KhanaReader.exe` را باز کنید.
 
 > **صادقانه:** فقط نسخه‌ی مک هر روز به دست یک انسان استفاده می‌شود. نسخه‌ی اندروید هنوز روی گوشی واقعی آزمایش نشده و نسخه‌ی ویندوز فقط روی رایانه‌های ساخت GitHub اجرا شده است. اگر مشکلی دیدید در بخش [Issues](../../issues) بنویسید؛ کتابی را که نمی‌خواهید همه ببینند پیوست نکنید.
@@ -242,9 +243,9 @@ GrapheneOS: the safety design of the PDF handling follows the [GrapheneOS PDF Vi
 
 ۲. **کد SHA-256 فایل را با فایل `SHA256SUMS.txt` همان نسخه مقایسه کنید.** در مک یا لینوکس: `shasum -a 256 نام‌فایل` · در ویندوز (PowerShell): `Get-FileHash نام‌فایل`. دو کد باید کاملاً یکی باشند.
 
-۳. **اندروید:** همه‌ی فایل‌های APK ما با یک کلید امضا شده‌اند. اثر انگشت (SHA-256) گواهی آن:
+۳. **اندروید:** دو نسخهٔ جدید با شناسهٔ `org.khana.reader.next` با یک کلید تازه امضا شده‌اند. اثر انگشت (SHA-256) گواهی آن:
 
-`32:44:BB:08:80:95:34:D3:42:78:5A:FD:CA:E9:C8:16:03:B9:B2:63:FC:7B:C2:3D:E5:78:32:D5:C1:D9:E0:F9`
+`EA:5A:BD:6B:BA:AC:8D:EB:50:DF:CA:F1:4F:71:0D:02:7E:50:02:14:C3:84:98:00:F1:22:79:42:90:74:95:0F`
 
 اگر این کد فرق داشت، فایل از ما نیست. اندروید هم اجازه نمی‌دهد نسخه‌ای با کلید دیگر روی این برنامه نصب شود.
 

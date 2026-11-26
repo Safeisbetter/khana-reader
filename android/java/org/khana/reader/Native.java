@@ -36,9 +36,19 @@ final class Native {
         final byte[] body;
 
         Reply(byte[] r) {
+            if (r == null || r.length < 8) {
+                status = 500;
+                body = new byte[0];
+                return;
+            }
             ByteBuffer b = ByteBuffer.wrap(r).order(ByteOrder.LITTLE_ENDIAN);
             status = b.getInt();
             int n = b.getInt();
+            if (n < 0 || n > 256) {
+                java.util.Arrays.fill(r, (byte) 0);
+                body = new byte[0];
+                return;
+            }
             for (int i = 0; i < n; i++) {
                 String k = string(b), v = string(b);
                 headers.put(k, v);

@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
-/** Sentence boundaries shared by native foreground and screen-off reading. Offsets are UTF-16, as in the page. */
+/** Sentence and natural-clause boundaries shared by native foreground and screen-off reading. Offsets are UTF-16. */
 final class SpeechPieces {
     static final class Piece {
         final String text;
@@ -12,6 +12,8 @@ final class SpeechPieces {
         Piece(String source, int first, int last) { text = source.substring(first, last).trim(); start = first; end = last; }
     }
     private static final Pattern INITIAL = Pattern.compile("(?:^|\\s)(?:(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|vs|e\\.g|i\\.e)\\.|(?:[A-Z]\\.)+)$", Pattern.CASE_INSENSITIVE);
+    private static final String CLAUSE_BREAKS = "،,؛;:—–";
+
     static List<Piece> split(String text) {
         List<Piece> out = new ArrayList<>();
         int first = 0;
@@ -25,7 +27,7 @@ final class SpeechPieces {
                 if (INITIAL.matcher(text.substring(first, i + 1)).find()) continue;
             }
             int end = i + 1;
-            while (end < text.length() && ".!?؟…\"'’”») ]".replace(" ", "").indexOf(text.charAt(end)) >= 0) end++;
+            while (end < text.length() && ".!?؟…\"'’”»)]".indexOf(text.charAt(end)) >= 0) end++;
             while (end < text.length() && Character.isWhitespace(text.charAt(end))) end++;
             add(out, text, first, end);
             first = end; i = end - 1;
@@ -33,33 +35,107 @@ final class SpeechPieces {
         if (first < text.length()) add(out, text, first, text.length());
         return out;
     }
-    /** The first piece of a reading, cut at its first comma when it is long: the short part is made in a few seconds, so the voice
-     *  starts sooner after play or after a change of voice, and the rest is made while it is heard. */
+
+    /** Splits long sentences (>140 chars) at natural Persian clause punctuation so synthesis stays
+     *  fast and pipelines evenly without cutting mid-phrase (which causes skipped words). */
+    static List<Piece> clauses(String text, Piece p, boolean isFirst) {
+        if (isFirst) {
+            List<Piece> h = head(text, p);
+            if (h.size() > 1) {
+                List<Piece> out = new ArrayList<>();
+                out.add(h.get(0));
+                out.addAll(clauses(text, h.get(1), false));
+                return out;
+            }
+        }
+        List<Piece> out = new ArrayList<>();
+        if (p.end - p.start <= 140) {
+            out.add(p);
+            return out;
+        }
+        int cur = p.start;
+        while (p.end - cur > 140) {
+            int limit = Math.min(p.end - 22, cur + 140);
+            int minCut = cur + 48;
+            int cut = -1;
+            // Prefer the last natural clause punctuation within [minCut, limit]
+            for (int i = limit; i >= minCut; i--) {
+                if (CLAUSE_BREAKS.indexOf(text.charAt(i)) >= 0) {
+                    cut = i + 1;
+                    break;
+                }
+            }
+            // If no punctuation before 140, look ahead up to 185 chars before forcing a word cut
+            if (cut < 0) {
+                int ahead = Math.min(p.end - 18, cur + 185);
+                for (int i = limit + 1; i <= ahead; i++) {
+                    if (CLAUSE_BREAKS.indexOf(text.charAt(i)) >= 0) {
+                        cut = i + 1;
+                        break;
+                    }
+                }
+            }
+            if (cut < 0) {
+                cut = limit;
+                while (cut > minCut && !Character.isWhitespace(text.charAt(cut))) cut--;
+                if (cut <= minCut) cut = limit;
+            }
+            while (cut < p.end && Character.isWhitespace(text.charAt(cut))) cut++;
+            if (cut <= cur || cut >= p.end) break;
+            if (hasAlnum(text, cur, cut)) out.add(new Piece(text, cur, cut));
+            cur = cut;
+        }
+        if (cur < p.end && hasAlnum(text, cur, p.end)) out.add(new Piece(text, cur, p.end));
+        if (out.isEmpty()) out.add(p);
+        return out;
+    }
+
+    /** The first piece of a reading, cut early when long so spoken audio starts in ~1.2-1.8s after pressing play. */
     static List<Piece> head(String text, Piece p) {
         List<Piece> out = new ArrayList<>();
-        if (p.end - p.start > 60) {
-            for (int i = p.start + 15; i < p.end - 15; i++) {
-                if ("،,؛;:".indexOf(text.charAt(i)) < 0) continue;
+        if (p.end - p.start > 45) {
+            int maxFirst = Math.min(p.end - 14, p.start + 68);
+            for (int i = p.start + 12; i <= maxFirst; i++) {
+                if (CLAUSE_BREAKS.indexOf(text.charAt(i)) < 0) continue;
                 int cut = i + 1;
                 while (cut < p.end && Character.isWhitespace(text.charAt(cut))) cut++;
-                out.add(new Piece(text, p.start, cut));
-                out.add(new Piece(text, cut, p.end));
-                return out;
+                if (hasAlnum(text, p.start, cut) && hasAlnum(text, cut, p.end)) {
+                    out.add(new Piece(text, p.start, cut));
+                    out.add(new Piece(text, cut, p.end));
+                    return out;
+                }
+            }
+            if (p.end - p.start > 78) {
+                int cut = Math.min(p.end - 18, p.start + 54);
+                while (cut > p.start + 22 && !Character.isWhitespace(text.charAt(cut))) cut--;
+                while (cut < p.end && Character.isWhitespace(text.charAt(cut))) cut++;
+                if (cut > p.start + 22 && cut < p.end && hasAlnum(text, p.start, cut) && hasAlnum(text, cut, p.end)) {
+                    out.add(new Piece(text, p.start, cut));
+                    out.add(new Piece(text, cut, p.end));
+                    return out;
+                }
             }
         }
         out.add(p);
         return out;
     }
+
+    private static boolean hasAlnum(String s, int a, int b) {
+        return s.substring(a, b).codePoints().anyMatch(Character::isLetterOrDigit);
+    }
+
     private static boolean asciiLetter(char c) { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'; }
+
     private static void add(List<Piece> out, String text, int first, int end) {
-        // Bound generation latency on an unusually long sentence without dropping letters.
-        while (end - first > 600) {
-            int cut = first + 600;
-            while (cut > first && !Character.isWhitespace(text.charAt(cut))) cut--;
-            if (cut == first) { cut = first + 600; if (Character.isHighSurrogate(text.charAt(cut - 1))) cut--; }
-            out.add(new Piece(text, first, cut)); first = cut;
-            while (first < end && Character.isWhitespace(text.charAt(first))) first++;
+        int start = first;
+        while (end - start > 600) {
+            int cut = start + 600;
+            while (cut > start && !Character.isWhitespace(text.charAt(cut))) cut--;
+            if (cut == start) { cut = start + 600; if (Character.isHighSurrogate(text.charAt(cut - 1))) cut--; }
+            if (hasAlnum(text, start, cut)) out.add(new Piece(text, start, cut));
+            start = cut;
+            while (start < end && Character.isWhitespace(text.charAt(start))) start++;
         }
-        if (text.substring(first, end).codePoints().anyMatch(Character::isLetterOrDigit)) out.add(new Piece(text, first, end));
+        if (hasAlnum(text, start, end)) out.add(new Piece(text, start, end));
     }
 }

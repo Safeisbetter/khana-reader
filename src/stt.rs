@@ -298,6 +298,16 @@ pub fn cancel() {
     CANCEL.store(true, Ordering::SeqCst);
 }
 
+pub fn wipe() {
+    CANCEL.store(true, Ordering::SeqCst);
+    let mut g = STATUS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(s) = g.as_mut() {
+        crate::ffi::wipe::string(&mut s.text);
+        crate::ffi::wipe::string(&mut s.error);
+    }
+    *g = None;
+}
+
 pub fn start(audio: Vec<f32>, lang: &str) -> Result<(), String> {
     if !available() {
         return Err("مدل نوشتن گفتار در این نسخه نیست.".into());

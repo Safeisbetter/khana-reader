@@ -8,7 +8,7 @@ use std::ptr::NonNull;
 #[cfg(target_os = "macos")]
 unsafe extern "C" {
     fn kt_farsi_pdf(recs: *const u8, len: usize, font: *const u8, fontlen: usize, outlen: *mut usize) -> *mut u8;
-    fn kt_free(p: *mut c_void);
+    fn kt_free_wipe(p: *mut c_void, len: usize);
 }
 
 /// One block of the PDF.
@@ -48,7 +48,7 @@ pub fn farsi_pdf(blocks: &[Block], font: &[u8]) -> Result<Vec<u8>, String> {
     let p = NonNull::new(p).ok_or("the PDF was not made")?;
     // SAFETY: the shim returned `len` readable bytes at `p` (malloc'd), copied before the free.
     let v = unsafe { std::slice::from_raw_parts(p.as_ptr(), len) }.to_vec();
-    // SAFETY: allocated by the shim with malloc and freed once, by its own free.
-    unsafe { kt_free(p.as_ptr().cast()) };
+    // SAFETY: allocated by the shim with malloc and freed once after wiping.
+    unsafe { kt_free_wipe(p.as_ptr().cast(), len) };
     Ok(v)
 }

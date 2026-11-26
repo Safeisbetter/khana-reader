@@ -6,10 +6,7 @@ use std::sync::OnceLock;
 #[cfg(windows)]
 fn dylib() -> PathBuf {
     let exe = std::env::current_exe().unwrap_or_default();
-    match exe.parent().map(|d| d.join("onnxruntime.dll")) {
-        Some(f) if f.is_file() => f,
-        _ => PathBuf::from("onnxruntime.dll"),
-    }
+    exe.parent().map(|d| d.join("onnxruntime.dll")).unwrap_or_default()
 }
 
 #[cfg(all(not(shell), not(windows)))]
@@ -38,7 +35,12 @@ pub fn init() {
 
 pub fn session(path: &Path, intra: Option<usize>) -> ort::Result<Session> {
     init();
-    let mut b = Session::builder()?.with_optimization_level(GraphOptimizationLevel::Level3)?;
+    let mut b = Session::builder()?
+        .with_optimization_level(GraphOptimizationLevel::Level3)?
+        // Disable ORT busy-spinning so concurrent TTS, G2P, translation, and AudioTrack threads
+        // never fight over spinlocks or waste CPU/thermal headroom on mobile big.LITTLE SoCs.
+        .with_config_entry("session.intra_op.allow_spinning", "0")?
+        .with_config_entry("session.inter_op.allow_spinning", "0")?;
     if let Some(n) = intra {
         b = b.with_intra_threads(n)?.with_inter_threads(1)?;
     }

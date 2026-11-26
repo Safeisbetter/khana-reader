@@ -60,7 +60,7 @@ fn library_dir() -> Option<PathBuf> {
 
 fn output_stem(name: &std::path::Path) -> String {
     let s = name.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-    let clean: String = s.chars().map(|c| if c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') { '_' } else { c }).collect();
+    let clean: String = s.chars().map(|c| if c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | ',' | ';') { '_' } else { c }).collect();
     let clean = clean.trim().trim_matches('.').to_string();
     if clean.is_empty() { "khana".to_string() } else { clean }
 }
@@ -96,18 +96,19 @@ fn all_voices() -> Vec<(String, String, String, String)> {
 fn default_settings() -> Map<String, Value> {
     let first = voices().first().map(|v| v.id).unwrap_or("");
     let v = json!({"voice": first, "speed": 1.0, "fontSize": 21, "lineHeight": 2.2, "reversed": false, "persianYeh": true, "autoNext": true, "focusMode": false, "lowVisionColor": "yellow",
-                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "naturalTone": true, "theme": "auto", "font": "vazir", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "normal", "cursor": "large", "accent": "khana", "accentFixed": true, "iconStyle": "glossy", "corners": "round", "startSound": true, "uiScale": 1, "lowVision": false, "lowVisionPrev": {}, "text3d": false, "wordSpacing": "normal"});
+                   "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "trQuality": "fast", "naturalTone": true, "showWaitReason": true, "smoothBuffer": "normal", "theme": "auto", "font": "vazir", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "short", "sentencePause": "normal", "cursor": "large", "accent": "khana", "accentFixed": true, "iconStyle": "glossy", "corners": "round", "startSound": true, "uiScale": 1, "lowVision": false, "lowVisionPrev": {}, "text3d": false, "wordSpacing": "normal"});
     v.as_object().unwrap().clone()
 }
 
 pub fn load_settings() -> Map<String, Value> {
     let mut s = default_settings();
-    if let Ok(t) = std::fs::read_to_string(settings_file()) {
-        if let Ok(Value::Object(m)) = serde_json::from_str::<Value>(&t) {
+    if let Ok(mut b) = crate::vault::read_bytes(&settings_file()) {
+        if let Ok(Value::Object(m)) = serde_json::from_slice::<Value>(&b) {
             for (k, v) in m {
                 s.insert(k, v);
             }
         }
+        crate::ffi::wipe::bytes(&mut b);
     }
     let voice = s.get("voice").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if !all_voices().iter().any(|v| v.0 == voice) {
@@ -119,8 +120,18 @@ pub fn load_settings() -> Map<String, Value> {
 
 fn save_settings(new: &Map<String, Value>) -> Result<Map<String, Value>, String> {
     let mut s = load_settings();
-    for k in default_settings().keys() {
-        if let Some(v) = new.get(k) {
+    let defaults = default_settings();
+    for (k, def) in &defaults {
+        let Some(v) = new.get(k) else { continue };
+        let valid = match (def, v) {
+            (Value::Bool(_), Value::Bool(_)) => true,
+            (Value::Number(_), Value::Number(n)) => n.as_f64().is_some_and(|f| f.is_finite() && f.abs() <= 10_000.0),
+            (Value::String(_), Value::String(st)) => st.chars().count() <= 64 && !st.chars().any(|c| c.is_control()),
+            (Value::Object(_), Value::Object(_)) if k == "lexicon" => true,
+            (Value::Object(_), Value::Object(_)) => serde_json::to_vec(v).is_ok_and(|b| b.len() <= 4096),
+            _ => false,
+        };
+        if valid {
             s.insert(k.clone(), v.clone());
         }
     }
@@ -140,7 +151,10 @@ fn save_settings(new: &Map<String, Value>) -> Result<Map<String, Value>, String>
     }
     s.insert("lexicon".into(), Value::Object(clean));
     std::fs::create_dir_all(data_dir()).map_err(|e| e.to_string())?;
-    crate::private_fs::atomic_write(&settings_file(), serde_json::to_string_pretty(&Value::Object(s.clone())).unwrap().as_bytes()).map_err(|e| e.to_string())?;
+    let mut bytes = serde_json::to_vec_pretty(&Value::Object(s.clone())).unwrap();
+    let res = crate::vault::write_bytes(&settings_file(), &bytes).map_err(|e| e.to_string());
+    crate::ffi::wipe::bytes(&mut bytes);
+    res?;
     Ok(s)
 }
 
@@ -182,7 +196,18 @@ impl Speech {
         self.synthesize_in_order(text, voice_id, speed, quick, None, cancel)
     }
 
+    pub fn wake_waiters(&self) {
+        self.busy.1.notify_all();
+    }
+
     pub fn synthesize_in_order(&self, text: &str, voice_id: &str, speed: f64, quick: bool, order: Option<u64>, cancel: &(dyn Fn() -> bool + Sync)) -> Result<(Vec<f32>, usize), String> {
+        self.synthesize_with_lexicon(text, voice_id, speed, quick, order, None, cancel)
+    }
+
+    pub fn synthesize_with_lexicon(&self, text: &str, voice_id: &str, speed: f64, quick: bool, order: Option<u64>, extra_lex: Option<(String, String)>, cancel: &(dyn Fn() -> bool + Sync)) -> Result<(Vec<f32>, usize), String> {
+        if cancel() {
+            return Err("cancelled".to_string());
+        }
         let all = voices();
         let (id, wav, tempo) = if voice_id == "mine" && my_voice().is_file() {
             ("mine".to_string(), my_voice(), 1.0)
@@ -193,19 +218,30 @@ impl Speech {
         let speed = (speed.clamp(0.5, 2.0) * tempo).clamp(0.5, 2.0);
         let eng = self.engine()?;
         let text = tts::speech_clean(text);
-        let _turn = Turn::take(&self.busy);
+        let _turn = Turn::take(&self.busy, cancel)?;
         let started = Instant::now();
         let settings = load_settings();
-        eng.g2p.set_lexicon(&lexicon_pairs(&settings));
+        let mut pairs = lexicon_pairs(&settings);
+        if let Some((w, sp)) = extra_lex {
+            if !w.trim().is_empty() && !sp.trim().is_empty() {
+                pairs.push((w, sp));
+            }
+        }
+        eng.g2p.set_lexicon(&pairs);
         eng.natural.store(settings.get("naturalTone").and_then(|v| v.as_bool()).unwrap_or(true), Ordering::Relaxed);
         tts::set_comma_pause(settings.get("commaPause").and_then(|v| v.as_str()).unwrap_or("short"));
         let recent = self.last_play.lock().unwrap().map_or(false, |t| t.elapsed() < Duration::from_secs(30));
-        let workers = if recent { 3 } else { 5 };
+        let workers = if cfg!(shell) { 2 } else if recent { 3 } else { 5 };
         let workers = std::env::var("KHANA_WORKERS").ok().and_then(|v| v.parse::<usize>().ok()).filter(|n| (1..=8).contains(n)).unwrap_or(workers);
         let mut a = eng.synthesize_text_in_order(&text, &id, &wav, workers, quick, order, cancel)?;
+        if cancel() {
+            return Err("cancelled".to_string());
+        }
         if (speed - 1.0).abs() >= 0.008 && !a.is_empty() {
             a = crate::stretch::stretch(&a, speed, tts::RATE);
         }
+        // Equalize loudness across all built-in voice models and "صدای من" (~-16.8 dBFS active speech RMS)
+        a = audio::normalize_loudness(a, tts::RATE, 0.145);
         note_reading_speed(a.len() as f64 * speed / tts::RATE as f64, started.elapsed().as_secs_f64());
         Ok((audio::fade_edges(a, tts::RATE, 8), tts::RATE))
     }
@@ -215,23 +251,37 @@ struct Turn<'a>(&'a (Mutex<usize>, std::sync::Condvar));
 
 impl<'a> Turn<'a> {
     fn room() -> usize {
-        (std::thread::available_parallelism().map_or(4, |n| n.get()) / 2).clamp(1, 3)
+        static ROOM: OnceLock<usize> = OnceLock::new();
+        *ROOM.get_or_init(|| {
+            if cfg!(shell) {
+                2
+            } else {
+                (std::thread::available_parallelism().map_or(4, |n| n.get()) / 2).clamp(1, 3)
+            }
+        })
     }
 
-    fn take(gate: &'a (Mutex<usize>, std::sync::Condvar)) -> Turn<'a> {
+    fn take(gate: &'a (Mutex<usize>, std::sync::Condvar), cancel: &(dyn Fn() -> bool + Sync)) -> Result<Turn<'a>, String> {
         let mut n = gate.0.lock().unwrap_or_else(|e| e.into_inner());
-        while *n >= Turn::room() {
-            n = gate.1.wait(n).unwrap_or_else(|e| e.into_inner());
+        loop {
+            if cancel() {
+                return Err("cancelled".to_string());
+            }
+            if *n < Turn::room() {
+                break;
+            }
+            let (guard, _) = gate.1.wait_timeout(n, Duration::from_millis(60)).unwrap_or_else(|e| e.into_inner());
+            n = guard;
         }
         *n += 1;
-        Turn(gate)
+        Ok(Turn(gate))
     }
 }
 
 impl Drop for Turn<'_> {
     fn drop(&mut self) {
         *self.0 .0.lock().unwrap_or_else(|e| e.into_inner()) -= 1;
-        self.0 .1.notify_one();
+        self.0 .1.notify_all();
     }
 }
 
@@ -239,7 +289,10 @@ impl Drop for Turn<'_> {
 fn make_my_voice(data: &[u8], ext: &str) -> Result<f64, String> {
     let (keep, rate) = voice_sample(data, ext)?;
     std::fs::create_dir_all(data_dir()).map_err(|e| e.to_string())?;
-    crate::private_fs::atomic_write(&my_voice(), &audio::wav_bytes(&keep, rate as u32)).map_err(|e| e.to_string())?;
+    let mut wav = audio::wav_bytes(&keep, rate as u32);
+    let res = crate::vault::write_bytes(&my_voice(), &wav).map_err(|e| e.to_string());
+    crate::ffi::wipe::bytes(&mut wav);
+    res?;
     if let Ok(e) = speech().engine() {
         e.forget_pace("mine");
     }
@@ -428,14 +481,21 @@ fn adapt_to_device_speed() {
         return;
     }
     let speed = *READ_SPEED.lock().unwrap();
-    let (full, tries) = match speed {
-        None => if cfg!(any(target_os = "android", target_os = "ios")) { (false, 2) } else { (true, 5) },
-        Some(r) => {
-            let full = if tts::LISTEN_LIGHT.load(Ordering::Relaxed) { r > 2.6 } else { r >= 2.0 };
-            (full, if full { 5 } else if r >= 1.8 { 3 } else { 2 })
-        }
+    // During live reading on mobile or slower/older CPUs, rely on our <3ms DSP anti-noise + anti-stutter + anti-skip
+    // gates instead of heavy Vosk ASR so live playback never pauses. Vosk remains active for MP3 export & fast desktops.
+    if cfg!(shell) {
+        tts::LISTEN.store(false, Ordering::Relaxed);
+        tts::LISTEN_LIGHT.store(true, Ordering::Relaxed);
+        tts::set_max_tries(2);
+        return;
+    }
+    let (listen, full, tries) = match speed {
+        None => (true, true, 3),
+        Some(r) if r < 1.8 => (false, false, 2),
+        Some(r) if r < 2.4 => (true, false, 2),
+        Some(_) => (true, true, 4),
     };
-    tts::LISTEN.store(true, Ordering::Relaxed);
+    tts::LISTEN.store(listen, Ordering::Relaxed);
     tts::LISTEN_LIGHT.store(!full, Ordering::Relaxed);
     tts::set_max_tries(tries);
 }
@@ -446,7 +506,9 @@ fn note_reading_speed(speech_seconds: f64, took: f64) {
     }
     let now = speech_seconds / took;
     let mut g = READ_SPEED.lock().unwrap();
-    *g = Some(g.map_or(now, |old| 0.6 * old + 0.4 * now));
+    let smoothed = g.map_or(now, |old| 0.6 * old + 0.4 * now);
+    *g = Some(smoothed);
+    tts::set_read_rtf(smoothed);
 }
 
 struct ListenAgain;
@@ -454,22 +516,24 @@ struct ListenAgain;
 impl Drop for ListenAgain {
     fn drop(&mut self) {
         if JOBS_RUNNING.fetch_sub(1, Ordering::SeqCst) == 1 {
-            tts::LISTEN.store(true, Ordering::Relaxed);
-            tts::set_max_tries(5);
+            tts::LISTEN.store(!cfg!(shell), Ordering::Relaxed);
+            tts::LISTEN_LIGHT.store(cfg!(shell), Ordering::Relaxed);
+            tts::set_max_tries(if cfg!(shell) { 2 } else { 3 });
         }
     }
 }
 
 fn export_groups(paras: &[String]) -> Vec<String> {
+    const BATCH_CHARS: usize = 1100;
     let mut groups = Vec::new();
     let mut group = String::new();
     for paragraph in paras {
         let mut rest = paragraph.trim();
         while !rest.is_empty() {
-            let at = rest.char_indices().nth(600).map(|(i, _)| i).unwrap_or(rest.len());
+            let at = rest.char_indices().nth(BATCH_CHARS).map(|(i, _)| i).unwrap_or(rest.len());
             let cut = if at < rest.len() { rest[..at].rfind(char::is_whitespace).filter(|&i| i > 0).unwrap_or(at) } else { at };
             let piece = rest[..cut].trim();
-            if !group.is_empty() && group.chars().count() + piece.chars().count() > 600 { groups.push(std::mem::take(&mut group)); }
+            if !group.is_empty() && group.chars().count() + piece.chars().count() > BATCH_CHARS { groups.push(std::mem::take(&mut group)); }
             if !group.is_empty() { group.push_str("\n\n"); }
             group.push_str(piece);
             rest = rest[cut..].trim_start();
@@ -482,9 +546,9 @@ fn export_groups(paras: &[String]) -> Vec<String> {
 fn run_job(job: Arc<Job>, r: Mp3Req) {
     JOBS_RUNNING.fetch_add(1, Ordering::SeqCst);
     let _listen = ListenAgain;
-    tts::LISTEN.store(!r.fast, Ordering::Relaxed);
-    tts::LISTEN_LIGHT.store(false, Ordering::Relaxed);
-    tts::set_max_tries(if r.fast { 3 } else { 5 });
+    tts::LISTEN.store(!r.fast && !cfg!(shell), Ordering::Relaxed);
+    tts::LISTEN_LIGHT.store(true, Ordering::Relaxed);
+    tts::set_max_tries(if r.fast { 1 } else { 2 });
     let wav = r.format == "wav" || r.format == "m4a";
     let scratch = match crate::private_fs::TempDir::new() {
         Ok(d) => d,
@@ -505,35 +569,78 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
             out.write_all(&[0u8; 44]).map_err(|e| e.to_string())?;
         }
         let mut interrupted = false;
-        'pages: for n in r.first..=r.last {
-            if cancel() { interrupted = true; break; }
-            let mut paras: Vec<String> = r.doc.page_text(n, r.opts).into_iter().filter(|p| p != crate::doc::PICTURE_PAGE).collect();
-            if r.end_word && n == r.last && !paras.is_empty() { paras.push(END_WORD.into()); }
-            let groups = export_groups(&paras);
-            let group_count = groups.len().max(1);
-            for (index, text) in groups.into_iter().enumerate() {
-                tts::wait_for_power(&cancel);
-                if cancel() { interrupted = true; break 'pages; }
-                let (mut pcm, rate) = match speech().synthesize(&text, &r.voice, r.speed, false, &cancel) {
-                    Ok(audio) => audio,
-                    Err(_) if cancel() => { interrupted = true; break 'pages; }
-                    Err(error) => return Err(error),
-                };
-                if cancel() { interrupted = true; break 'pages; }
-                if !wav && enc.is_none() { enc = Some(crate::mp3::Mp3::new(rate as u32, r.bitrate)?); }
-                pcm.extend(std::iter::repeat(0f32).take((rate as f64 * 0.45) as usize));
-                if wav {
-                    wav_rate = rate as u32;
-                    let bytes: Vec<u8> = audio::to_pcm16(&pcm).iter().flat_map(|x| x.to_le_bytes()).collect();
-                    wav_bytes_written = wav_bytes_written.checked_add(u32::try_from(bytes.len()).map_err(|_| "فایل WAV خیلی بزرگ است.")?).filter(|&n| n <= u32::MAX - 36).ok_or("فایل WAV خیلی بزرگ است.")?;
-                    out.write_all(&bytes).map_err(|e| e.to_string())?;
-                } else { out.write_all(&enc.as_mut().unwrap().encode(&audio::to_pcm16(&pcm))).map_err(|e| e.to_string())?; }
-                *job.seconds.lock().unwrap() += pcm.len() as f64 / rate as f64;
-                *job.done_chars.lock().unwrap() = (n - r.first) * 1000 + (index + 1) * 1000 / group_count;
-                out.flush().map_err(|e| e.to_string())?;
-            }
-            *job.done_chars.lock().unwrap() = (n - r.first + 1) * 1000;
+        enum ExportStep {
+            Audio { pcm: Vec<f32>, rate: usize, done_chars: usize },
+            PageDone(usize),
         }
+        let r_ref = &r;
+        let cancel_ref = &cancel;
+        std::thread::scope(|s| -> Result<(), String> {
+            let (tx, rx) = std::sync::mpsc::sync_channel::<ExportStep>(1);
+            let prod = s.spawn(move || -> Result<bool, String> {
+                for n in r_ref.first..=r_ref.last {
+                    if cancel_ref() { return Ok(true); }
+                    let mut paras: Vec<String> = r_ref.doc.page_text(n, r_ref.opts).into_iter().filter(|p| p != crate::doc::PICTURE_PAGE).collect();
+                    if r_ref.end_word && n == r_ref.last && !paras.is_empty() { paras.push(END_WORD.into()); }
+                    let groups = export_groups(&paras);
+                    let group_count = groups.len().max(1);
+                    for (index, text) in groups.into_iter().enumerate() {
+                        tts::wait_for_power(cancel_ref);
+                        if cancel_ref() { return Ok(true); }
+                        let (mut pcm, rate) = match speech().synthesize(&text, &r_ref.voice, r_ref.speed, false, cancel_ref) {
+                            Ok(audio) => audio,
+                            Err(_) if cancel_ref() => return Ok(true),
+                            Err(error) => return Err(error),
+                        };
+                        if cancel_ref() { return Ok(true); }
+                        pcm.extend(std::iter::repeat_n(0f32, (rate as f64 * 0.45) as usize));
+                        let done_chars = (n - r_ref.first) * 1000 + (index + 1) * 1000 / group_count;
+                        if tx.send(ExportStep::Audio { pcm, rate, done_chars }).is_err() {
+                            return Ok(true);
+                        }
+                    }
+                    if tx.send(ExportStep::PageDone((n - r_ref.first + 1) * 1000)).is_err() {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            });
+            let mut write_res: Result<(), String> = Ok(());
+            while let Ok(step) = rx.recv() {
+                if cancel() { interrupted = true; break; }
+                match step {
+                    ExportStep::PageDone(done) => {
+                        *job.done_chars.lock().unwrap() = done;
+                    }
+                    ExportStep::Audio { pcm, rate, done_chars } => {
+                        let step_res = (|| -> Result<(), String> {
+                            if !wav && enc.is_none() { enc = Some(crate::mp3::Mp3::new(rate as u32, r.bitrate)?); }
+                            if wav {
+                                wav_rate = rate as u32;
+                                let bytes: Vec<u8> = audio::to_pcm16(&pcm).iter().flat_map(|x| x.to_le_bytes()).collect();
+                                wav_bytes_written = wav_bytes_written.checked_add(u32::try_from(bytes.len()).map_err(|_| "فایل WAV خیلی بزرگ است.")?).filter(|&n| n <= u32::MAX - 36).ok_or("فایل WAV خیلی بزرگ است.")?;
+                                out.write_all(&bytes).map_err(|e| e.to_string())?;
+                            } else {
+                                out.write_all(&enc.as_mut().unwrap().encode(&audio::to_pcm16(&pcm))).map_err(|e| e.to_string())?;
+                            }
+                            *job.seconds.lock().unwrap() += pcm.len() as f64 / rate as f64;
+                            *job.done_chars.lock().unwrap() = done_chars;
+                            out.flush().map_err(|e| e.to_string())?;
+                            Ok(())
+                        })();
+                        if let Err(e) = step_res {
+                            write_res = Err(e);
+                            break;
+                        }
+                    }
+                }
+            }
+            drop(rx);
+            let prod_interrupted = prod.join().unwrap()?;
+            write_res?;
+            if prod_interrupted { interrupted = true; }
+            Ok(())
+        })?;
         let partial = interrupted || cancel();
         if partial && (!job.keep_partial.load(Ordering::SeqCst) || job.discard_partial.load(Ordering::SeqCst)) { return Err("cancelled".into()); }
         if partial && *job.seconds.lock().unwrap() <= 0.0 { return Err("cancelled".into()); }
@@ -632,8 +739,9 @@ fn audio_seconds(p: &std::path::Path) -> Option<f64> {
 }
 
 fn doc_info(d: &Arc<Document>) -> Value {
-    json!({"id": d.id, "name": d.name, "isTyped": d.is_typed.load(Ordering::Relaxed), "title": d.title(), "pages": d.n_pages, "lang": d.lang(),
-           "canTranslate": d.can_translate(), "hasImages": d.pdfjs, "hasText": d.has_text(), "scanned": d.had_scans,
+    let fg = d.is_finglish.load(Ordering::Relaxed);
+    json!({"id": d.id, "name": d.name, "isTyped": d.is_typed.load(Ordering::Relaxed), "isFinglish": fg, "title": d.title(), "pages": d.n_pages, "lang": if fg { "fa" } else { d.lang() },
+           "canTranslate": if fg { false } else { d.can_translate() }, "hasImages": d.pdfjs, "hasText": d.has_text(), "scanned": d.had_scans,
            "engine": if d.pdfjs { "pdfjs" } else { "text" }})
 }
 
@@ -676,8 +784,11 @@ fn run_pdf_job(job: Arc<Job>, doc: Arc<Document>, first: usize, last: usize, opt
         }
         let font = VAZIRMATN.to_vec();
         let mut saved = unique_path(save_dir().join(&job.filename));
-        while std::fs::OpenOptions::new().write(true).create_new(true).open(&saved).is_err() {
-            if !saved.exists() { break; }
+        loop {
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
+            if options.open(&saved).is_ok() || !saved.exists() { break; }
             saved = unique_path(saved);
         }
         crate::platform::farsi_pdf(&blocks, &font, &saved)?;
@@ -691,10 +802,22 @@ fn run_pdf_job(job: Arc<Job>, doc: Arc<Document>, first: usize, last: usize, opt
 
 #[cfg(not(any(target_os = "android", windows)))]
 const FRAME_SRC: &str = "khana:";
+#[cfg(not(any(target_os = "android", windows)))]
+const FRAME_ANCESTOR: &str = "khana:";
+#[cfg(not(any(target_os = "android", windows)))]
+const INDEX_FRAME_SRC: &str = "'self'";
 #[cfg(windows)]
 const FRAME_SRC: &str = "http://khana.localhost";
+#[cfg(windows)]
+const FRAME_ANCESTOR: &str = "http://khana.localhost";
+#[cfg(windows)]
+const INDEX_FRAME_SRC: &str = "'self'";
 #[cfg(target_os = "android")]
-const FRAME_SRC: &str = "https://khana.invalid";
+const FRAME_SRC: &str = "https://khana-pdf.invalid/pdfjs/";
+#[cfg(target_os = "android")]
+const FRAME_ANCESTOR: &str = "https://khana.invalid";
+#[cfg(target_os = "android")]
+const INDEX_FRAME_SRC: &str = "https://khana-pdf.invalid";
 
 const LOCKED_POWERS: &str = "accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), bluetooth=(), camera=(), clipboard-read=(), clipboard-write=(), display-capture=(), document-domain=(), encrypted-media=(), fullscreen=(), gamepad=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), interest-cohort=(), local-fonts=(), magnetometer=(), microphone=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), speaker-selection=(), storage-access=(), sync-xhr=(), usb=(), web-share=(), window-management=(), xr-spatial-tracking=()";
 
@@ -874,8 +997,8 @@ impl App {
                 ctype: "text/html; charset=utf-8",
                 body: html.into_bytes(),
                 headers: vec![("Content-Security-Policy".into(),
-                    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; \
-                     font-src 'self'; connect-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'".into()),
+                    format!("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; \
+                     font-src 'self'; connect-src 'self'; frame-src {INDEX_FRAME_SRC}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")),
                     ("Permissions-Policy".into(), PAGE_PERMISSIONS.into())],
             };
         }
@@ -894,7 +1017,7 @@ impl App {
             if ctype.starts_with("text/html") {
                 headers.push(("Content-Security-Policy".into(),
                     format!("default-src 'none'; script-src {o} blob:; worker-src {o} blob:; connect-src {o}; img-src {o} blob: data:; \
-                     base-uri 'none'; form-action 'none'; frame-ancestors {o}", o = FRAME_SRC)));
+                     base-uri 'none'; form-action 'none'; frame-ancestors {a}", o = FRAME_SRC, a = FRAME_ANCESTOR)));
                 headers.push(("Permissions-Policy".into(), LOCKED_POWERS.into()));
             } else if ctype.starts_with("text/javascript") {
                 headers.push(("Content-Security-Policy".into(), format!("default-src 'none'; script-src {o} blob:; connect-src {o}", o = FRAME_SRC)));
@@ -907,6 +1030,20 @@ impl App {
         }
         if method == "GET" && path == "/Vazirmatn.woff2" {
             return Reply { status: 200, ctype: "font/woff2", body: VAZIRMATN.to_vec(), headers: Vec::new() };
+        }
+        if method == "GET" {
+            let (file, ctype) = match path {
+                "/welcome-illustrated-clean.jpg" => ("welcome-illustrated-clean.jpg", "image/jpeg"),
+                "/welcome-illustrated.jpg" => ("welcome-illustrated.jpg", "image/jpeg"),
+                "/fish-slim.png" => ("fish-slim.png", "image/png"),
+                _ => ("", ""),
+            };
+            if !file.is_empty() {
+                return match std::fs::read(web.join(file)) {
+                    Ok(body) => Reply { status: 200, ctype, body, headers: Vec::new() },
+                    Err(_) => Reply { status: 404, ctype: "text/plain", body: Vec::new(), headers: Vec::new() },
+                };
+            }
         }
         if method == "GET" && path == "/NotoNaskhArabic-Regular.ttf" {
             return Reply { status: 200, ctype: "font/ttf", body: std::fs::read(web.join("NotoNaskhArabic-Regular.ttf")).unwrap_or_default(), headers: Vec::new() };
@@ -1013,7 +1150,7 @@ impl App {
                 }
             }
             "myvoice_delete_post" => {
-                let _ = std::fs::remove_file(my_voice());
+                crate::private_fs::wipe_and_remove(&my_voice());
                 let s = load_settings();
                 if s.get("voice").and_then(|v| v.as_str()) == Some("mine") {
                     let mut m = Map::new();
@@ -1024,20 +1161,29 @@ impl App {
             }
             "forget_post" => {
                 *self.docs.lock().unwrap() = None;
+                crate::stt::wipe();
                 for j in self.jobs.lock().unwrap().values() {
                     let _publication = j.publication.lock().unwrap();
                     j.discard_partial.store(true, Ordering::SeqCst);
                     j.cancelled.store(true, Ordering::SeqCst);
                     j.cleanup();
                 }
-                let _ = std::fs::remove_dir_all(data_dir().join("edits"));
-                let _ = std::fs::remove_file(my_voice());
-                let _ = std::fs::remove_file(settings_file());
+                let edits_dir = data_dir().join("edits");
+                if let Ok(d) = std::fs::read_dir(&edits_dir) {
+                    for e in d.flatten() {
+                        crate::private_fs::wipe_and_remove(&e.path());
+                    }
+                }
+                let _ = std::fs::remove_dir_all(&edits_dir);
+                crate::private_fs::wipe_and_remove(&my_voice());
+                crate::private_fs::wipe_and_remove(&settings_file());
                 if let Some(dir) = library_dir() {
                     if let Ok(d) = std::fs::read_dir(&dir) {
                         for e in d.flatten() {
-                            if library_file(&e.file_name().to_string_lossy()).is_some() {
-                                let _ = std::fs::remove_file(e.path());
+                            let fname = e.file_name().to_string_lossy().into_owned();
+                            let is_saved_pdf = !fname.starts_with('.') && fname.ends_with(".pdf") && e.path().is_file();
+                            if library_file(&fname).is_some() || is_saved_pdf {
+                                crate::private_fs::wipe_and_remove(&e.path());
                             }
                         }
                     }
@@ -1056,9 +1202,18 @@ impl App {
                     return Err(bad("فایل خیلی بزرگ است (بیشتر از ۳۰۰ مگابایت)."));
                 }
                 *self.docs.lock().unwrap() = None;
-                let d = open_document(&name, body, self.engines.clone()).map_err(bad)?;
-                d.is_typed.store(q.get("source").is_some_and(|s| s == "typed"), Ordering::Relaxed);
-                crate::vocab::set_source_lang(d.lang());
+                let typed = q.get("source").is_some_and(|s| s == "typed");
+                let body_str = std::str::from_utf8(body).unwrap_or("");
+                let has_latin = body_str.chars().any(|c| c.is_ascii_alphabetic());
+                let fg_req = q.get("finglish").is_some_and(|s| s == "1");
+                let finglish = typed && has_latin && (fg_req || crate::phon::looks_like_finglish(body_str));
+                let d = if typed {
+                    crate::doc::open_typed(&name, body_str, finglish, self.engines.clone())
+                } else {
+                    open_document(&name, body, self.engines.clone()).map_err(bad)?
+                };
+                crate::vocab::set_finglish(finglish);
+                crate::vocab::set_source_lang(if finglish { "fa" } else { d.lang() });
                 *self.docs.lock().unwrap() = Some(d.clone());
                 Ok(reply_json(&doc_info(&d)))
             }
@@ -1084,6 +1239,7 @@ impl App {
                 }
                 *self.docs.lock().unwrap() = None;
                 let d = crate::doc::open_pages(&name, pages, self.engines.clone());
+                crate::vocab::set_finglish(false);
                 crate::vocab::set_source_lang(d.lang());
                 *self.docs.lock().unwrap() = Some(d.clone());
                 Ok(reply_json(&doc_info(&d)))
@@ -1108,10 +1264,11 @@ impl App {
                         Some(crate::text::LayoutItem { s, x0: num(a.get(1)), top: num(a.get(2)), x1: num(a.get(3)), bot: num(a.get(4)),
                             size: num(a.get(5)).max(0.1), rtl: num(a.get(6)) != 0.0 })
                     }).collect();
-                    layout.push((items, num(p.get("h")).max(1.0), p.get("images").and_then(|b| b.as_bool()).unwrap_or(false)));
+                    layout.push((items, num(p.get("w")).max(1.0), num(p.get("h")).max(1.0), p.get("images").and_then(|b| b.as_bool()).unwrap_or(false)));
                 }
                 *self.docs.lock().unwrap() = None;
                 let d = crate::doc::open_document_layout(&name, layout, self.engines.clone());
+                crate::vocab::set_finglish(false);
                 crate::vocab::set_source_lang(d.lang());
                 *self.docs.lock().unwrap() = Some(d.clone());
                 Ok(reply_json(&doc_info(&d)))
@@ -1121,7 +1278,7 @@ impl App {
                 let n: usize = q.get("n").and_then(|x| x.parse().ok()).unwrap_or(0);
                 let u32_at = |at: usize| body.get(at..at + 4).map_or(0, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize);
                 let (w, h) = (u32_at(0), u32_at(4));
-                if !d.pdfjs || n < 1 || n > d.n_pages || w == 0 || h == 0 || w > 20000 || h > 20000 || w.checked_mul(h) != Some(body.len() - 8) {
+                if !d.pdfjs || n < 1 || n > d.n_pages || body.len() < 8 || w == 0 || h == 0 || w > 20000 || h > 20000 || w.saturating_mul(h) > 16_000_000 || w.checked_mul(h) != Some(body.len().saturating_sub(8)) {
                     return Err(bad("تصویر صفحه درست نیست."));
                 }
                 d.give_picture(n, body[8..].to_vec(), w, h);
@@ -1137,11 +1294,24 @@ impl App {
                     return Ok(reply_json(&json!({"n": n, "needsPicture": true})));
                 }
                 let opts = self.opts(q);
+                crate::translate::set_accurate(load_settings().get("trQuality").and_then(|v| v.as_str()) == Some("accurate"));
                 if q.get("partial").map(|s| s.as_str()) == Some("1") && opts.translate && d.can_translate() {
-                    let (paras, done) = d.page_text_so_far(n);
-                    return Ok(reply_json(&json!({"n": n, "paragraphs": paras, "done": done})));
+                    let (paras, done, total, aligned_boxes) = d.page_text_so_far(n);
+                    let boxes = aligned_boxes.map(|(w, h, p)| json!({"w": w, "h": h, "paras": p}))
+                        .or_else(|| d.page_boxes(n).map(|(w, h, p)| json!({"w": w, "h": h, "paras": p})));
+                    return Ok(reply_json(&json!({"n": n, "paragraphs": paras, "done": done, "total": total, "boxes": boxes})));
                 }
-                Ok(reply_json(&json!({"n": n, "paragraphs": d.page_text(n, opts), "done": true})))
+                let paras = d.page_text(n, opts);
+                let boxes = if opts.translate && d.can_translate() {
+                    let raw_tr = d.st.lock().unwrap().translated.get(&n).cloned();
+                    raw_tr.as_deref()
+                        .and_then(|rt| d.translated_boxes(n, rt))
+                        .map(|(w, h, p)| json!({"w": w, "h": h, "paras": p}))
+                        .or_else(|| d.page_boxes(n).map(|(w, h, p)| json!({"w": w, "h": h, "paras": p})))
+                } else {
+                    d.page_boxes(n).map(|(w, h, p)| json!({"w": w, "h": h, "paras": p}))
+                };
+                Ok(reply_json(&json!({"n": n, "paragraphs": paras, "done": true, "boxes": boxes})))
             }
             "edit_post" => {
                 let d = self.doc(q)?;
@@ -1340,10 +1510,11 @@ impl App {
                 let asked_gen = req.get("gen").and_then(|v| v.as_u64()).unwrap_or(0);
                 let quick = req.get("quick").and_then(|v| v.as_bool()).unwrap_or(false);
                 let order = req.get("order").and_then(|v| v.as_u64());
+                let extra_lex = req.get("spelling").and_then(|v| v.as_str()).map(strip).filter(|s| !s.is_empty()).map(|sp| (text.clone(), sp.to_string()));
                 let dropped = move || asked_gen > 0 && asked_gen < TTS_GEN.load(Ordering::Relaxed);
                 speech().mark_play();
                 adapt_to_device_speed();
-                let (a, rate) = match speech().synthesize_in_order(&text, &voice, speed, quick, order, &dropped) {
+                let (a, rate) = match speech().synthesize_with_lexicon(&text, &voice, speed, quick, order, extra_lex, &dropped) {
                     Ok(r) => r,
                     Err(_) if dropped() => return Err(bad("cancelled")),
                     Err(e) => return Err(ApiError::Internal(e)),
@@ -1354,13 +1525,15 @@ impl App {
             "tts_gen_post" => {
                 let new_gen = body_json()?.get("gen").and_then(|v| v.as_u64()).unwrap_or(0);
                 TTS_GEN.fetch_max(new_gen, Ordering::Relaxed);
+                tts::wake_waiters();
+                speech().wake_waiters();
                 Ok(reply_json(&json!({"gen": TTS_GEN.load(Ordering::Relaxed)})))
             }
-            "mp3fast_post" => {
+                "mp3fast_post" => {
                 let fast = body_json()?.get("fast").and_then(|v| v.as_bool()).unwrap_or(false);
                 if JOBS_RUNNING.load(Ordering::Relaxed) > 0 {
-                    tts::LISTEN.store(!fast, Ordering::Relaxed);
-                    tts::set_max_tries(if fast { 3 } else { 5 });
+                    tts::LISTEN.store(!fast && !cfg!(shell), Ordering::Relaxed);
+                    tts::set_max_tries(if fast { 1 } else { 2 });
                 }
                 Ok(reply_json(&json!({"ok": true, "fast": fast})))
             }
@@ -1385,9 +1558,18 @@ impl App {
                 let bitrate = (num("bitrate", s["bitrate"].as_f64().unwrap_or(64.0)) as i64).clamp(32, 320) as u32;
                 let opts = Opts { reversed: flag("reversed"), persian_yeh: flag("persianYeh"), translate: flag("translate") };
                 let stem = output_stem(std::path::Path::new(&d.name));
-                let rng = if first == last { format!("{first}") } else { format!("{first}-{last}") };
                 let format = match req.get("format").and_then(|v| v.as_str()) { Some("wav") => "wav", Some("m4a") => "m4a", _ => "mp3" }.to_string();
-                let job = self.add_job(Job::new(format!("{stem} - p{rng}.{format}")));
+                let is_typed = d.is_typed.load(Ordering::Relaxed);
+                let out_name = if is_typed || (d.n_pages == 1 && first == 1 && last == 1) {
+                    format!("{stem}.{format}")
+                } else if stem.chars().any(|c| ('\u{0600}'..='\u{06FF}').contains(&c)) {
+                    let rng = if first == last { fa_digits(first) } else { format!("{}-{}", fa_digits(first), fa_digits(last)) };
+                    format!("{stem} - صفحه {rng}.{format}")
+                } else {
+                    let rng = if first == last { format!("{first}") } else { format!("{first}-{last}") };
+                    format!("{stem} - p{rng}.{format}")
+                };
+                let job = self.add_job(Job::new(out_name));
                 let info = job.info();
                 let fast = req.get("fast").and_then(|v| v.as_bool()).unwrap_or(false);
                 let end_word = req.get("endWord").and_then(|v| v.as_bool()).unwrap_or(last == d.n_pages && !d.is_typed.load(Ordering::Relaxed));
@@ -1461,7 +1643,7 @@ impl App {
             }
             "library_delete_post" => {
                 let p = library_file(q.get("name").map(|s| s.as_str()).unwrap_or("")).ok_or_else(|| ApiError::NotFound("فایل پیدا نشد.".into()))?;
-                std::fs::remove_file(&p).map_err(|e| ApiError::Internal(e.to_string()))?;
+                crate::private_fs::wipe_and_remove(&p);
                 Ok(reply_json(&json!({"ok": true})))
             }
             "library_export_post" => {
@@ -1490,6 +1672,7 @@ impl App {
     }
 
     pub fn shutdown(&self) {
+        crate::vault::clear_key();
         for j in self.jobs.lock().unwrap().values() {
             let _publication = j.publication.lock().unwrap();
             j.discard_partial.store(true, Ordering::SeqCst);

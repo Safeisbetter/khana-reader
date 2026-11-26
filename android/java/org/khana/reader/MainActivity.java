@@ -36,7 +36,7 @@ import java.io.File;
  * in its sandboxed frame, the same files as the Mac app's), set up as GrapheneOS's PDF Viewer sets
  * up its own: JavaScript only for the app's own page, no file or content access, no network loads
  * (blockNetworkLoads), no cookies or cache, every request answered inside the app (Server) at the
- * app's own address https://khana.invalid, every navigation refused. There is no JavaScript
+ * app's own address {@code https://khana.invalid}, every navigation refused. There is no JavaScript
  * interface: the page reaches the app only through its requests (and the body port, Server).
  * Files are opened with the system's picker (ACTION_OPEN_DOCUMENT) and saved with its «save as»
  * screen (ACTION_CREATE_DOCUMENT, Exporter): the app has no storage permission.
@@ -54,13 +54,16 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     private FrameLayout root;
     private WebView web;
     private WebMessagePort pagePort;
+    private android.os.HandlerThread portThread;
     private ValueCallback<Uri[]> picking;
     private PermissionRequest micRequest;
     private Exporter.Saved saving;
+    private android.content.BroadcastReceiver screenOffReceiver;
     private boolean pageBarPainted;
     private int barGround, barInk;
 
-    // the page's own dark colours (web/app.css, --paper)
+    // Pure black startup background so launching the app never flashes white before the page theme paints.
+    private static final int BOOT_BLACK = Color.BLACK;
     private static final int DARK_PAPER = Color.rgb(16, 20, 27);
 
     /** The device is in dark mode (the page follows by itself: prefers-color-scheme). */
@@ -70,16 +73,18 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     }
 
     @Override
+    @SuppressWarnings("NullableProblems")
     public void onConfigurationChanged(android.content.res.Configuration c) {
         super.onConfigurationChanged(c);
         // (the activity is not recreated for a change of mode: the colours around the page change here)
-        boolean n = night();
-        if (outer != null) outer.setBackgroundColor(n ? DARK_PAPER : Color.WHITE);
-        if (root != null) root.setBackgroundColor(n ? DARK_PAPER : Color.WHITE);
-        if (web != null) web.setBackgroundColor(n ? DARK_PAPER : Color.WHITE);
+        int bg = pageBarPainted ? barGround : BOOT_BLACK;
+        if (outer != null) outer.setBackgroundColor(bg);
+        if (root != null) root.setBackgroundColor(bg);
+        if (web != null) web.setBackgroundColor(pageBarPainted ? (night() ? DARK_PAPER : Color.WHITE) : BOOT_BLACK);
         // Keep a chosen page theme until the page supplies its updated colours. Resetting to
         // green here left the bar green when the page's colour had not changed (and was cached).
         if (outer != null) applyBarColors(pageBarPainted ? barGround : defaultBarGround(), pageBarPainted ? barInk : defaultBarInk());
+        sendCut();
         applyFullScreen();
     }
 
@@ -106,7 +111,10 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) applyFullScreen();
+        if (hasFocus) {
+            Server.clearExpiredClipboard(this);
+            applyFullScreen();
+        }
     }
 
     /** The camera's corner at the side of the screen, in the page's pixels, so the page keeps its text clear of it. */
@@ -119,13 +127,15 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     private void sendCut() {
         if (web == null) return;
         float d = getResources().getDisplayMetrics().density;
-        web.evaluateJavascript("(function(s){s.setProperty('--cut-l','" + Math.round(cutLeft / d) + "px');s.setProperty('--cut-r','" + Math.round(cutRight / d) + "px');})(document.documentElement.style)", null);
+        String dark = night() ? "1" : "0";
+        web.evaluateJavascript("(function(el){el.style.setProperty('--cut-l','" + Math.round(cutLeft / d) + "px');el.style.setProperty('--cut-r','" + Math.round(cutRight / d) + "px');el.dataset.osdark='" + dark + "';})(document.documentElement)", null);
     }
 
-    private int defaultBarGround() { return night() ? Color.rgb(24, 30, 40) : Color.WHITE; }
-    private int defaultBarInk() { return night() ? Color.rgb(231, 235, 242) : Color.rgb(26, 33, 48); }
+    private int defaultBarGround() { return BOOT_BLACK; }
+    private int defaultBarInk() { return Color.rgb(235, 238, 244); }
 
     @Override
+    @SuppressWarnings("deprecation")
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         current = this;
@@ -133,11 +143,11 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
-        outer.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
+        outer.setBackgroundColor(BOOT_BLACK);
         // The page already has settings, export, font and speed controls. A second, empty native
         // toolbar wasted a full row, especially in landscape. Keep just the system-safe insets.
         root = new FrameLayout(this);
-        root.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
+        root.setBackgroundColor(BOOT_BLACK);
         outer.addView(root, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         // Held sideways the page fills the whole screen: the status and navigation bars are hidden (a swipe from the edge brings
         // them back for a moment), and the page goes under the camera's corner too, with only its text kept clear of it (--cut-l,
@@ -167,6 +177,15 @@ public final class MainActivity extends Activity implements Exporter.Asker {
             // (the back gesture, Android 13 and newer; for an app made for Android 16 and newer the only way)
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::goBack);
         }
+        screenOffReceiver = new android.content.BroadcastReceiver() {
+            @Override
+            public void onReceive(android.content.Context ctx, Intent intent) {
+                lockIfImmediate();
+            }
+        };
+        android.content.IntentFilter screenOffFilter = new android.content.IntentFilter(Intent.ACTION_SCREEN_OFF);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(screenOffReceiver, screenOffFilter, RECEIVER_NOT_EXPORTED);
+        else registerReceiver(screenOffReceiver, screenOffFilter);
         String old = webViewTooOld();
         if (old != null) {
             message(old);
@@ -179,9 +198,10 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         }
         TextView wait = message("خوانا آماده می‌شود…\nبار اول چند دقیقه طول می‌کشد (صداها و مدل‌ها باز می‌شوند).");
         new Thread(() -> {
-            String err = null;
+            String err;
             try {
                 start();
+                err = null;
             } catch (Exception e) {
                 err = e.toString();
             }
@@ -199,6 +219,8 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     private TextView message(String text) {
         TextView t = new TextView(this);
         t.setText(text);
+        t.setTextColor(Color.rgb(235, 238, 244));
+        t.setBackgroundColor(BOOT_BLACK);
         t.setGravity(Gravity.CENTER);
         t.setTextSize(18);
         t.setPadding(48, 48, 48, 48);
@@ -209,17 +231,18 @@ public final class MainActivity extends Activity implements Exporter.Asker {
 
     private String webViewTooOld() {
         PackageInfo p = WebView.getCurrentWebViewPackage();
-        if (p == null) return "Android System WebView روی این گوشی نیست.";
+        if (p == null || p.versionName == null) return "Android System WebView روی این گوشی نیست.";
         try {
             int major = Integer.parseInt(p.versionName.split("\\.")[0]);
             if (major < MIN_WEBVIEW_MAJOR) return "WebView این گوشی قدیمی است (" + p.versionName + "). لطفاً Android System WebView را به‌روز کنید.";
-        } catch (RuntimeException ignored) {
-            // (a version name not in the usual form: tried anyway)
+        } catch (RuntimeException e) {
+            return "نسخه‌ی Android System WebView قابل تشخیص نیست. لطفاً آن را به‌روز کنید.";
         }
         return null;
     }
 
     /** Unpacks the page and the models (first start and after an update), then starts the core. */
+    @SuppressWarnings("deprecation")
     private void start() throws Exception {
         File files = getFilesDir();
         PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
@@ -248,11 +271,28 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         maybeBench(getIntent());
     }
 
+    /** WebView subclass that forces keyboard incognito mode (no personalized learning / cloud sync). */
+    private static final class PrivateWebView extends WebView {
+        PrivateWebView(android.content.Context ctx) {
+            super(ctx);
+        }
+        @Override
+        public android.view.inputmethod.InputConnection onCreateInputConnection(android.view.inputmethod.EditorInfo outAttrs) {
+            android.view.inputmethod.InputConnection ic = super.onCreateInputConnection(outAttrs);
+            if (outAttrs != null) {
+                outAttrs.imeOptions |= android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING;
+            }
+            return ic;
+        }
+    }
+
+    @SuppressWarnings("deprecation")
     private void showPage() {
         if (web != null) return;
         CookieManager.getInstance().setAcceptCookie(false);
-        web = new WebView(this);
-        web.setBackgroundColor(night() ? DARK_PAPER : Color.WHITE);
+        web = new PrivateWebView(this);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
+        web.setBackgroundColor(BOOT_BLACK);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setBlockNetworkLoads(true);
@@ -269,10 +309,14 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         s.setSafeBrowsingEnabled(false); // (it would ask Google's servers about pages)
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        if (Build.VERSION.SDK_INT >= 33) s.setAlgorithmicDarkeningAllowed(false);
         s.setMediaPlaybackRequiresUserGesture(false); // (reading aloud plays page after page)
         s.setTextZoom(Math.max(50, Math.min(300, Math.round(getResources().getConfiguration().fontScale * 100))));
-        // (nothing typed in the page, the password of a PDF least of all, is offered to the phone's «autofill» service)
+        // Block Android Autofill and Android System Intelligence (ContentCapture) from reading book text or passwords.
         web.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+        if (Build.VERSION.SDK_INT >= 29) {
+            web.setImportantForContentCapture(android.view.View.IMPORTANT_FOR_CONTENT_CAPTURE_NO_EXCLUDE_DESCENDANTS);
+        }
         web.setWebViewClient(new Client());
         web.setWebChromeClient(new Chrome());
         web.setDownloadListener((url, ua, cd, mime, len) -> { }); // (nothing is downloaded)
@@ -285,6 +329,11 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     private void givePort() {
         server.clearBodies();
         if (pagePort != null) pagePort.close();
+        if (portThread == null) {
+            portThread = new android.os.HandlerThread("khana-port");
+            portThread.start();
+        }
+        android.os.Handler bg = new android.os.Handler(portThread.getLooper());
         WebMessagePort[] ch = web.createWebMessageChannel();
         pagePort = ch[0];
         pagePort.setWebMessageCallback(new WebMessagePort.WebMessageCallback() {
@@ -292,7 +341,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
             public void onMessage(WebMessagePort port, WebMessage m) {
                 server.onPortMessage(port, m);
             }
-        });
+        }, bg);
         web.postWebMessage(new WebMessage("khana-port:" + server.token(), new WebMessagePort[]{ch[1]}), Uri.parse(Server.ORIGIN));
     }
 
@@ -308,10 +357,14 @@ public final class MainActivity extends Activity implements Exporter.Asker {
 
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
-            // every navigation refused (links are not followed, the page is not left), but the reader
-            // page's own pdf.js frame
+            // every navigation refused (links are not followed, the page is not left), except the
+            // isolated pdf.js sandbox frame on its own synthetic host
             Uri u = req.getUrl();
-            boolean frame = !req.isForMainFrame() && "https".equals(u.getScheme()) && Server.HOST.equals(u.getHost())
+            boolean frame = !req.isForMainFrame()
+                    && "https".equals(u.getScheme())
+                    && Server.PDF_HOST.equals(u.getHost())
+                    && (u.getPort() == -1 || u.getPort() == 443)
+                    && u.getUserInfo() == null
                     && FRAME_PATH.equals(u.getPath());
             return !frame;
         }
@@ -373,6 +426,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                 req.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
             } else {
+                if (micRequest != null) micRequest.deny();
                 micRequest = req;
                 requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, ASK_MIC);
             }
@@ -382,6 +436,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     /** Exporter.Asker: the «save as» screen for a file the core made. */
     @Override
     public void ask(Exporter.Saved s) {
+        if (Server.isLocked()) return;
         saving = s;
         Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(s.mime())
                 .putExtra(Intent.EXTRA_TITLE, s.file.getName());
@@ -401,7 +456,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
             if (result == RESULT_OK && data != null && data.getClipData() != null) {
                 android.content.ClipData cd = data.getClipData();
                 chosen = new Uri[cd.getItemCount()];
-                for (int k = 0; k < chosen.length; k++) chosen[k] = cd.getItemAt(k).getUri();
+                java.util.Arrays.setAll(chosen, k -> cd.getItemAt(k).getUri());
             } else if (u != null) {
                 chosen = new Uri[]{u};
             }
@@ -417,6 +472,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     }
 
     @Override
+    @SuppressWarnings("NullableProblems")
     public void onRequestPermissionsResult(int request, String[] perms, int[] results) {
         if (request == ASK_MIC && micRequest != null) {
             if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
@@ -454,17 +510,11 @@ public final class MainActivity extends Activity implements Exporter.Asker {
 
     private static volatile MainActivity current;
 
-    /**
-     * The screen guard: unless the reader allows screenshots in Settings, the window is marked secure. Then no other app can
-     * photograph or record this screen (a screen recorder, a «screen sharing» app), and the list of recent apps shows a blank
-     * card instead of the page being read. Asked again whenever the settings are saved (Server).
-     */
     /** The system-bar margins in the page's own colours, so they match «رنگ پس‌زمینه»; the status bar's icons
      *  dark on a light bar and light on a dark one. */
     static void paintBar(final int ground, final int ink) {
         final MainActivity a = current;
         if (a == null) return;
-        android.util.Log.i("KhanaBar", String.format("bar painted #%06x #%06x", ground & 0xFFFFFF, ink & 0xFFFFFF));
         a.runOnUiThread(() -> {
             if (a.outer == null) return;
             a.pageBarPainted = true;
@@ -486,15 +536,37 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         }
     }
 
+    static void clearWebData() {
+        final MainActivity a = current;
+        if (a == null) return;
+        a.runOnUiThread(() -> {
+            try {
+                if (a.web != null) {
+                    a.web.clearCache(true);
+                    a.web.clearHistory();
+                    a.web.clearFormData();
+                }
+                android.webkit.WebStorage.getInstance().deleteAllData();
+                CookieManager.getInstance().removeAllCookies(null);
+            } catch (Throwable ignored) { }
+        });
+    }
+
+    /**
+     * The screen guard: unless the reader allows screenshots in Settings, the window is marked secure. Then no other app can
+     * photograph or record this screen (a screen recorder, a «screen sharing» app), and the list of recent apps shows a blank
+     * card instead of the page being read. Asked again whenever the settings are saved (Server).
+     */
     static void applyScreenGuard() {
         final MainActivity a = current;
         if (a == null) return;
         boolean allow = false;
-        try {
-            Native.Reply r = new Native.Reply(Native.handle(Native.utf8("GET"), Native.utf8("/api/init"), Native.utf8(""), Native.token(), null));
-            allow = Native.text(r.body).replace(" ", "").contains("\"allowScreenshots\":true");
-        } catch (Throwable e) {
-            allow = false;
+        if (!Server.isLocked()) {
+            try {
+                Native.Reply r = new Native.Reply(Native.handle(Native.utf8("GET"), Native.utf8("/api/init"), Native.utf8(""), Native.token(), null));
+                allow = Native.text(r.body).replace(" ", "").contains("\"allowScreenshots\":true");
+            } catch (Throwable ignored) {
+            }
         }
         final boolean secure = !allow;
         a.runOnUiThread(() -> {
@@ -508,11 +580,12 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         });
     }
 
-    /** A developer's speed test (Bench), only when it is asked for over USB with USB debugging switched on. */
     /** The developer's tests (Bench) exist only in a developer's own build: false by default, so every build that leaves this computer
      *  is safe; android/build.sh switches it on only for KHANA_DEV=1, into a separately named APK. */
     static final boolean DEV_TOOLS = false;
 
+    /** A developer's speed test (Bench), only when it is asked for over USB with USB debugging switched on. */
+    @SuppressWarnings("unused")
     private void maybeBench(Intent it) {}
 
     @Override
@@ -522,9 +595,19 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        if (web != null) web.onResume();
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
-        if (server != null) Exporter.setAsker(this);
+        if (web != null) web.onResume();
+        if (server != null) {
+            applyScreenGuard();
+            Exporter.setAsker(this);
+        }
     }
 
     @Override
@@ -533,8 +616,36 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         super.onPause();
     }
 
+    @Override
+    protected void onStop() {
+        if (web != null) web.onPause();
+        super.onStop();
+        if (picking == null && saving == null && !isChangingConfigurations()) {
+            lockIfImmediate();
+        }
+    }
+
+    /** If App Lock is configured for immediate lock (timeout == 0), lock right away on background or screen-off. */
+    private void lockIfImmediate() {
+        if (server == null) return;
+        try {
+            Native.Reply st = new Native.Reply(Native.handle(Native.utf8("GET"), Native.utf8("/api/lock_status"), Native.utf8(""), Native.utf8(server.token()), null));
+            String body = Native.text(st.body).replace(" ", "");
+            if (body.contains("\"enabled\":true") && body.contains("\"locked\":false") && body.contains("\"timeout\":0")) {
+                Native.handle(Native.utf8("POST"), Native.utf8("/api/lock_now"), Native.utf8(""), Native.utf8(server.token()), null);
+                ReadService.stop(this);
+                Server.clearClipboard(this);
+                applyScreenGuard();
+                runOnUiThread(() -> {
+                    if (web != null) web.evaluateJavascript("window.khanaLockHit && window.khanaLockHit();", null);
+                });
+            }
+        } catch (Throwable ignored) { }
+    }
+
     /** (Android 12 and older; newer ones: the callback in onCreate) */
     @Override
+    @SuppressWarnings("deprecation")
     public void onBackPressed() {
         goBack();
     }
@@ -553,8 +664,16 @@ public final class MainActivity extends Activity implements Exporter.Asker {
 
     @Override
     protected void onDestroy() {
+        if (screenOffReceiver != null) {
+            try { unregisterReceiver(screenOffReceiver); } catch (Throwable ignored) { }
+            screenOffReceiver = null;
+        }
+        if (current == this) current = null;
         if (server != null) server.clearBodies();
         Exporter.setAsker(null);
+        if (isFinishing()) {
+            Server.clearClipboard(this);
+        }
         if (isFinishing() && server != null && !ReadService.reading()) {
             // (the window is ending: the open book is let go, its text overwritten, not left for the process's remaining life)
             try {
@@ -563,8 +682,23 @@ public final class MainActivity extends Activity implements Exporter.Asker {
                 // (nothing more to do)
             }
         }
+        if (picking != null) {
+            picking.onReceiveValue(null);
+            picking = null;
+        }
+        if (micRequest != null) {
+            micRequest.deny();
+            micRequest = null;
+        }
         if (pagePort != null) pagePort.close();
+        if (portThread != null) {
+            portThread.quitSafely();
+            portThread = null;
+        }
         if (web != null) {
+            web.clearCache(true);
+            web.clearHistory();
+            web.clearFormData();
             web.destroy();
             web = null;
         }

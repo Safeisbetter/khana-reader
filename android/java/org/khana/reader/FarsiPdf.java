@@ -17,7 +17,7 @@ import java.nio.charset.StandardCharsets;
  * pages, the app's font (Vazirmatn), each block right to left with Android's own Farsi shaping
  * (letters joined) and line breaking; paragraphs justified, 1.4 line height, the page number in
  * Persian digits at the foot. Each block is its own layout, cut across pages line by line.
- *
+ * <p>
  * The input is the Rust core's records (src/ffi/typeset.rs): a kind byte ('T' the title, 'S' the
  * line under it, 'H' a page's heading, 'P' a paragraph) and UTF-8 text, separated by 0x1E. Only
  * the app's own text comes here (a book's translation), never a document.
@@ -29,13 +29,16 @@ final class FarsiPdf {
 
     private FarsiPdf() {}
 
-    static void write(Context ctx, byte[] recs, OutputStream out) throws java.io.IOException {
-        Typeface font;
+    private static Typeface loadFont(Context ctx) {
         try {
-            font = Typeface.createFromAsset(ctx.getAssets(), "fonts/Vazirmatn.ttf");
-        } catch (RuntimeException e) {
-            font = Typeface.DEFAULT;
+            return Typeface.createFromAsset(ctx.getAssets(), "fonts/Vazirmatn.ttf");
+        } catch (RuntimeException ignored) {
+            return Typeface.DEFAULT;
         }
+    }
+
+    static void write(Context ctx, byte[] recs, OutputStream out) throws java.io.IOException {
+        Typeface font = loadFont(ctx);
         TextPaint title = paint(font, 18, INK), small = paint(font, 9, GREY), text = paint(font, 12, INK);
         PdfDocument pdf = new PdfDocument();
         Pages p = new Pages(pdf, small);
@@ -146,7 +149,7 @@ final class FarsiPdf {
     }
 
     static String persian(int n) {
-        String s = Integer.toString(n);
+        String s = String.valueOf(n);
         StringBuilder b = new StringBuilder();
         for (char c : s.toCharArray()) b.append((char) (0x06F0 + (c - '0')));
         return b.toString();

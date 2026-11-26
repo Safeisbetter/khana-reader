@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds the Android app: android/build/KhanaReader.apk (arm64 phones, Android 10 or newer).
+# Builds the new Android app (arm64 phones, Android 8 or newer).
 # No Gradle: the Rust core (libkhana.so) with cargo and the NDK, the Java shell with javac and d8,
 # the APK with aapt2, zipalign and apksigner. Everything it uses is in android/toolchain (JDK 17,
 # Android SDK platform 37 and build-tools 35, NDK r27c, CTranslate2 4.5.0's source); nothing is fetched while building.
@@ -22,6 +22,21 @@ JAR="$SDK/platforms/android-37.0/android.jar"
 NDKB="$T/ndk-x/android-ndk-r27c/toolchains/llvm/prebuilt/darwin-x86_64/bin"
 API=26
 
+# Keep signing material out of Git. Public builds use the new app's release key.
+K="${KHANA_ANDROID_SIGNING_DIR:-$HERE/keystore}"
+if [ ! -r "$K/khana.jks" ] || [ ! -r "$K/password.txt" ]; then
+  echo "Set KHANA_ANDROID_SIGNING_DIR to the directory containing khana.jks and password.txt." >&2
+  exit 1
+fi
+if [ -n "${KHANA_PUBLIC:-}" ]; then
+  expected=$(cat "$HERE/RELEASE_CERT_SHA256")
+  actual=$("$JAVA_HOME/bin/keytool" -list -v -keystore "$K/khana.jks" -storepass:file "$K/password.txt" -alias khana | awk '$1 == "SHA256:" { print $2 }')
+  if [ "$actual" != "$expected" ]; then
+    echo "The Android signing key does not match the published release certificate." >&2
+    exit 1
+  fi
+fi
+
 # 1. CTranslate2 (once)
 [ -f "$OUT/ct2/libctranslate2.a" ] || "$HERE/build_ct2.sh"
 
@@ -34,7 +49,11 @@ mkdir -p "$OUT/jniLibs/arm64-v8a"
 cp "$HERE/prebuilt/arm64-v8a/"*.so "$OUT/jniLibs/arm64-v8a/"
 # (paths of this Mac left out of the library: the source and cargo folders by fixed names)
 export CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=$ROOT=/khana"$'\x1f'"--remap-path-prefix=$HOME/.cargo=/cargo"$'\x1f'"--remap-path-prefix=$HOME/.rustup=/rustup"
-(cd "$ROOT" && cargo rustc --release --lib --target aarch64-linux-android --crate-type cdylib)
+VENDOR_ARGS=()
+if [ -d "$ROOT/vendor/crates" ]; then
+  VENDOR_ARGS=(--offline --config "source.crates-io.replace-with='vendored-sources'" --config "source.vendored-sources.directory='$ROOT/vendor/crates'")
+fi
+(cd "$ROOT" && cargo rustc --locked --release --lib --target aarch64-linux-android --crate-type cdylib "${VENDOR_ARGS[@]}")
 "$NDKB/llvm-strip" --strip-unneeded -o "$OUT/jniLibs/arm64-v8a/libkhana.so" "$ROOT/target/aarch64-linux-android/release/libkhana.so"
 
 # 3. the Java shell
@@ -103,17 +122,19 @@ fi
 # on its first start as before. resources.arsc stays uncompressed, as Android 11 and newer require)
 "$BT/aapt2" link -o "$OUT/unsigned.apk" --manifest "$MANIFEST" -I "$JAR" -A "$A" -0 .arsc \
   --proguard "$OUT/aapt-rules.pro" "$OUT/res.zip"
-# R8: the shell shrunk and its names shortened (release), keeping what the manifest and JNI name; the public download also has
-# every log call taken out (proguard-public.pro)
+# R8: the shell shrunk and its names shortened (release), keeping what the manifest and JNI name; non-dev builds
+# also strip every log call (proguard-public.pro) so default production builds never leak logs.
 PG_PUBLIC=()
-[ -n "${KHANA_PUBLIC:-}" ] && PG_PUBLIC=(--pg-conf "$HERE/proguard-public.pro")
+if [ -z "${KHANA_DEV:-}" ] || [ -n "${KHANA_PUBLIC:-}" ]; then
+  PG_PUBLIC=(--pg-conf "$HERE/proguard-public.pro")
+fi
 java -cp "$BT/lib/d8.jar" com.android.tools.r8.R8 --release --min-api $API --lib "$JAR" \
   --pg-conf "$OUT/aapt-rules.pro" --pg-conf "$HERE/proguard-rules.pro" ${PG_PUBLIC[@]+"${PG_PUBLIC[@]}"} --pg-map-output "$OUT/mapping.txt" \
   --output "$OUT/dex" "$OUT/classes.jar"
-if [ -n "${KHANA_PUBLIC:-}" ]; then
-  # (checked, not hoped: no reference to Android's log, nor to the developer's tests, is left in the public download's code)
-  if LC_ALL=C grep -q -a 'Landroid/util/Log;' "$OUT/dex/classes.dex"; then echo "PUBLIC BUILD STILL CALLS android.util.Log"; exit 1; fi
-  if LC_ALL=C grep -q -a 'KhanaBench' "$OUT/dex/classes.dex"; then echo "PUBLIC BUILD STILL HAS THE DEVELOPER TESTS"; exit 1; fi
+if [ -z "${KHANA_DEV:-}" ] || [ -n "${KHANA_PUBLIC:-}" ]; then
+  # (checked, not hoped: no reference to Android's log, nor to the developer's tests, is left in non-dev code)
+  if LC_ALL=C grep -q -a 'Landroid/util/Log;' "$OUT/dex/classes.dex"; then echo "RELEASE BUILD STILL CALLS android.util.Log"; exit 1; fi
+  if LC_ALL=C grep -q -a 'KhanaBench' "$OUT/dex/classes.dex"; then echo "RELEASE BUILD STILL HAS THE DEVELOPER TESTS"; exit 1; fi
 fi
 mkdir -p "$OUT/extra/lib"
 rm -rf "$OUT/extra/lib/arm64-v8a"
@@ -124,19 +145,10 @@ cp "$OUT/dex/classes.dex" "$OUT/extra/"
   find classes.dex lib -type f | sort | zip -q -X -0 "$OUT/unsigned.apk" -@)
 "$BT/zipalign" -P 16 -f 4 "$OUT/unsigned.apk" "$OUT/aligned.apk"
 
-# 6. signed with the app's own key (made once, kept in android/keystore: back it up; an update must
-# be signed with the same key)
-APK=KhanaReader.apk; [ -n "${KHANA_LITE:-}" ] && APK=KhanaReader-lite.apk
+# 6. Sign with the new app's key. Back up this key and its password separately;
+# future updates of org.khana.reader.next require the same signing identity.
+APK=KhanaReader-Android-next.apk; [ -n "${KHANA_LITE:-}" ] && APK=KhanaReader-Android-next-lite.apk
 if [ -n "${KHANA_DEV:-}" ] && [ -z "${KHANA_PUBLIC:-}" ]; then APK=KhanaReader-dev.apk; fi
-K="$HERE/keystore"
-if [ ! -f "$K/khana.jks" ]; then
-  mkdir -p "$K"
-  chmod 700 "$K"
-  head -c 24 /dev/urandom | base64 | tr -d '/+=' > "$K/password.txt"
-  chmod 600 "$K/password.txt"
-  keytool -genkeypair -keystore "$K/khana.jks" -storepass:file "$K/password.txt" -keypass:file "$K/password.txt" \
-    -alias khana -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=Khana Reader" >/dev/null
-fi
 "$BT/apksigner" sign --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --ks "$K/khana.jks" --ks-pass "file:$K/password.txt" --ks-key-alias khana --out "$OUT/$APK" "$OUT/aligned.apk"
 "$BT/apksigner" verify -v --print-certs "$OUT/$APK" | grep -E "Verified using v[23] |Signer #1 certificate SHA-256"
 # (never a debuggable APK: any app could then be attached to it over USB and its memory, the open book, read)

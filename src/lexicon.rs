@@ -246,6 +246,45 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("اشکال خارجی", "?aSkAle xAreji"),
     ("اشکال مختلف", "?aSkAle moxtalef"),
     ("اشکال دیگر", "?aSkAle digar"),
+    ("اشکال گوناگون", "?aSkAle gunAgun"),
+    ("اشکال گوناگونی", "?aSkAle gunAguni"),
+    ("اشکال متفاوت", "?aSkAle motafAvet"),
+    ("اشکال متفاوتی", "?aSkAle motafAveti"),
+    ("اشکال متنوع", "?aSkAle motanavve?"),
+    ("اشکال تازه", "?aSkAle tAze"),
+    ("اشکال تازه‌ای", "?aSkAle tAze?i"),
+    ("اشکال نوین", "?aSkAle novin"),
+    ("اشکال سنتی", "?aSkAle sonnati"),
+    ("اشکال اولیه", "?aSkAle ?avvaliyye"),
+    ("اشکال پیشین", "?aSkAle piSin"),
+    ("اشکال سیاسی", "?aSkAle siyAsi"),
+    ("اشکال اجتماعی", "?aSkAle ?ejtemA?i"),
+    ("اشکال اقتصادی", "?aSkAle ?eqtesAdi"),
+    ("اشکال مبارزه", "?aSkAle mobAreze"),
+    ("اشکال اعتراض", "?aSkAle ?e?terAz"),
+    ("اشکال اعتراضی", "?aSkAle ?e?terAzi"),
+    ("اشکال تولید", "?aSkAle tolid"),
+    ("اشکال خشونت", "?aSkAle xoSunat"),
+    ("اشکال قدرت", "?aSkAle qodrat"),
+    ("اشکال بیان", "?aSkAle bayAn"),
+    ("اشکال سازمان‌دهی", "?aSkAle sAzmAndehi"),
+    ("اشکال سازماندهی", "?aSkAle sAzmAndehi"),
+    ("اشکال خاصی", "?aSkAle xAssi"),
+    ("اشکال خاص", "?aSkAle xAss"),
+    ("انواع و اشکال", "?anvA? o ?aSkAle"),
+    ("به اشکال", "be ?aSkAle"),
+    ("در اشکال", "dar ?aSkAle"),
+    ("از اشکال", "?az ?aSkAle"),
+    ("این اشکال", "?in ?aSkAl"),
+    ("همه‌ی اشکال", "hameye ?aSkAle"),
+    ("همه اشکال", "hameye ?aSkAle"),
+    ("اشکالی ندارد", "?eSkAli nadArad"),
+    ("اشکال ندارد", "?eSkAl nadArad"),
+    ("اشکالی نیست", "?eSkAli nist"),
+    ("بی‌اشکال", "bi?eSkAl"),
+    ("بیاشکال", "bi?eSkAl"),
+    ("اشکالات", "?eSkAlAt"),
+    ("اشکالاتی", "?eSkAlAti"),
     ("سپتامبر", "septAmbr"),
     ("اکتبر", "?oktobr"),
     ("نوامبر", "novAmbr"),
@@ -260,7 +299,9 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("با فرض اینکه", "bA farze ?inke"),
     ("فرض اینکه", "farze ?inke"),
     ("گو اینکه", "gu ?inke"),
-    ("مبتنی بر", "mabtani bar"),
+    ("مبتنی بر", "mobtani bar"),
+    ("مبتنی‌بر", "mobtani bar"),
+    ("مبتنی", "mobtani"),
     ("چاره را", "CAre rA"),
     ("مورد ترحّم", "morede tarahhom"),
     ("مورد ترحم", "morede tarahhom"),
@@ -272,8 +313,23 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("مترسک‌ها", "matarsakhA"),
     ("مترسکها", "matarsakhA"),
     ("رأی", "ra?y"),
+    ("رای", "ra?y"),
+    ("رأی دادن", "ra?y dAdan"),
+    ("رای دادن", "ra?y dAdan"),
+    ("رأی‌دادن", "ra?y dAdan"),
+    ("رای‌دادن", "ra?y dAdan"),
+    ("رأی‌گیری", "ra?ygiri"),
+    ("رای‌گیری", "ra?ygiri"),
+    ("رای گیری", "ra?ygiri"),
     ("رأی‌ها", "ra?yhA"),
     ("رأیها", "ra?yhA"),
+    ("رای‌ها", "ra?yhA"),
+    ("جبهه", "jebhe"),
+    ("جبهه‌ی", "jebheye"),
+    ("جبهه ی", "jebheye"),
+    ("جبهه‌ی متحد", "jebheye mottahed"),
+    ("جبهه متحد", "jebheye mottahed"),
+    ("متحد", "mottahed"),
     ("مسئولان", "mas?ulAn"),
     ("مسئولین", "mas?ulin"),
     ("مسوولان", "mas?ulAn"),
@@ -288,6 +344,232 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("خودنگاره", "xodnegAre"),
     ("دورنگار", "durnegAr"),
     ("الگوریتم", "?algoritm"),
+    // Standard Persian calendar months & ordinals (all 12 months neutrally covered)
+    ("فروردین‌ماه", "farvardinmAh"),
+    ("اردیبهشت‌ماه", "?ordibeheStmAh"),
+    ("خرداد‌ماه", "xordAdmAh"),
+    ("خردادماه", "xordAdmAh"),
+    ("تیر‌ماه", "tirmAh"),
+    ("تیرماه", "tirmAh"),
+    ("مرداد‌ماه", "mordAdmAh"),
+    ("مردادماه", "mordAdmAh"),
+    ("شهریور‌ماه", "SahrivarmAh"),
+    ("شهریورماه", "SahrivarmAh"),
+    ("مهر‌ماه", "mehrmAh"),
+    ("مهرماه", "mehrmAh"),
+    ("مهر ماه", "mehrmAh"),
+    ("آبان‌ماه", "?AbAnmAh"),
+    ("آذر‌ماه", "?AzarmAh"),
+    ("آذرماه", "?AzarmAh"),
+    ("آذر ماه", "?AzarmAh"),
+    ("ماه آذر", "mAhe ?Azar"),
+    ("ماه مهر", "mAhe mehr"),
+    ("ماه دی", "mAhe dey"),
+    ("دی‌ماه", "deymAh"),
+    ("دی ماه", "deymAh"),
+    ("دیماه", "deymAh"),
+    ("دی", "dey"),
+    ("بهمن‌ماه", "bahmanmAh"),
+    ("اسفند‌ماه", "?esfandmAh"),
+    ("اسفندماه", "?esfandmAh"),
+    ("یکم", "yekom"),
+    ("یکمِ", "yekome"),
+    // General everyday Persian dictionary & homograph fixes
+    ("اصناف", "?asnAf"),
+    ("برش", "boreS"),
+    ("برش‌ها", "boreShA"),
+    ("برشها", "boreShA"),
+    ("برش‌های", "boreShAye"),
+    ("برشی", "boreSi"),
+    ("دو برش", "do boreS"),
+    ("دوبرش", "do boreS"),
+    ("بحث", "bahs"),
+    ("بحث‌ها", "bahshA"),
+    ("بحثها", "bahshA"),
+    ("بحث‌های", "bahshAye"),
+    ("بحثهای", "bahshAye"),
+    ("بحثی", "bahsi"),
+    ("بی‌تأمل", "bita?ammol"),
+    ("بی‌تأملی", "bita?ammoli"),
+    ("بی‌تامل", "bita?ammol"),
+    ("بی‌تاملی", "bita?ammoli"),
+    ("بی‌رمق", "biramaq"),
+    ("بی‌واسطه", "bivAsete"),
+    ("پدرسالار", "pedarsAlAr"),
+    ("پدرسالاری", "pedarsAlAri"),
+    ("پیشبرد", "piSbord"),
+    ("پیش‌برد", "piSbord"),
+    ("پیشگیری", "piSgiri"),
+    ("پیش‌گیری", "piSgiri"),
+    ("پیگرد", "peygard"),
+    ("پی‌گرد", "peygard"),
+    ("تأمل", "ta?ammol"),
+    ("تامل", "ta?ammol"),
+    ("تشخیص", "taSxis"),
+    ("تشخیصی", "taSxisi"),
+    ("تنگ‌دست", "tangdast"),
+    ("تنگ‌دستان", "tangdastAn"),
+    ("تهی‌دست", "tohidast"),
+    ("تهی‌دستان", "tohidastAn"),
+    ("تهی‌دستی", "tohidasti"),
+    ("جوّ", "javv"),
+    ("جوِ", "javve"),
+    ("جوّی", "javvi"),
+    ("جوسازی", "javvsAzi"),
+    ("خرد جمعی", "xerade jam?i"),
+    ("خرد", "xerad"),
+    ("خردی", "xeradi"),
+    ("بی‌خرد", "bixerad"),
+    ("بی خرد", "bixerad"),
+    ("بیخرد", "bixerad"),
+    ("بی‌خردی", "bixeradi"),
+    ("بی‌خردان", "bixeradAn"),
+    ("کم‌خرد", "kamxerad"),
+    ("کم خرد", "kamxerad"),
+    ("کمخرد", "kamxerad"),
+    ("کم‌خردی", "kamxeradi"),
+    ("خردورز", "xeradvarz"),
+    ("خردورزی", "xeradvarzi"),
+    ("خردورزان", "xeradvarzAn"),
+    ("خردگرا", "xeradgarA"),
+    ("خردگرایی", "xeradgerAyi"),
+    ("خردگرایان", "xeradgarAyAn"),
+    ("خردگرایانه", "xeradgarAyAne"),
+    ("خردستیز", "xeradsetiz"),
+    ("خردستیزی", "xeradsetizi"),
+    ("خردپیشه", "xeradpiSe"),
+    ("خردمندان", "xeradmandAn"),
+    ("خردمند", "xeradmand"),
+    ("خردمندانه", "xeradmandAne"),
+    ("خرد و کلان", "xord ?o kalAn"),
+    ("خرد و بزرگ", "xord ?o bozorg"),
+    ("خرد و ریز", "xord ?o riz"),
+    ("ریز و خرد", "riz ?o xord"),
+    ("پول خرد", "pule xord"),
+    ("سنگ خرد", "sange xord"),
+    ("کاسب خرد", "kAsebe xord"),
+    ("مالکیت خرد", "mAlekiyyate xord"),
+    ("تولید خرد", "tolide xord"),
+    ("سرمایه خرد", "sarmAyeye xord"),
+    ("سرمایه‌ی خرد", "sarmAyeye xord"),
+    ("مقیاس خرد", "meqyAse xord"),
+    ("اقتصاد خرد", "?eqtesAde xord"),
+    ("خرد شد", "xord Sod"),
+    ("خرد شدند", "xord Sodand"),
+    ("خرد شده", "xord Sode"),
+    ("خرد شدن", "xord Sodan"),
+    ("خرد شود", "xord Savad"),
+    ("خرد می‌شود", "xord miSavad"),
+    ("خرد کرد", "xord kard"),
+    ("خرد کردند", "xord kardand"),
+    ("خرد کرده", "xord karde"),
+    ("خرد کردن", "xord kardan"),
+    ("خرد کند", "xord konad"),
+    ("خرد می‌کند", "xord mikonad"),
+    ("خرده‌فرهنگ", "xordefarhang"),
+    ("خرده فرهنگ", "xordefarhang"),
+    ("خرده‌بورژوازی", "xordebur;vAzi"),
+    ("خرده بورژوازی", "xordebur;vAzi"),
+    ("خرده‌فروشی", "xordeforuSi"),
+    ("خرده فروشی", "xordeforuSi"),
+    ("خرده‌فروش", "xordeforuS"),
+    ("خرده‌پا", "xordepA"),
+    ("خرده پا", "xordepA"),
+    ("خرده‌گیری", "xordegiri"),
+    ("خرده گیری", "xordegiri"),
+    ("خرده‌مالک", "xordemAlek"),
+    ("نمی‌خرد", "nemixarad"),
+    ("نخرد", "naxarad"),
+    ("خلط", "xalt"),
+    ("خلط مبحث", "xalte mabhas"),
+    ("خودتشخیصی", "xodtaSxisi"),
+    ("خود‌تشخیصی", "xodtaSxisi"),
+    ("رمق", "ramaq"),
+    ("روند", "ravand"),
+    ("روندها", "ravandhA"),
+    ("روند‌ها", "ravandhA"),
+    ("روندهای", "ravandhAye"),
+    ("روندی", "ravandi"),
+    ("زن‌ستیز", "zansetiz"),
+    ("زن‌ستیزی", "zansetizi"),
+    ("سرخ‌پوست", "sorxpust"),
+    ("سرخ‌پوستان", "sorxpustAn"),
+    ("سفیدپوست", "sefidpust"),
+    ("سفید‌پوست", "sefidpust"),
+    ("سفید پوست", "sefidpust"),
+    ("سفیدپوستان", "sefidpustAn"),
+    ("سفید‌پوستان", "sefidpustAn"),
+    ("سیاه‌پوست", "siyAhpust"),
+    ("سیاهپوست", "siyAhpust"),
+    ("سیاه پوست", "siyAhpust"),
+    ("سیاه‌پوستان", "siyAhpustAn"),
+    ("سیاهپوستان", "siyAhpustAn"),
+    ("شکل‌گیر", "Seklgir"),
+    ("شکل‌گیری", "Seklgiri"),
+    ("صنف", "senf"),
+    ("صنف‌ها", "senfhA"),
+    ("صنفها", "senfhA"),
+    ("صنفی", "senfi"),
+    ("صنفی‌ها", "senfihA"),
+    ("ظرفیت", "zarfiyyat"),
+    ("ظرفیت‌ها", "zarfiyyathA"),
+    ("ظرفیتها", "zarfiyyathA"),
+    ("ظرفیت‌های", "zarfiyyathAye"),
+    ("ظرفیتی", "zarfiyyati"),
+    ("علی‌الاصول", "?alal?osul"),
+    ("علی‌الحساب", "?alalhesAb"),
+    ("علی الحساب", "?alalhesAb"),
+    ("علی‌الظاهر", "?alazzAher"),
+    ("علی‌القاعده", "?alalqa?ede"),
+    ("علی‌ای‌حال", "?alA ?ayye hAl"),
+    ("علی ای حال", "?alA ?ayye hAl"),
+    ("علی‌رغم", "?alA raqme"),
+    ("علی رغم", "?alA raqme"),
+    ("علی", "?ali"),
+    ("فرافکن", "farAfkan"),
+    ("فرافکنی", "farAfkani"),
+    ("قاضی", "qAzi"),
+    ("قضات", "qozzAt"),
+    ("کلاهبرداری", "kolAhbardAri"),
+    ("کلاه‌برداری", "kolAhbardAri"),
+    ("مردسالار", "mardsAlAr"),
+    ("مردسالاری", "mardsAlAri"),
+    ("مصرانه", "moserrAne"),
+    ("معین", "mo?ayyan"),
+    ("معینی", "mo?ayyani"),
+    ("می‌خرد", "mixarad"),
+    ("میخرد", "mixarad"),
+    ("بخرد", "bexarad"),
+    ("می‌رود", "miravad"),
+    ("میرود", "miravad"),
+    ("نمی‌رود", "nemiravad"),
+    ("برود", "beravad"),
+    ("نرود", "naravad"),
+    ("به‌کار رود", "be kAr ravad"),
+    ("به کار رود", "be kAr ravad"),
+    ("به‌شمار رود", "be SomAr ravad"),
+    ("به شمار رود", "be SomAr ravad"),
+    ("پیش رود", "piS ravad"),
+    ("از میان رود", "?az miyAn ravad"),
+    ("از بین رود", "?az beyn ravad"),
+    ("گمان رود", "gomAn ravad"),
+    ("انتظار رود", "?entezAr ravad"),
+    ("نابرابر", "nAbarAbar"),
+    ("نابرابری", "nAbarAbari"),
+    ("نابرابری‌ها", "nAbarAbarihA"),
+    ("نابرابریها", "nAbarAbarihA"),
+    ("واسط", "vAset"),
+    ("واسطه", "vAsete"),
+    ("ویژه", "vi;e"),
+    ("ویژه‌ای", "vi;e?i"),
+    ("ویژه ای", "vi;e?i"),
+    ("ویژهای", "vi;e?i"),
+    ("به‌ویژه", "bevi;e"),
+    ("به ویژه", "bevi;e"),
+    ("ویژگی", "vi;egi"),
+    ("ویژگی‌ها", "vi;egihA"),
+    ("ویژگیها", "vi;egihA"),
+    ("ویژگی‌های", "vi;egihAye"),
     ("استوری", "?estori"),
     ("دانلود", "dAnlod"),
     ("آپلود", "?Aplod"),
@@ -333,12 +615,14 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("وانگهی", "vAngahi"),
     ("درکی", "darki"),
     ("بدوی", "badavi"),
-    ("مضحک", "mozahek"),
-    ("حول", "havl"),
-    ("کردار", "kardAr"),
-    ("موطن", "mavtan"),
+    ("مضحک", "mozhek"),
+    ("حول", "hol"),
+    ("حول و حوش", "hol ?o hoS"),
+    ("کردار", "kerdAr"),
+    ("کردار نیک", "kerdAre nik"),
+    ("موطن", "motan"),
     ("بنگریم", "bengarim"),
-    ("ممارست", "momArast"),
+    ("ممارست", "momAresat"),
     ("جبلی", "jebelli"),
     ("ادعیه", "?ad?iye"),
     ("اینده", "?Ayande"),
@@ -346,7 +630,48 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("پژوهش‌گران", "pa;uheSgarAn"),
     ("ماکیان", "mAkiyAn"),
     ("علیرغم", "?alA raqme"),
+    ("سحر و جادو", "sehr ?o jAdu"),
+    ("جادو و سحر", "jAdu va sehr"),
+    ("سحرآمیز", "sehr?Amiz"),
+    ("سحر آمیز", "sehr?Amiz"),
+    ("باطل‌السحر", "bAtelossehr"),
     ("سحر", "sahar"),
+    ("فقدان", "foqdAn"),
+    ("پرسمان", "porsmAn"),
+    ("متهم", "mottahem"),
+    ("متهمان", "mottahemAn"),
+    ("محتمل", "mohtamal"),
+    ("متداول", "motadAvel"),
+    ("کشت و زرع", "keSt ?o zar?"),
+    ("کشت و کار", "keSt ?o kAr"),
+    ("کشتزار", "keStzAr"),
+    ("کشتزارها", "keStzArhA"),
+    ("شترمرغ", "Sotormorq"),
+    ("شتر مرغ", "Sotormorq"),
+    ("کرم ابریشم", "kerme ?abriSam"),
+    ("کرم خاکی", "kerme xAki"),
+    ("پلی از", "poli ?az"),
+    ("گرد دلاور", "gorde delAvar"),
+    ("بعد اول", "bo?de ?avval"),
+    ("بعد دوم", "bo?de dovvom"),
+    ("بعد سوم", "bo?de sevvom"),
+    ("بعد چهارم", "bo?de CahArom"),
+    ("بعد سیاسی", "bo?de siyAsi"),
+    ("بعد اجتماعی", "bo?de ?ejtemA?i"),
+    ("بعد اقتصادی", "bo?de ?eqtesAdi"),
+    ("بعد فرهنگی", "bo?de farhangi"),
+    ("بعد روانی", "bo?de ravAni"),
+    ("بعد فلسفی", "bo?de falsafi"),
+    ("بعد نظری", "bo?de nazari"),
+    ("بعد عملی", "bo?de ?amali"),
+    ("تک‌بعدی", "takbo?di"),
+    ("تک بعدی", "takbo?di"),
+    ("دوبعدی", "dobo?di"),
+    ("دو بعدی", "dobo?di"),
+    ("سه‌بعدی", "sebo?di"),
+    ("سه بعدی", "sebo?di"),
+    ("چندبعدی", "Candbo?di"),
+    ("چند بعدی", "Candbo?di"),
     ("قرمه‌سبزی", "qormesabzi"),
     ("استریت", "?estreyt"),
 ];
@@ -389,12 +714,43 @@ impl LexiconG2P {
         LexiconG2P { base, lexicon: Mutex::new((Vec::new(), None)), plain: Mutex::new(HashMap::new()), memo: Mutex::new(HashMap::new()) }
     }
 
-    fn spelling_phonemes(&self, spelling: &str) -> R {
+    pub fn spelling_phonemes(&self, spelling: &str) -> R {
         let spelling = strip(spelling);
         if spelling.is_empty() {
             return Ok(String::new());
         }
-        if search(PHONEME_WORD, &spelling.replace(' ', "")) || search(r"[ً-ْ]", spelling) {
+        // 1) User-typed Finglish pronunciation (e.g. "mobtani", "boresh", "shekl giri")
+        if crate::phon::is_plain_finglish_spelling(spelling) {
+            return Ok(crate::phon::finglish_to_phonemes(spelling));
+        }
+        // 2) Built-in internal Parsigo phoneme code (contains uppercase A/S/C/?/;)
+        if search(PHONEME_WORD, &spelling.replace(' ', "")) {
+            return Ok(pronounce(spelling));
+        }
+        // 3) Persian spelling WITH vowel marks (َ ِ ُ ْ ّ): merge user's explicit marks onto base G2P
+        //    so marking even 1 letter (e.g. "بُرش" or "مُبتنی" or "اَشکال") keeps all other vowels natural!
+        if search(r"[ً-ْ]", spelling) {
+            let mut out_words = Vec::new();
+            for w in split_ws(spelling) {
+                let plain: String = w.chars().filter(|c| !('\u{064b}'..='\u{0652}').contains(c) && *c != '\u{0670}').collect();
+                let base_ph = if !plain.is_empty() {
+                    self.base.phonemise(&repair_default(&plain), true).unwrap_or_default()
+                } else {
+                    String::new()
+                };
+                let base_one = split_ws(&base_ph).into_iter().next().unwrap_or("");
+                let merged = if !base_one.is_empty() {
+                    crate::phon::apply_user_marks(w, base_one)
+                } else {
+                    pronounce_word(w)
+                };
+                if !merged.is_empty() {
+                    out_words.push(merged);
+                }
+            }
+            if !out_words.is_empty() {
+                return Ok(out_words.join(" "));
+            }
             return Ok(pronounce(spelling));
         }
         if let Some(p) = self.plain.lock().unwrap().get(spelling) {
@@ -406,18 +762,26 @@ impl LexiconG2P {
     }
 
     pub fn set_lexicon(&self, user: &[(String, String)]) {
-        let mut all: Vec<(String, String)> =
-            BUILTIN_LEXICON.iter().chain(GENERAL_LEXICON).chain(RUST_LEXICON).map(|(a, b)| (a.to_string(), b.to_string())).collect();
+        let mut all: Vec<(String, String, bool)> =
+            BUILTIN_LEXICON.iter().chain(GENERAL_LEXICON).chain(RUST_LEXICON).map(|(a, b)| (a.to_string(), b.to_string(), true)).collect();
         for (w, s) in user {
-            match all.iter_mut().find(|x| &x.0 == w) {
-                Some(x) => x.1 = s.clone(),
-                None => all.push((w.clone(), s.clone())),
+            let clean_w = repair_default(w.trim().trim_matches(|c: char| "«»()[]{}،؛:.!?؟\"'-–—".contains(c)));
+            if clean_w.is_empty() {
+                continue;
+            }
+            match all.iter_mut().find(|x| repair_default(&x.0) == clean_w) {
+                Some(x) => {
+                    x.0 = clean_w;
+                    x.1 = s.clone();
+                    x.2 = false;
+                }
+                None => all.push((clean_w, s.clone(), false)),
             }
         }
         let mut lex: Vec<(String, String)> = Vec::new();
-        for (word, spelling) in all {
+        for (word, spelling, builtin) in all {
             let word = repair_default(&word);
-            let ph = self.spelling_phonemes(&spelling).unwrap_or_default();
+            let ph = if builtin { pronounce(&spelling) } else { self.spelling_phonemes(&spelling).unwrap_or_default() };
             if !word.is_empty() && !ph.is_empty() {
                 match lex.iter_mut().find(|x| x.0 == word) {
                     Some(x) => x.1 = ph,
@@ -441,7 +805,8 @@ impl LexiconG2P {
     }
 
     pub fn phonemise(&self, text: &str, keep_ezafe: bool) -> R {
-        let key = (if source_is_dutch() { format!("nl|{text}") } else { text.to_string() }, keep_ezafe);
+        let mode = if crate::vocab::is_finglish() { "fg|" } else if source_is_dutch() { "nl|" } else { "" };
+        let key = (if mode.is_empty() { text.to_string() } else { format!("{mode}{text}") }, keep_ezafe);
         if let Some(p) = self.memo.lock().unwrap().get(&key) {
             return Ok(p.clone());
         }
@@ -458,6 +823,23 @@ impl LexiconG2P {
         let mut text = sub(r"ق\.\s?م\.?", "قبل از میلاد", text);
         text = sub(r"([\u0600-\u06FF]{2,})ه[ \u200c](گی|گان|گانی)(?![\u0600-\u06FF])", "\\1\\2", &text);
         text = sub(r"(?<=[\u0600-\u06FF]ه) +(ی|ای)(?![\u0600-\u06FF\u200c])", "\u{200c}\\1", &text);
+        // General Persian compound ZWNJ boundary rules (teaches G2P thousands of Persian compounds cleanly)
+        text = sub(
+            r"([\u0600-\u06FF]{2,})[\s\u200c]?(سالار(?:ی|ان|انه)?|ستیز(?:ی|ان|انه)?|بگیر(?:ان|ها|‌ها|ی)?|بردار(?:ی|ان|ها|‌ها)?|تشخیصی)(?![\u0600-\u06FF\u200c])",
+            "\\1\u{200c}\\2",
+            &text,
+        );
+        text = sub(
+            r"(?<![\u0600-\u06FF\u200c])(بی|خود|پیش|تهی|تنگ)[\s\u200c]?(تأمل(?:ی)?|تامل(?:ی)?|واسطه|رمق|دست(?:ان|ی)?|گیری|برد)(?![\u0600-\u06FF\u200c])",
+            "\\1\u{200c}\\2",
+            &text,
+        );
+        // General all-12 Persian calendar months + year rule (e.g. "مهر ۵۷", "آذر ۱۳۹۸", "دی ۱۴۰۲")
+        text = sub(
+            r"(?<![\u0600-\u06FF\u200c])(فروردین|اردیبهشت|خرداد|تیر|مرداد|شهریور|مهر|آبان|آذر|دی|بهمن|اسفند)\s+(?=[\d۰-۹٠-٩]{2,4}(?![\d۰-۹٠-٩]))",
+            "\\1\u{200c}ماه ",
+            &text,
+        );
         text = sub(r"(?<=[\d۰-۹٠-٩]) قم(?![\w])", " قبل از میلاد", &text);
         text = sub(r"(?<=[\d۰-۹٠-٩])\s*ص\.?(?![\w])", " صفحه", &text);
         text = sub(r"(?<![\d۰-۹٠-٩])([\d۰-۹٠-٩]{2,4})\s*[-–]\s*([\d۰-۹٠-٩]{2,4})(?![\d۰-۹٠-٩])", r"\1 تا \2", &text);
@@ -620,11 +1002,39 @@ impl LexiconG2P {
             ph = phw.join(" ");
         }
         let in_fix = |w: &str| lookup(WORD_FIX, w).is_some();
+        let has_harakat = |w: &str| {
+            let trimmed = w.trim_end_matches(|c: char| !"آابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهیيئؤأإةۀ\u{064b}\u{064c}\u{064d}\u{064e}\u{064f}\u{0650}\u{0651}\u{0652}".contains(c));
+            let without_ezafe_kasra = trimmed.strip_suffix('\u{0650}').unwrap_or(trimmed);
+            without_ezafe_kasra.chars().any(|c| ('\u{064b}'..='\u{0652}').contains(&c))
+        };
         let pair_fix = |a: &str, b: &str| WORD_FIX_PAIRS.iter().find(|((x, y), _)| *x == a && *y == b).map(|(_, v)| *v);
-        if words.iter().any(|w| EZAFE_PRONE.contains(&core(w).as_str())) || words.iter().any(|w| search(KASRA_END, w) || w.contains("ساخت") || w.contains("جستار") || in_fix(&core(w))) {
+        if words.iter().any(|w| EZAFE_PRONE.contains(&core(w).as_str())) || words.iter().any(|w| has_harakat(w) || search(KASRA_END, w) || w.contains("ساخت") || w.contains("جستار") || in_fix(&core(w))) {
             let aligned = align_words(&words, &phw);
             let has = |k: usize| aligned.iter().find(|x| x.0 == k).map(|x| x.1);
             for &(i, j) in &aligned {
+                if has_harakat(&words[i]) {
+                    let clean_w = words[i].trim_matches(|c: char| "«»()[]{}،؛:.!?؟\"'-–—".contains(c));
+                    let ez_kasra = search(KASRA_END, clean_w);
+                    let w_for_marks = if ez_kasra { clean_w.trim_end_matches('\u{0650}') } else { clean_w };
+                    let had_ez = phw[j].ends_with('1') || ez_kasra;
+                    let base = if let Some(b) = phw[j].strip_suffix("ye1") {
+                        b
+                    } else if let Some(b) = phw[j].strip_suffix("e1") {
+                        b
+                    } else {
+                        phw[j].trim_end_matches('1')
+                    };
+                    let marked = crate::phon::apply_user_marks(w_for_marks, base);
+                    if !marked.is_empty() {
+                        phw[j] = if had_ez && !marked.ends_with('1') {
+                            let suf = if ends_any(&marked, &["A", "u", "i", "o", "e"]) { "ye1" } else { "e1" };
+                            format!("{marked}{suf}")
+                        } else {
+                            marked
+                        };
+                        continue;
+                    }
+                }
                 let key = core(&words[i]);
                 let pair = if i + 1 < words.len() { pair_fix(&key, &core(&words[i + 1])) } else { None };
                 if let (Some((a, b)), Some(j2)) = (pair, has(i + 1)) {

@@ -53,6 +53,19 @@ fn main() {
         println!("cargo:rerun-if-changed=native");
         return;
     }
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        // The per-WebView proxy API is available only on macOS 14+. Apply a WebKit
+        // content blocker on every supported macOS version before either view loads.
+        cc::Build::new()
+            .file("native/network_guard.m")
+            .flag("-fobjc-arc")
+            .warnings(false)
+            .opt_level(2)
+            .compile("network_guard");
+        println!("cargo:rustc-link-lib=framework=WebKit");
+        println!("cargo:rustc-link-lib=framework=AppKit");
+        println!("cargo:rerun-if-changed=native/network_guard.m");
+    }
     if android {
         let ct2 = root.join("android/build/ct2");
         cc::Build::new()
@@ -106,9 +119,11 @@ fn main() {
     println!("cargo:rerun-if-changed=native/ct2_shim.cpp");
     lame(&root, false);
     println!("cargo:rustc-link-search=native={}", lib.display());
-    // during development the libraries are found in vendor/lib; in the app bundle in Frameworks
-    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib.display());
+    // Search the app bundle's Frameworks folder first; only add vendor/lib rpath in debug builds.
     println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path/../Frameworks");
+    if std::env::var("PROFILE").as_deref() != Ok("release") {
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib.display());
+    }
 }
 
 /// LAME 3.100, the MP3 encoder inside the Python app's lameenc (library part only)

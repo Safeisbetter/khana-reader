@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.30</string>
+	<string>1.36</string>
 	<key>CFBundleVersion</key>
-	<string>1.30</string>
+	<string>1.36</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>LSArchitecturePriority</key>
@@ -31,6 +31,8 @@
 	</dict>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSQuitAlwaysKeepsWindows</key>
+	<false/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Khana Reader records a short sample of your voice so it can read in your voice. The sample stays on this Mac.</string>
 </dict>

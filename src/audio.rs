@@ -2,7 +2,8 @@
 use std::path::Path;
 
 pub fn read_wav(path: &Path) -> Result<(Vec<f32>, u32), String> {
-    let mut r = hound::WavReader::open(path).map_err(|e| e.to_string())?;
+    let mut raw = crate::vault::read_bytes(path).map_err(|e| e.to_string())?;
+    let mut r = hound::WavReader::new(std::io::Cursor::new(&raw)).map_err(|e| e.to_string())?;
     let spec = r.spec();
     let ch = spec.channels.max(1) as usize;
     let data: Vec<f32> = match spec.sample_format {
@@ -12,6 +13,7 @@ pub fn read_wav(path: &Path) -> Result<(Vec<f32>, u32), String> {
             r.samples::<i32>().map(|s| (s.unwrap_or(0) as f64 / scale) as f32).collect()
         }
     };
+    crate::ffi::wipe::bytes(&mut raw);
     let mono = if ch == 1 {
         data
     } else {
@@ -126,10 +128,16 @@ pub fn resample_poly(x: &[f32], up: usize, down: usize) -> Vec<f32> {
 }
 
 pub fn voice_pitch(x: &[f32], rate: usize) -> Option<f64> {
+    voice_quality(x, rate).0
+}
+
+/// Returns `(median_pitch_hz, voiced_frame_fraction)` over active frames.
+/// Real speech has clear harmonic periodicity (voiced_fraction >= 0.16); static/noise/hiss has near-zero.
+pub fn voice_quality(x: &[f32], rate: usize) -> (Option<f64>, f64) {
     let n = (rate as f64 * 0.04) as usize;
     let hop = (rate as f64 * 0.01) as usize;
-    if x.len() < n * 10 {
-        return None;
+    if x.len() < n * 3 || n == 0 || hop == 0 {
+        return (None, 0.0);
     }
     let mut planner = realfft::RealFftPlanner::<f64>::new();
     let fwd = planner.plan_fft_forward(2 * n);
@@ -137,7 +145,7 @@ pub fn voice_pitch(x: &[f32], rate: usize) -> Option<f64> {
     let lo = rate / 400;
     let hi = rate / 70;
     let mut pitches = Vec::new();
-    let mut frames = 0;
+    let mut frames = 0usize;
     let mut start = 0;
     let mut buf = fwd.make_input_vec();
     let mut spec = fwd.make_output_vec();
@@ -154,11 +162,15 @@ pub fn voice_pitch(x: &[f32], rate: usize) -> Option<f64> {
         for (i, b) in buf.iter_mut().enumerate() {
             *b = if i < n { fr[i] as f64 - mean } else { 0.0 };
         }
-        fwd.process(&mut buf, &mut spec).ok()?;
+        if fwd.process(&mut buf, &mut spec).is_err() {
+            return (None, 0.0);
+        }
         for c in spec.iter_mut() {
             *c = realfft::num_complex::Complex::new(c.norm_sqr(), 0.0);
         }
-        inv.process(&mut spec, &mut ac).ok()?;
+        if inv.process(&mut spec, &mut ac).is_err() {
+            return (None, 0.0);
+        }
         let mut best = lo;
         for l in lo..hi {
             if ac[l] > ac[best] {
@@ -169,10 +181,63 @@ pub fn voice_pitch(x: &[f32], rate: usize) -> Option<f64> {
             pitches.push(rate as f64 / best as f64);
         }
     }
-    if frames < 8 || pitches.len() < 8 {
-        return None;
+    let voiced_frac = if frames == 0 { 0.0 } else { pitches.len() as f64 / frames as f64 };
+    if frames < 2 || pitches.len() < 2 {
+        return (None, voiced_frac);
     }
-    Some(median(&mut pitches))
+    (Some(median(&mut pitches)), voiced_frac)
+}
+
+/// Detects metallic digital buzzing, screeching, static, or codec rail-clipping in synthesized audio (<1 ms).
+/// Clean Persian speech has moderate first-difference spectral slope, low ZCR, and near-zero hard clipping;
+/// collapsed FlowLM/Mimi digital noise trips one or more of these physical bounds immediately.
+pub fn is_digital_noise(x: &[f32], rate: usize) -> bool {
+    if x.len() < (rate / 12).max(64) {
+        return false;
+    }
+    let mut sum_sq = 0.0f64;
+    let mut diff_sq = 0.0f64;
+    let mut zc = 0usize;
+    let mut clipped = 0usize;
+    let mut active = 0usize;
+    let mut prev = x[0];
+    for &v in x {
+        if !v.is_finite() || v.abs() > 3.5 {
+            return true;
+        }
+        let vf = v as f64;
+        sum_sq += vf * vf;
+        let d = vf - prev as f64;
+        diff_sq += d * d;
+        if v.abs() >= 0.02 {
+            active += 1;
+            if v.abs() >= 0.96 {
+                clipped += 1;
+            }
+            if (v >= 0.0) != (prev >= 0.0) {
+                zc += 1;
+            }
+        }
+        prev = v;
+    }
+    if active < (rate / 25).max(32) || !(sum_sq > 1e-7) {
+        return false;
+    }
+    let clip_frac = clipped as f64 / active as f64;
+    if clip_frac > 0.03 {
+        return true;
+    }
+    // First-difference RMS / signal RMS: clean speech ~0.15..0.90; harsh digital hash/screech >1.32
+    let diff_ratio = (diff_sq / sum_sq).sqrt();
+    if diff_ratio > 1.32 {
+        return true;
+    }
+    // Active-sample zero-crossing rate: speech ~0.04..0.24; broadband noise/metallic buzz >0.38
+    let zcr = zc as f64 / active as f64;
+    if zcr > 0.38 {
+        return true;
+    }
+    false
 }
 
 pub fn median(v: &mut [f64]) -> f64 {
@@ -207,6 +272,56 @@ pub fn fade_edges(mut audio: Vec<f32>, rate: usize, ms: usize) -> Vec<f32> {
             audio[i] *= ramp[i];
             audio[len - n + i] *= ramp[n - 1 - i];
         }
+    }
+    audio
+}
+
+/// Active-speech RMS loudness normalizer with smooth soft-knee peak limiting.
+/// Ensures all built-in voice models and user recordings ("صدای من") play at the exact same
+/// comfortable volume level without ever clipping transients.
+pub fn normalize_loudness(mut audio: Vec<f32>, rate: usize, target_rms: f64) -> Vec<f32> {
+    if audio.is_empty() || !(target_rms > 0.0) {
+        return audio;
+    }
+    let frame = (rate / 50).max(1); // 20 ms analysis frames
+    let mut energies: Vec<f64> = Vec::with_capacity(audio.len() / frame + 1);
+    let mut max_e = 0.0f64;
+    for chunk in audio.chunks(frame) {
+        let e = rms(chunk);
+        if e.is_finite() {
+            if e > max_e {
+                max_e = e;
+            }
+            energies.push(e);
+        }
+    }
+    if !(max_e > 1e-4) {
+        return audio;
+    }
+    // Measure only active speech frames (ignoring silence/pauses between clauses)
+    let floor = (0.15 * max_e).max(0.004);
+    let (mut sum_sq, mut count) = (0.0f64, 0usize);
+    for e in energies {
+        if e >= floor {
+            sum_sq += e * e;
+            count += 1;
+        }
+    }
+    let active_rms = if count > 0 { (sum_sq / count as f64).sqrt() } else { rms(&audio) };
+    if !(active_rms.is_finite() && active_rms > 1e-5) {
+        return audio;
+    }
+    let gain = (target_rms / active_rms).clamp(0.25, 4.5) as f32;
+    let knee = 0.88f32;
+    let head = 0.08f32;
+    for x in audio.iter_mut() {
+        let y = *x * gain;
+        let ay = y.abs();
+        *x = if ay <= knee {
+            y
+        } else {
+            y.signum() * (knee + head * ((ay - knee) / head).tanh())
+        };
     }
     audio
 }
@@ -292,8 +407,8 @@ pub fn settle_tail(mut a: Vec<f32>, rate: usize) -> Vec<f32> {
     if !(level > 1e-6) {
         return a;
     }
-    let Some(last) = env.iter().rposition(|e| *e >= 0.045 * level) else { return a };
-    let keep = ((last + 1) * f + rate * 12 / 100).min(a.len());
+    let Some(last) = env.iter().rposition(|e| *e >= 0.022 * level) else { return a };
+    let keep = ((last + 1) * f + rate * 17 / 100).min(a.len());
     if a.len() - keep < 4 * f {
         return a;
     }

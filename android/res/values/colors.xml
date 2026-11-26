@@ -1,1 +1,4 @@
-<resources><color name="icon_background">#A71930</color></resources>
+<resources>
+    <color name="icon_background">#A71930</color>
+    <color name="boot_black">#000000</color>
+</resources>

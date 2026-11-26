@@ -7,7 +7,6 @@ import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -22,12 +21,12 @@ import java.util.Map;
  * layout's records and is made into the PDF here (FarsiPdf). The app's private copy is deleted once
  * it is saved; until then (cancelled, or the app was closed) it is offered again.
  */
-final class Exporter {
+public final class Exporter {
     /** 1.29 deep check: copies being written to a place the reader chose; closing the app waits for them (Closed). */
     static final java.util.concurrent.atomic.AtomicInteger WRITING = new java.util.concurrent.atomic.AtomicInteger();
 
     /** a file the core made, and where it was saved (null: not yet) */
-    static final class Saved {
+    public static final class Saved {
         final File file;
         final String kind;
         Uri uri;
@@ -38,12 +37,12 @@ final class Exporter {
         }
 
         String mime() {
-            return kind.equals("mp3") ? "audio/mpeg" : kind.equals("wav") ? "audio/wav" : "application/pdf";
+            return "mp3".equals(kind) ? "audio/mpeg" : "wav".equals(kind) ? "audio/wav" : "application/pdf";
         }
     }
 
     /** the window, while it is in front: it shows the «save as» screen */
-    interface Asker {
+    public interface Asker {
         void ask(Saved s);
     }
 
@@ -74,25 +73,26 @@ final class Exporter {
     }
 
     static synchronized void drain(Context ctx) {
+        if (Server.isLocked()) return;
         String ev = Native.text(Native.takeEvents());
         for (String line : ev.isEmpty() ? new String[0] : ev.split("\n")) {
             int tab = line.indexOf('\t');
             if (tab < 0) continue;
             String kind = line.substring(0, tab);
             File f = new File(line.substring(tab + 1));
-            if (kind.equals("mp3") || kind.equals("wav")) {
+            if ("mp3".equals(kind) || "wav".equals(kind)) {
                 // (kept inside the app: no «save as» screen until the reader asks for a copy, «ذخیره در گوشی…»)
                 byPath.put(f.getPath(), new Saved(f, kind));
-            } else if (kind.equals("pdf")) {
+            } else if ("pdf".equals(kind)) {
                 add(new Saved(f, kind));
-            } else if (kind.equals("reveal")) {
+            } else if ("reveal".equals(kind)) {
                 Saved s = byPath.get(f.getPath());
                 if (s == null && f.isFile() && (f.getName().endsWith(".mp3") || f.getName().endsWith(".wav"))) {
                     s = new Saved(f, f.getName().endsWith(".mp3") ? "mp3" : "wav");
                     byPath.put(f.getPath(), s);
                 }
                 if (s == null) continue;
-                if (!s.kind.equals("pdf")) {
+                if (!"pdf".equals(s.kind)) {
                     // (a sound file of the library: a copy may be saved as often as the reader likes)
                     if (!waiting.contains(s)) waiting.addFirst(s);
                 } else if (s.uri != null) {
@@ -111,8 +111,31 @@ final class Exporter {
         askNext();
     }
 
+    static synchronized void onUnlocked() {
+        askNext();
+    }
+
+    static synchronized void clearAll(Context ctx) {
+        waiting.clear();
+        byPath.clear();
+        asking = false;
+        try {
+            ctx.stopService(new android.content.Intent(ctx, JobService.class));
+        } catch (Throwable ignored) { }
+        File dir = new File(ctx.getFilesDir(), "saved");
+        File[] fs = dir.listFiles();
+        if (fs != null) {
+            for (File f : fs) {
+                if (f.isFile()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    f.delete();
+                }
+            }
+        }
+    }
+
     private static void askNext() {
-        if (asker == null || asking || waiting.isEmpty()) return;
+        if (asker == null || asking || waiting.isEmpty() || Server.isLocked()) return;
         asking = true;
         Saved s = waiting.peek();
         Asker a = asker;
@@ -126,7 +149,7 @@ final class Exporter {
             asking = false;
         }
         if (u == null) {
-            Toast.makeText(ctx, s.kind.equals("pdf") ? "فایل ذخیره نشد. با «ذخیره / باز کردن» دوباره امتحان کنید." : "رونوشت ذخیره نشد. فایل در «فایل‌های من» می‌ماند.", Toast.LENGTH_LONG).show();
+            Toast.makeText(ctx, "pdf".equals(s.kind) ? "فایل ذخیره نشد. با «ذخیره / باز کردن» دوباره امتحان کنید." : "رونوشت ذخیره نشد. فایل در «فایل‌های من» می‌ماند.", Toast.LENGTH_LONG).show();
             return;
         }
         Context app = ctx.getApplicationContext();
@@ -148,7 +171,7 @@ final class Exporter {
                 }
             } catch (Exception e) {
                 Log.w("Khana", "saving failed: " + e.getClass().getSimpleName()); // (not the message: it can hold the file's name)
-                msg = "ذخیره نشد: " + e.getMessage();
+                msg = "ذخیره نشد. دوباره امتحان کنید.";
             }
             WRITING.decrementAndGet();
             final String m = msg;
@@ -162,15 +185,22 @@ final class Exporter {
     }
 
     private static void write(Context ctx, Saved s, Uri u) throws Exception {
+        if (Server.isLocked()) throw new IllegalStateException("App Lock is active");
         try (OutputStream out = ctx.getContentResolver().openOutputStream(u, "wt")) {
             if (out == null) throw new IllegalStateException("the place cannot be written");
             if (s.kind.equals("mp3") || s.kind.equals("wav")) {
-                try (InputStream in = new FileInputStream(s.file)) {
+                try (InputStream in = Files.newInputStream(s.file.toPath())) {
                     byte[] buf = new byte[1 << 16];
-                    for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
+                    int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
                 }
             } else {
-                FarsiPdf.write(ctx, Files.readAllBytes(s.file.toPath()), out);
+                byte[] recs = Files.readAllBytes(s.file.toPath());
+                try {
+                    FarsiPdf.write(ctx, recs, out);
+                } finally {
+                    java.util.Arrays.fill(recs, (byte) 0);
+                }
             }
         }
     }

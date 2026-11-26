@@ -30,6 +30,8 @@ pub mod lame;
 #[cfg(windows)]
 #[path = "lame_stub.rs"]
 pub mod lame;
+#[cfg(target_os = "macos")]
+pub mod network_guard;
 pub mod onnx;
 #[cfg(target_os = "macos")]
 pub mod power;

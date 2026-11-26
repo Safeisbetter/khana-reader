@@ -17,6 +17,15 @@ pub fn bytes(buf: &mut [u8]) {
     compiler_fence(Ordering::SeqCst);
 }
 
+/// Zeros every u32 of `buf`.
+pub fn u32s(buf: &mut [u32]) {
+    for w in buf.iter_mut() {
+        // SAFETY: `w` is a valid, aligned, exclusive reference to one initialised u32.
+        unsafe { std::ptr::write_volatile(w, 0) };
+    }
+    compiler_fence(Ordering::SeqCst);
+}
+
 /// Zeros the bytes of a text and empties it (its memory is given back with the String).
 pub fn string(s: &mut String) {
     // SAFETY: zero bytes are valid UTF-8, so the String stays valid.

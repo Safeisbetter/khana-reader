@@ -6,10 +6,10 @@
      (asked when first used; WebView also needs MODIFY_AUDIO_SETTINGS for it; a light build made with
      KHANA_NO_MIC=1 leaves both out); the wake lock and the foreground service only to keep a long MP3/PDF job running. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="org.khana.reader"
+    package="org.khana.reader.next"
     android:targetSandboxVersion="2"
-    android:versionCode="15"
-    android:versionName="1.30">
+    android:versionCode="20"
+    android:versionName="1.36">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="37" />
 
@@ -21,7 +21,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <application
-        android:label="خوانا"
+        android:label="خوانا جدید"
         android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:fullBackupContent="false"
@@ -31,6 +31,7 @@
         android:usesCleartextTraffic="false"
         android:allowAudioPlaybackCapture="false"
         android:memtagMode="async"
+        android:gwpAsanMode="always"
         android:supportsRtl="true"
         android:enableOnBackInvokedCallback="true"
         android:theme="@style/AppTheme">
@@ -40,7 +41,7 @@
         <meta-data android:name="android.webkit.WebView.EnableSafeBrowsing" android:value="false" />
 
         <activity
-            android:name=".MainActivity"
+            android:name="org.khana.reader.MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale|layoutDirection|fontWeightAdjustment|mcc|mnc|colorMode|touchscreen|grammaticalGender">
@@ -51,12 +52,12 @@
         </activity>
 
         <service
-            android:name=".ReadService"
+            android:name="org.khana.reader.ReadService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
         <service
-            android:name=".JobService"
+            android:name="org.khana.reader.JobService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"

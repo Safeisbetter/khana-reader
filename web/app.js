@@ -1,4 +1,9 @@
 "use strict";
+// Defense-in-depth offline lock: disable outbound real-time/beacon network APIs on all platforms.
+for (const k of ["RTCPeerConnection", "webkitRTCPeerConnection", "RTCDataChannel", "RTCSessionDescription", "RTCIceCandidate", "WebSocket", "EventSource"]) {
+  try { Object.defineProperty(window, k, { value: undefined, configurable: false, writable: false }); } catch (_) {}
+}
+try { if (navigator.sendBeacon) Object.defineProperty(navigator, "sendBeacon", { value: () => false, configurable: false, writable: false }); } catch (_) {}
 // (the token comes in a meta tag: the page has no inline script, so its policy can forbid them)
 const TOKEN = document.querySelector("meta[name=khana-token]").content;
 const $ = id => document.getElementById(id);
@@ -6,7 +11,7 @@ const fa = n => String(n).replace(/\d/g, d => "۰۱۲۳۴۵۶۷۸۹"[d]);
 // (numbers typed in a box are Farsi digits; whatever digits are typed are read: ۱۲, 12 and ١٢ are all twelve)
 const latinDigits = t => String(t).replace(/[۰-۹]/g, d => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
 const numOf = v => parseInt(latinDigits(v).replace(/\D/g, ""), 10) || 0;
-const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 async function api(path, opts = {}) {
@@ -35,7 +40,7 @@ const S = { settings: {}, voices: [], doc: null, page: 1, view: "text", paras: [
 /* ---------------- settings ---------------- */
 // (the looks to choose from; anything else follows the system: light or dark)
 // (modern: the 2026 design, the default for a new install; a saved choice is kept)
-const THEMES = ["modern", "light", "dark", "night", "black", "blackyellow", "glass", "glassdark", "depth", "depthdark"];
+const THEMES = ["modern", "auto", "light", "dark", "night", "black", "blackyellow", "glass", "glassdark", "depth", "depthdark"];
 function applySettings() {
   const s = S.settings;
   const uiScale = [1, 1.15, 1.3].includes(Number(s.uiScale)) ? Number(s.uiScale) : 1;
@@ -107,6 +112,10 @@ function applySettings() {
   document.querySelectorAll("input[name=cursor]").forEach(r => r.checked = r.value === (s.cursor || "large"));
   $("autoNext").checked = !!s.autoNext;
   $("naturalTone").checked = s.naturalTone !== false;
+  if ($("showWaitReason")) $("showWaitReason").checked = s.showWaitReason !== false;
+  if ($("smoothExtra")) $("smoothExtra").checked = s.smoothBuffer === "extra";
+  const trq = document.querySelector(`input[name=trQuality][value="${s.trQuality === "accurate" ? "accurate" : "fast"}"]`);
+  if (trq) trq.checked = true;
   $("autoPlay").checked = !!s.autoPlay;
   document.documentElement.dataset.hl = s.highlight || "yellow";
   document.querySelectorAll("input[name=hl]").forEach(r => r.checked = r.value === (s.highlight || "yellow"));
@@ -118,6 +127,7 @@ function applySettings() {
   $("bitrate").value = String(s.bitrate);
   const v = S.voices.find(x => x.id === s.voice);
   if (saveKind !== "pdf") $("mp3Voice").textContent = "صدا: " + (v ? v.name : "-") + " · سرعت " + pct(s.speed) + " · " + fa(s.bitrate) + " کیلوبیت (از تنظیمات)";
+  document.documentElement.classList.remove("boot-dark");
 }
 let saveT;
 function setSetting(k, v, reloadText) {
@@ -128,18 +138,21 @@ function setSetting(k, v, reloadText) {
 // speech is prepared well ahead, so a new voice or speed restarts reading at the sentence being heard
 let restartT;
 let restartGen = 0; // (a newer change cancels an older one still waiting for its sentences)
-function restartReading() {
+function restartReading(immediate = false, reason = "") {
   clearTimeout(restartT);
   const gen = ++restartGen;
   if (!reader.active) return;
-  restartT = setTimeout(async () => {
+  if (reason && window.setReadingWait) window.setReadingWait(reason);
+  const runRestart = async () => {
     if (!reader.active) return;
     dropOldSpeech();
     reader.restarting = gen;
-    try { await restartNow(gen); } finally { if (reader.restarting === gen) reader.restarting = 0; }
-  }, 400);
+    try { await restartNow(gen, reason); } finally { if (reader.restarting === gen) reader.restarting = 0; }
+  };
+  if (immediate) runRestart();
+  else restartT = setTimeout(runRestart, 350);
 }
-async function restartNow(gen) {
+async function restartNow(gen, reason = "") {
   {
     const now = actx ? actx.currentTime : 0;
     // (1.29 deep check: before the first sentence is heard nothing is playing yet; the next piece of the queue is where reading
@@ -169,19 +182,19 @@ async function restartNow(gen) {
             if (wait > 0.05) await sleep(wait * 1000);
             if (!reader.active || reader.run !== run || gen !== restartGen) return;
           }
-          if (reader.paused) { readFrom(next.p, next.start); actx.suspend(); reader.paused = true; setPlayButton(); return; }
-          readFrom(next.p, next.start);
+          if (reader.paused) { readFrom(next.p, next.start, { reason }); actx.suspend(); reader.paused = true; setPlayButton(); return; }
+          readFrom(next.p, next.start, { reason });
           return;
         } catch (e) { if (!reader.active || reader.run !== run || gen !== restartGen) return; }
       }
     }
     if (piece && piece.page !== S.page) showPage(piece.page, reader.pageParas[piece.page], !reader.partial[piece.page]);
-    if (piece && piece.p >= 0) readFrom(piece.p, piece.start); else readFrom(0);
+    if (piece && piece.p >= 0) readFrom(piece.p, piece.start, { reason }); else readFrom(0, 0, { reason });
     if (wasPaused) { actx.suspend(); reader.paused = true; setPlayButton(); }
   }
 }
-$("voice").onchange = e => { setSetting("voice", e.target.value); $("dockVoice").value = e.target.value; ttsCache.clear(); restartReading(); };
-$("dockVoice").onchange = e => { $("voice").value = e.target.value; setSetting("voice", e.target.value); ttsCache.clear(); restartReading(); };
+$("voice").onchange = e => { setSetting("voice", e.target.value); $("dockVoice").value = e.target.value; ttsCache.clear(); restartReading(true, "در حال تعویض صدا…"); };
+$("dockVoice").onchange = e => { $("voice").value = e.target.value; setSetting("voice", e.target.value); ttsCache.clear(); restartReading(true, "در حال تعویض صدا…"); };
 // reading speed: 0.5× to 2×; the slider, the −/+ buttons, the presets and the Speed menu all come here
 // (shown in percent: ۱۰۰٪ is normal; the −/+ buttons go one percent at a time, the menu's keys five)
 const pct = v => fa(Math.round(Number(v) * 100)) + "٪";
@@ -226,6 +239,9 @@ $("lineHeight").oninput = e => setSetting("lineHeight", +e.target.value);
 document.querySelectorAll("input[name=cursor]").forEach(r => r.onchange = () => setSetting("cursor", r.value));
 $("autoNext").onchange = e => { setSetting("autoNext", e.target.checked); restartReading(); };
 $("naturalTone").onchange = e => { setSetting("naturalTone", e.target.checked); ttsCache.clear(); bufCache.clear(); restartReading(); };
+if ($("showWaitReason")) $("showWaitReason").onchange = e => { setSetting("showWaitReason", e.target.checked); if (!e.target.checked && window.setReadingWait) window.setReadingWait(""); };
+if ($("smoothExtra")) $("smoothExtra").onchange = e => setSetting("smoothBuffer", e.target.checked ? "extra" : "normal");
+document.querySelectorAll("input[name=trQuality]").forEach(r => r.onchange = () => { setSetting("trQuality", r.value); pageCache.clear(); });
 $("autoPlay").onchange = e => setSetting("autoPlay", e.target.checked);
 document.querySelectorAll("input[name=hl]").forEach(r => r.onchange = () => setSetting("highlight", r.value));
 document.querySelectorAll("input[name=fc]").forEach(r => r.onchange = () => setSetting("frameColor", r.value));
@@ -344,6 +360,7 @@ function fillVoices(voices) {
 async function useMyVoice(blob, name) {
   $("myStatus").textContent = "در حال آماده کردن صدای شما…";
   try {
+    if (blob.size > 50 * 1024 * 1024) throw new Error("فایل نمونهٔ صدا خیلی بزرگ است.");
     const r = await (await api("/api/myvoice?name=" + encodeURIComponent(name), { method: "POST", body: await blob.arrayBuffer() })).json();
     const init = await jget("/api/init");
     fillVoices(init.voices);
@@ -365,12 +382,16 @@ function wavBlob(chunks, rate) {
   return new Blob([buf], { type: "audio/wav" });
 }
 let rec = null;
+const MAX_MY_VOICE_SECS = 45;
 async function stopRecording(save) {
   if (!rec) return;
   const r = rec; rec = null;
-  clearInterval(r.timer); r.node.disconnect(); r.src.disconnect();
+  clearInterval(r.timer);
+  try { r.node.disconnect(); } catch (_) {}
+  try { if (r.sink) r.sink.disconnect(); } catch (_) {}
+  try { r.src.disconnect(); } catch (_) {}
   r.stream.getTracks().forEach(t => t.stop());
-  r.ctx.close();
+  r.ctx.close().catch(() => {});
   $("recBtn").textContent = "● ضبط صدای من"; $("recTime").hidden = true;
   if (!save) return;
   if ((Date.now() - r.t0) < 4000) { $("myStatus").textContent = "ضبط خیلی کوتاه بود. دست‌کم ۵ ثانیه صحبت کنید."; return; }
@@ -384,22 +405,24 @@ $("recBtn").onclick = async () => {
   let stream;
   recAsking = true;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: true } });
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, autoGainControl: true, noiseSuppression: true } });
   } catch (e) {
     recAsking = false;
-    $("myStatus").textContent = "خوانا به میکروفون دسترسی ندارد. در System Settings › Privacy & Security › Microphone اجازه بدهید، یا با برنامه‌ی Voice Memos ضبط کنید و «انتخاب فایل صدا» را بزنید.";
+    $("myStatus").textContent = "خوانا به میکروفون دسترسی ندارد. در تنظیمات دستگاه اجازه‌ی میکروفون را بدهید، یا یک فایل صوتی ضبط‌شده را با «انتخاب فایل صدا» وارد کنید.";
     return;
   }
   recAsking = false;
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  try { await ctx.resume(); } catch (_) {}
   const src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(4096, 1, 1);
+  const sink = ctx.createGain(); sink.gain.value = 0;
   const chunks = [];
   node.onaudioprocess = e => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
-  src.connect(node); node.connect(ctx.destination);
-  rec = { ctx, src, node, stream, chunks, t0: Date.now() };
+  src.connect(node); node.connect(sink); sink.connect(ctx.destination);
+  rec = { ctx, src, node, sink, stream, chunks, t0: Date.now() };
   $("recBtn").textContent = "■ پایان ضبط"; $("recTime").hidden = false;
-  $("myStatus").textContent = "جمله را بخوانید…";
-  const show = () => { const t = Math.floor((Date.now() - rec.t0) / 1000); $("recTime").textContent = "● " + fa(t) + " ثانیه"; if (t >= 20) stopRecording(true); };
+  $("myStatus").textContent = "متن را آرام بخوانید؛ پس از پایان، «■ پایان ضبط» را بزنید (تا ۴۵ ثانیه).";
+  const show = () => { const t = Math.floor((Date.now() - rec.t0) / 1000); $("recTime").textContent = "● " + fa(t) + " از " + fa(MAX_MY_VOICE_SECS) + " ثانیه"; if (t >= MAX_MY_VOICE_SECS) stopRecording(true); };
   show(); rec.timer = setInterval(() => rec && show(), 250);
 };
 $("voiceFile").onchange = e => { const f = e.target.files[0]; e.target.value = ""; if (f) useMyVoice(f, f.name); };
@@ -408,7 +431,7 @@ $("forgetAll").onclick = async () => {
   try {
     stopReading();
     await jpost("/api/forget", {});
-    try { localStorage.removeItem("khana-type-width"); } catch (e) {}
+    try { localStorage.clear(); } catch (e) {}
     location.reload();
   } catch (e) { toast(e.message); }
 };
@@ -440,34 +463,56 @@ async function saveLexicon(lex) {
   S.settings = await jpost("/api/settings", S.settings);
   renderLexicon();
 }
-async function sayWord(text) {
-  try { stopReading(); audio.src = await ttsUrl(text); audio.play(); } catch (e) { toast(e.message); }
+const stripWordPunct = s => String(s || "").trim().replace(/^[«»()\[\]{}،؛:.!?؟"'`\-–—\s]+|[«»()\[\]{}،؛:.!?؟"'`\-–—\s]+$/g, "");
+async function sayWord(text, spelling = "", btn = null) {
+  const prevLabel = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "در حال آماده‌سازی…"; }
+  try {
+    stopReading();
+    ensureAudio();
+    const payload = { text, voice: S.settings.voice, speed: S.settings.speed, quick: true };
+    if (spelling && spelling.trim()) payload.spelling = spelling.trim();
+    const r = await api("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const buf = await r.arrayBuffer();
+    if (buf.byteLength <= 44) return toast("صدایی ساخته نشد.");
+    try {
+      const ctx = ensureAudio();
+      if (ctx.state === "suspended") await ctx.resume();
+      const decoded = await ctx.decodeAudioData(buf.slice(0));
+      const src = ctx.createBufferSource();
+      src.buffer = decoded;
+      src.connect(ctx.destination);
+      src.start();
+    } catch (_) {
+      const u = URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+      audio.src = u;
+      await audio.play();
+    }
+  } catch (e) { toast(e.message || "پخش صدا انجام نشد."); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = prevLabel; } }
 }
 $("lexAdd").onclick = async () => {
-  const w = $("lexWord").value.trim(), p = $("lexSay").value.trim();
+  const w = stripWordPunct($("lexWord").value), p = $("lexSay").value.trim();
   if (!w || !p) return toast("کلمه و تلفظ را بنویسید.");
   await saveLexicon({ ...(S.settings.lexicon || {}), [w]: p });
   $("lexWord").value = ""; $("lexSay").value = "";
-  // without vowel marks the word is read like normal text, so the marks are what give control
-  toast(/[\u064b-\u0652]/.test(p) ? "تلفظ «" + w + "» ذخیره شد."
-    : "ذخیره شد. برای تلفظ دقیق، حرکت‌ها را هم بگذارید؛ مثلاً هَرجَهَت.");
+  toast("تلفظ «" + w + "» ذخیره شد.");
 };
 $("lexTest").onclick = async () => {
-  const w = $("lexWord").value.trim(), p = $("lexSay").value.trim();
+  const w = stripWordPunct($("lexWord").value), p = $("lexSay").value.trim();
   if (!w) return toast("کلمه را بنویسید.");
-  if (p) await saveLexicon({ ...(S.settings.lexicon || {}), [w]: p });
-  sayWord(w);
+  await sayWord(w, p, $("lexTest"));
 };
 $("lexMarks").onclick = () => openPronunciation($("lexWord").value);
 $("lexList").addEventListener("click", async e => {
   const say = e.target.closest("[data-say]"), del = e.target.closest("[data-del]");
-  if (say) sayWord(say.dataset.say);
+  if (say) sayWord(say.dataset.say, (S.settings.lexicon || {})[say.dataset.say] || "", say);
   if (del) { const lex = { ...(S.settings.lexicon || {}) }; delete lex[del.dataset.del]; await saveLexicon(lex); }
 });
 // select a word in the text -> a button offers to fix how it is read
 document.addEventListener("selectionchange", () => {
-  const t = getSelection().toString().trim();
-  const ok = t && t.length <= 30 && !/\s/.test(t) && $("textView").contains(getSelection().anchorNode);
+  const t = stripWordPunct(getSelection().toString());
+  const ok = t && t.length <= 35 && !/\s/.test(t) && $("textView").contains(getSelection().anchorNode);
   $("fixWord").hidden = !ok;
   if (ok) {
     // (while the text is being edited the button changes the word in the whole book; otherwise it fixes how the word is said)
@@ -477,15 +522,18 @@ document.addEventListener("selectionchange", () => {
 });
 $("fixWord").onclick = () => {
   $("fixWord").hidden = true;
-  if (S.editing) return openWordEditor($("fixWord").dataset.word);
-  openPronunciation($("fixWord").dataset.word);
+  const word = $("fixWord").dataset.word;
+  try { const sel = getSelection(); if (sel) sel.removeAllRanges(); } catch (e) {}
+  if (S.editing) return openWordEditor(word);
+  openPronunciation(word);
 };
 
-// Separate letter selection avoids opening the tablet keyboard just to add vowel marks.
-const pronunciation = { word: "", letters: [], selected: -1, generation: 0 };
+// Separate letter selection avoids opening the tablet keyboard just to add vowel marks,
+// while #pronText also lets the user type Persian marks, simpler Persian, or Finglish (e.g. boresh).
+const pronunciation = { word: "", letters: [], selected: -1, generation: 0, customText: "" };
 function markedLetters(word) {
   const letters = [];
-  for (const c of word) {
+  for (const c of String(word).replace(/[\u200c\u200d\ufeffـ]/g, "")) {
     if (/\p{M}/u.test(c) && letters.length) letters[letters.length - 1] += c;
     else letters.push(c);
   }
@@ -496,7 +544,11 @@ function markLetter(letter, mark) {
   if (mark === "ّ") return letter.includes(mark) ? letter.replace(/ّ/g, "") : letter.replace(/ْ/g, "") + mark;
   return letter.replace(mark === "ْ" ? /[\u064b-\u0652]/g : /[\u064b-\u0650\u0652]/g, "") + mark;
 }
-function renderPronunciation() {
+function currentPronSpelling() {
+  const typed = $("pronText") ? $("pronText").value.trim() : "";
+  return typed || pronunciation.letters.join("");
+}
+function renderPronunciation(syncInput = true) {
   const box = $("pronLetters"); box.replaceChildren();
   pronunciation.letters.forEach((letter, i) => {
     const selectable = /\p{Script=Arabic}/u.test(letter) && /\p{L}/u.test(letter);
@@ -509,30 +561,51 @@ function renderPronunciation() {
     }
     box.appendChild(b);
   });
-  $("pronPreview").textContent = pronunciation.letters.join("");
+  const joined = pronunciation.letters.join("");
+  if (syncInput && $("pronText")) $("pronText").value = joined;
+  $("pronPreview").textContent = currentPronSpelling();
   $("pronMarks").querySelectorAll("button").forEach(b => b.disabled = pronunciation.selected < 0);
-  $("pronSave").disabled = pronunciation.selected < 0;
+  $("pronSave").disabled = !currentPronSpelling();
 }
 function openPronunciation(word) {
-  word = (word || "").trim();
-  if (!word || /\s/.test(word) || word.length > 80) return toast("یک کلمه را انتخاب کنید.");
+  word = stripWordPunct(word);
+  if (!word || word.length > 80) return toast("یک کلمه را انتخاب کنید.");
+  try { const sel = getSelection(); if (sel) sel.removeAllRanges(); } catch (e) {}
   stopReading();
   pronunciation.generation++;
   pronunciation.word = word;
-  const saved = (S.settings.lexicon || {})[word];
-  pronunciation.letters = markedLetters(saved && /\p{Script=Arabic}/u.test(saved) ? saved : word);
+  const saved = (S.settings.lexicon || {})[word] || "";
+  const initial = saved || word;
+  pronunciation.letters = markedLetters(/\p{Script=Arabic}/u.test(initial) ? initial : word);
   pronunciation.selected = pronunciation.letters.findIndex(c => /\p{Script=Arabic}/u.test(c) && /\p{L}/u.test(c));
   $("pronTitle").textContent = "اصلاح تلفظ «" + word + "»";
-  renderPronunciation();
+  if ($("pronText")) $("pronText").value = initial;
+  if ($("pronReset")) $("pronReset").hidden = !saved;
+  renderPronunciation(false);
   openPanel("pronPanel");
   const first = $("pronLetters").querySelector('button[aria-pressed="true"]');
   if (first) first.focus({ preventScroll: true });
+}
+if ($("pronText")) {
+  $("pronText").oninput = () => {
+    const val = $("pronText").value.trim();
+    if (/\p{Script=Arabic}/u.test(val)) {
+      pronunciation.letters = markedLetters(val);
+      if (pronunciation.selected >= pronunciation.letters.length) {
+        pronunciation.selected = pronunciation.letters.findIndex(c => /\p{Script=Arabic}/u.test(c) && /\p{L}/u.test(c));
+      }
+      renderPronunciation(false);
+    } else {
+      $("pronPreview").textContent = val || pronunciation.word;
+      $("pronSave").disabled = !val;
+    }
+  };
 }
 $("pronLetters").onclick = e => {
   const b = e.target.closest("button[data-letter]");
   if (!b) return;
   pronunciation.selected = Number(b.dataset.letter);
-  renderPronunciation();
+  renderPronunciation(false);
   $("pronLetters").querySelector(`button[data-letter="${pronunciation.selected}"]`).focus({ preventScroll: true });
 };
 $("pronMarks").onclick = e => {
@@ -540,19 +613,30 @@ $("pronMarks").onclick = e => {
   if (!b || pronunciation.selected < 0) return;
   const i = pronunciation.selected;
   pronunciation.letters[i] = markLetter(pronunciation.letters[i], b.dataset.mark);
-  renderPronunciation();
+  renderPronunciation(true);
 };
-$("pronListen").onclick = () => sayWord(pronunciation.letters.join(""));
+if ($("pronReset")) $("pronReset").onclick = async () => {
+  const word = pronunciation.word;
+  if (!word) return;
+  const lex = { ...(S.settings.lexicon || {}) };
+  delete lex[word];
+  await saveLexicon(lex);
+  $("pronPanel").hidden = true;
+  toast("اصلاح تلفظ «" + word + "» حذف شد.");
+};
+$("pronListen").onclick = () => sayWord(pronunciation.word, currentPronSpelling(), $("pronListen"));
 $("pronSave").onclick = async () => {
-  const word = pronunciation.word, spelling = pronunciation.letters.join("");
+  const word = pronunciation.word, spelling = currentPronSpelling();
+  if (!word || !spelling) return toast("تلفظ درست را وارد کنید.");
   const generation = pronunciation.generation;
   $("pronSave").disabled = true;
   try {
     await saveLexicon({ ...(S.settings.lexicon || {}), [word]: spelling });
+    if ($("lexWord") && stripWordPunct($("lexWord").value) === word) { $("lexWord").value = ""; $("lexSay").value = ""; }
     if (generation === pronunciation.generation) $("pronPanel").hidden = true;
     toast("تلفظ «" + word + "» ذخیره شد.");
   } catch (e) { toast(e.message); }
-  finally { if (generation === pronunciation.generation) $("pronSave").disabled = pronunciation.selected < 0; }
+  finally { if (generation === pronunciation.generation) $("pronSave").disabled = !currentPronSpelling(); }
 };
 
 /* ---------------- panels ---------------- */
@@ -560,11 +644,27 @@ $("pronSave").onclick = async () => {
 // focus returns to the button that opened it (a screen reader would otherwise be left at the top of the page).
 const panelOpener = new Map();
 const panelStack = [], modalInert = new Map();
+// Release decoded start-page artwork textures & stop all SVG animations whenever reading, typing, in any panel, or backgrounded.
+function syncWelcomeMedia() {
+  const suspend = !!S.doc || document.hidden || !!document.querySelector(".panel:not([hidden])") || document.body.classList.contains("locked");
+  document.body.classList.toggle("art-suspended", suspend);
+  const imgs = document.querySelectorAll(".living-village image");
+  for (const img of imgs) {
+    if (suspend) {
+      const cur = img.getAttribute("href");
+      if (cur) { img.dataset.href = cur; img.removeAttribute("href"); }
+    } else if (!img.getAttribute("href") && img.dataset.href) {
+      img.setAttribute("href", img.dataset.href);
+    }
+  }
+}
+document.addEventListener("visibilitychange", syncWelcomeMedia);
 function syncModalState() {
   if (document.body.classList.contains("locked")) {
     panelStack.length = 0;
     modalInert.clear();
     for (const el of document.body.children) el.inert = el.id !== "lockScreen" && el.tagName !== "SCRIPT";
+    syncWelcomeMedia();
     return;
   }
   const visible = [...document.querySelectorAll(".panel:not([hidden])")];
@@ -582,16 +682,17 @@ function syncModalState() {
   }
   if (!top) modalInert.clear();
   panelStack.forEach((p, i) => p.style.zIndex = String(70 + i));
+  syncWelcomeMedia();
 }
 function openPanel(id) {
   if (document.body.classList.contains("locked")) return;
-  if ($(id).hidden) panelOpener.set(id, document.activeElement.closest(".more-tools")?.querySelector("summary") || document.activeElement);
+  if ($(id).hidden) panelOpener.set(id, document.activeElement?.closest?.(".more-tools")?.querySelector("summary") || document.activeElement);
   $(id).hidden = false;
   const at = panelStack.indexOf($(id));
   if (at >= 0) panelStack.splice(at, 1);
   panelStack.push($(id));
   syncModalState();
-  $(id).querySelector("button,select,input").focus();
+  $(id).querySelector("button,select,input")?.focus();
 }
 // said by a screen reader, shown nowhere
 function announce(msg) { const n = $("srLive"); n.textContent = ""; setTimeout(() => { n.textContent = msg; }, 50); }
@@ -647,7 +748,9 @@ function toggleLowVision() {
     for (const [k, v] of Object.entries(LOW_VISION)) s[k] = k === "fontSize" ? Math.max(v, Number(s.fontSize) || 0) : v;
     s.theme = lowVisionTheme();
     s.lowVision = true;
-    toast("نمایش درشت و پررنگ روشن شد. برای بازگشت، همین دکمه یا چشم بالای صفحه را دوباره بزنید.");
+    toast("نمایش درشت و پررنگ روشن شد. برای بازگشت به حالت عادی، روی همین پیام یا دکمه‌ی «Aa» در بالای صفحه بزنید.", () => {
+      if (S.settings && S.settings.lowVision) toggleLowVision();
+    });
   } else {
     const prev = s.lowVisionPrev && typeof s.lowVisionPrev === "object" ? s.lowVisionPrev : {};
     const normal = { theme: "modern", fontSize: 21, lineHeight: 2.2, uiScale: 1, cursor: "large", sentenceLines: true };
@@ -662,7 +765,7 @@ $("visionFontUp").onclick = () => setFontSize(Number(S.settings.fontSize) + 2);
 $("focusBtn").onclick = () => setSetting("focusMode", !S.settings.focusMode);
 document.querySelectorAll('[data-ui-scale]').forEach(b => b.onclick = () => setSetting('uiScale', Number(b.dataset.uiScale)));
 document.querySelectorAll('[data-vision-theme]').forEach(b => b.onclick = () => setSetting('theme', b.dataset.visionTheme));
-$("moreTools").addEventListener('click', e => { if (e.target.closest('button')) $("moreTools").open = false; });
+$("moreTools").addEventListener('click', e => { const btn = e.target.closest('button'); if (btn && !btn.closest('.text-size')) $("moreTools").open = false; });
 document.addEventListener('pointerdown', e => { if (!$("moreTools").contains(e.target)) $("moreTools").open = false; });
 $("moreTools").addEventListener('keydown', e => {
   if (e.key === 'Escape' && $("moreTools").open) { e.preventDefault(); $("moreTools").open = false; $("moreTools").querySelector('summary').focus(); }
@@ -691,32 +794,70 @@ function startChime() {
     setTimeout(() => ctx.close && ctx.close(), 2000);
   } catch (e) { /* no sound is fine */ }
 }
-// the fish in the water: a press shows or hides the quotation in the water
+// the welcome picture: a press shows or hides the quotation in the water
 {
   const jump = $("jumpArt");
-  // (1.29: the band's visible part of the scene: as wide as the band is, from 240 up to the 560 the scene is drawn; its middle
-  // stays where it was)
-  const scene = jump && jump.querySelector("svg.water-scene");
-  const fitScene = () => {
-    const r = jump.getBoundingClientRect();
-    if (!scene || !r.width || !r.height) return;
-    const w = Math.max(240, Math.min(560, 176 * r.width / r.height));
-    scene.setAttribute("viewBox", `${(120 - w / 2).toFixed(1)} 0 ${w.toFixed(1)} 176`);
-  };
-  if (scene) { fitScene(); if (window.ResizeObserver) new ResizeObserver(fitScene).observe(jump); else addEventListener("resize", fitScene); }
-  const toggleQuote = () => {
-    const open = jump.classList.toggle("show-quote");
-    jump.setAttribute("aria-expanded", String(open));
-  };
-  jump.addEventListener("click", toggleQuote);
-  jump.addEventListener("keydown", e => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleQuote(); }
-  });
+  if (jump) {
+    // Use only the device's local clock to tint the still image. No time value leaves the device.
+    const setSceneLight = () => {
+      const hour = new Date().getHours();
+      jump.dataset.light = hour >= 6 && hour < 9 ? "dawn" : hour >= 9 && hour < 17 ? "day" : hour >= 17 && hour < 20 ? "evening" : "night";
+    };
+    setSceneLight();
+    setInterval(setSceneLight, 60_000);
+    const toggleQuote = () => {
+      const open = jump.classList.toggle("show-quote");
+      jump.setAttribute("aria-expanded", String(open));
+      if ($("waterQuote")) $("waterQuote").setAttribute("aria-hidden", String(!open));
+    };
+    jump.addEventListener("click", toggleQuote);
+    jump.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleQuote(); }
+    });
+  }
 }
 
 /* ---------------- opening ---------------- */
 // pictures (a photo of a page, a screenshot): read with the app's text recognition, one page per picture
 const isImage = f => /\.(png|jpe?g|webp|gif|bmp|heic|tiff?)$/i.test(f.name) || /^image\//.test(f.type || "");
+const MAX_IMAGE_PIXELS = 40_000_000;
+const MAX_UPLOAD_BYTES = 300 * 1024 * 1024;
+// Inspect PNG/GIF/JPEG/WebP header dimensions BEFORE decoding so a tiny decompression bomb cannot OOM the renderer.
+async function checkImageHeaderPixels(file) {
+  try {
+    const head = new Uint8Array(await file.slice(0, 65536).arrayBuffer());
+    const dv = new DataView(head.buffer);
+    let w = 0, h = 0;
+    if (head.length >= 24 && head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4E && head[3] === 0x47) {
+      w = dv.getUint32(16, false); h = dv.getUint32(20, false); // PNG IHDR
+    } else if (head.length >= 10 && head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46) {
+      w = dv.getUint16(6, true); h = dv.getUint16(8, true); // GIF
+    } else if (head.length >= 30 && head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46 && head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50) {
+      const chunk = String.fromCharCode(head[12], head[13], head[14], head[15]);
+      if (chunk === "VP8 " && head.length >= 30) { w = dv.getUint16(26, true) & 0x3FFF; h = dv.getUint16(28, true) & 0x3FFF; }
+      else if (chunk === "VP8L" && head.length >= 25) { const b = dv.getUint32(21, true); w = (b & 0x3FFF) + 1; h = ((b >> 14) & 0x3FFF) + 1; }
+      else if (chunk === "VP8X" && head.length >= 30) { w = 1 + (head[24] | (head[25] << 8) | (head[26] << 16)); h = 1 + (head[27] | (head[28] << 8) | (head[29] << 16)); }
+    } else if (head.length >= 4 && head[0] === 0xFF && head[1] === 0xD8) {
+      let off = 2;
+      while (off + 8 < head.length) {
+        if (head[off] !== 0xFF) break;
+        const m = head[off + 1];
+        if (m === 0xD8 || m === 0xD9 || m === 0x01 || (m >= 0xD0 && m <= 0xD7)) { off += 2; continue; }
+        const segLen = dv.getUint16(off + 2, false);
+        if (segLen < 2) break;
+        if ((m >= 0xC0 && m <= 0xC3) || (m >= 0xC5 && m <= 0xC7) || (m >= 0xC9 && m <= 0xCB) || (m >= 0xCD && m <= 0xCF)) {
+          h = dv.getUint16(off + 5, false); w = dv.getUint16(off + 7, false); break;
+        }
+        off += 2 + segLen;
+      }
+    }
+    if (w > 0 && h > 0 && w * h > MAX_IMAGE_PIXELS) {
+      throw new Error("ابعاد این تصویر بیش از حد بزرگ و ناامن است: " + file.name);
+    }
+  } catch (e) {
+    if (e && /ناامن/.test(e.message)) throw e;
+  }
+}
 async function openImages(files) {
   // (limits: the pictures are decoded in the page; a huge one is refused before anything is drawn)
   if (files.length > 50) throw new Error("حداکثر ۵۰ تصویر را می‌توان با هم باز کرد.");
@@ -724,21 +865,27 @@ async function openImages(files) {
   const pages = [];
   for (let i = 0; i < files.length; i++) {
     note(`در حال خواندن تصویر ${fa(i + 1)} از ${fa(files.length)}…`);
+    await checkImageHeaderPixels(files[i]);
     let bmp;
     try { bmp = await createImageBitmap(files[i]); } catch (e) { throw new Error("این تصویر باز نشد: " + files[i].name); }
-    if (bmp.width * bmp.height > 60e6) { bmp.close(); throw new Error("تصویر خیلی بزرگ است: " + files[i].name); }
-    // (about the size of a page scanned at 250 dpi: large pictures are made smaller, small ones larger)
-    const long = Math.max(bmp.width, bmp.height), k = long > 3200 ? 3200 / long : long < 1600 ? Math.min(2, 2200 / long) : 1;
-    const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
-    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
-    const cx = cv.getContext("2d", { willReadFrequently: true });
-    cx.fillStyle = "#fff"; cx.fillRect(0, 0, w, h); cx.drawImage(bmp, 0, 0, w, h);
-    const px = cx.getImageData(0, 0, w, h).data, body = new Uint8Array(8 + w * h), dv = new DataView(body.buffer);
-    dv.setUint32(0, w, true); dv.setUint32(4, h, true);
-    for (let j = 0, o = 8; j < px.length; j += 4, o++) body[o] = (px[j] * 77 + px[j + 1] * 150 + px[j + 2] * 29) >> 8;
-    const r = await (await api("/api/ocr_image", { method: "POST", body: body.buffer })).json();
-    if (r.error) throw new Error(r.error);
-    pages.push(r.paragraphs || []);
+    try {
+      if (bmp.width * bmp.height > MAX_IMAGE_PIXELS) throw new Error("تصویر خیلی بزرگ است: " + files[i].name);
+      // (about the size of a page scanned at 250 dpi: large pictures are made smaller, small ones larger)
+      const long = Math.max(bmp.width, bmp.height), k = long > 3200 ? 3200 / long : long < 1600 ? Math.min(2, 2200 / long) : 1;
+      const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
+      const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+      const cx = cv.getContext("2d", { willReadFrequently: true });
+      cx.fillStyle = "#fff"; cx.fillRect(0, 0, w, h); cx.drawImage(bmp, 0, 0, w, h);
+      const px = cx.getImageData(0, 0, w, h).data, body = new Uint8Array(8 + w * h), dv = new DataView(body.buffer);
+      dv.setUint32(0, w, true); dv.setUint32(4, h, true);
+      for (let j = 0, o = 8; j < px.length; j += 4, o++) body[o] = (px[j] * 77 + px[j + 1] * 150 + px[j + 2] * 29) >> 8;
+      cv.width = 0; cv.height = 0;
+      const r = await (await api("/api/ocr_image", { method: "POST", body: body.buffer })).json();
+      if (r.error) throw new Error(r.error);
+      pages.push(r.paragraphs || []);
+    } finally {
+      try { bmp.close(); } catch (_) {}
+    }
   }
   if (!pages.some(p => p.length)) throw new Error("در این تصویر متنی پیدا نشد.");
   const name = files.length === 1 ? files[0].name : files[0].name.replace(/\.[^.]+$/, "") + " (+" + (files.length - 1) + ").png";
@@ -748,16 +895,32 @@ function setOpening(busy) {
   S.opening = busy;
   $("mainContent").setAttribute("aria-busy", String(busy));
   for (const id of ["openFileBtn", "welcomeOpen", "fileInput", "typeBtn", "typeBtn2"]) $(id).disabled = busy;
-  $("openFileBtn").textContent = busy ? "در حال باز کردن…" : "باز کردن فایل";
-  $("welcomeOpen").textContent = busy ? "در حال آماده کردن متن…" : "انتخاب فایل برای خواندن";
+  const openLbl = $("openFileBtn").querySelector(".btn-label");
+  if (openLbl) openLbl.textContent = busy ? "در حال باز کردن…" : "باز کردن";
+  else $("openFileBtn").textContent = busy ? "در حال باز کردن…" : "باز کردن فایل";
+  $("welcomeOpen").textContent = busy ? "در حال آماده کردن متن…" : "انتخاب متن برای خواندن";
+}
+async function verifyFileMagic(file) {
+  if (file.size > MAX_UPLOAD_BYTES) throw new Error("فایل خیلی بزرگ است (بیشتر از ۳۰۰ مگابایت).");
+  const head = new Uint8Array(await file.slice(0, 1024).arrayBuffer());
+  if (/\.pdf$/i.test(file.name)) {
+    const sig = String.fromCharCode(...head);
+    if (!sig.includes("%PDF-")) throw new Error("این فایل ساختار معتبر PDF ندارد و به دلایل امنیتی باز نشد.");
+  } else if (/\.(docx|epub|odt|pptx)$/i.test(file.name)) {
+    if (head.length < 4 || head[0] !== 0x50 || head[1] !== 0x4B) {
+      throw new Error("این فایل ساختار معتبر فشرده‌سازی ندارد و باز نشد.");
+    }
+  }
 }
 async function openFile(file, images) {
   if (!file) return;
   if (S.opening) return toast("لطفاً صبر کنید تا فایل باز شود.");
   setOpening(true);
   stopReading();
-  note(`در حال باز کردن «${esc(file.name)}»…`);
+  clearPageImgCache();
+  note(`در حال باز کردن «${file.name}»…`);
   try {
+    if (!images) await verifyFileMagic(file);
     // (a PDF is read by pdf.js in its sandboxed frame; other files by the app)
     const d = /\.pdf$/i.test(file.name) ? await openWithPdfjs(file)
       : isImage(file) ? await openImages(images || [file])
@@ -783,7 +946,7 @@ async function openFile(file, images) {
       while (!S.paras.length && n < d.pages) await loadPage(++n);
       if (S.paras.length) readFrom(0);
     }
-  } catch (e) { note(esc(e.message), true); }
+  } catch (e) { note(e.message, true); }
   finally { setOpening(false); }
 }
 /* ---------------- pdf.js, in its own sandboxed frame (as GrapheneOS's PDF Viewer) ----------------
@@ -791,7 +954,7 @@ async function openFile(file, images) {
    app's requests (it never has the token); its policy lets it load only pdf.js's own files; it has
    no permissions. It gets a PDF's bytes and answers with text positions and pictures, which are
    treated as untrusted (text is escaped when shown; the app checks what it is sent). */
-let pdfFrame = null, pdfReady = null, pdfSeq = 0;
+let pdfFrame = null, pdfReady = null, pdfSeq = 0, pendingPdfOpenId = 0;
 const pdfWait = new Map();
 function pdfjsFrame() {
   if (pdfReady) return pdfReady;
@@ -800,7 +963,7 @@ function pdfjsFrame() {
   pdfFrame.setAttribute("sandbox", "allow-scripts");
   pdfFrame.setAttribute("allow", "");
   pdfFrame.setAttribute("referrerpolicy", "no-referrer");
-  pdfFrame.src = "pdfjs/frame.html";
+  pdfFrame.src = location.host === "khana.invalid" ? "https://khana-pdf.invalid/pdfjs/frame.html" : "pdfjs/frame.html";
   pdfReady = new Promise((ok, no) => {
     const t = setTimeout(() => {
       // (a frame that never started is removed, so a retry starts clean and no stale frame stays in the page)
@@ -839,16 +1002,22 @@ function askPassword(again) {
   });
 }
 addEventListener("message", e => {
-  if (!pdfFrame || e.source !== pdfFrame.contentWindow) return;
+  if (!pdfFrame || e.source !== pdfFrame.contentWindow || e.origin !== "null") return;
   const m = e.data || {};
   if (m.ready) { if (pdfFrame.ready) pdfFrame.ready(); return; }
   if (m.needPassword) {
-    askPassword(!!m.again).then(pw => pdfFrame.contentWindow.postMessage(pw == null ? { op: "password", cancel: true } : { op: "password", value: pw }, "*"));
+    if (!pendingPdfOpenId || m.id !== pendingPdfOpenId || document.body.classList.contains("locked")) return;
+    askPassword(!!m.again).then(pw => {
+      if (pdfFrame && pdfFrame.contentWindow) {
+        pdfFrame.contentWindow.postMessage(pw == null ? { op: "password", cancel: true } : { op: "password", value: pw }, "*");
+      }
+    });
     return;
   }
   const w = pdfWait.get(m.id);
   if (!w) return;
   pdfWait.delete(m.id);
+  if (m.id === pendingPdfOpenId) pendingPdfOpenId = 0;
   if (m.ok) w.ok(m.data); else w.no(new Error("pdf.js: " + String(m.error).slice(0, 200)));
 });
 // On the Mac pdf.js is not in a frame of this page but in a web view of its own (another process): the page asks the app,
@@ -866,7 +1035,7 @@ async function pdfViewCall(msg) {
       continue;
     }
     if (kind === "json") return r.json();
-    if (kind === "png") return new Blob([await r.arrayBuffer()], { type: "image/png" });
+    if (kind === "png" || kind === "jpeg") return new Blob([await r.arrayBuffer()], { type: kind === "jpeg" ? "image/jpeg" : "image/png" });
     if (kind === "gray") {
       const buf = await r.arrayBuffer(), dv = new DataView(buf);
       return { w: dv.getUint32(0, true), h: dv.getUint32(4, true), px: new Uint8Array(buf, 8) };
@@ -874,13 +1043,28 @@ async function pdfViewCall(msg) {
     throw new Error("pdf.js: " + (await r.text()).slice(0, 200));
   }
 }
+function resetPdfFrame() {
+  for (const w of pdfWait.values()) w.no(new Error("پردازش PDF متوقف شد."));
+  pdfWait.clear();
+  pendingPdfOpenId = 0;
+  pdfReady = null;
+  if (pdfFrame) { try { pdfFrame.remove(); } catch (_) {} pdfFrame = null; }
+}
 async function pdfCall(msg, transfer) {
   if (window.KHANA_PDF_VIEW) return pdfViewCall(msg);
   await pdfjsFrame();
   return new Promise((ok, no) => {
     const id = ++pdfSeq;
-    // (1.29 deep check: a PDF that makes pdf.js hang no longer blocks every later file: after 3 minutes the call fails)
-    const t = setTimeout(() => { if (pdfWait.delete(id)) no(new Error("PDF باز نشد: پاسخی نیامد.")); }, 180000);
+    if (msg.op === "open") pendingPdfOpenId = id;
+    const ms = msg.op === "open" ? 120000 : 45000;
+    // If a hostile/corrupted PDF hangs pdf.js, tear down and recreate the isolated sandbox frame cleanly.
+    const t = setTimeout(() => {
+      if (pdfWait.delete(id)) {
+        if (pendingPdfOpenId === id) pendingPdfOpenId = 0;
+        resetPdfFrame();
+        no(new Error("PDF باز نشد یا بیش از حد طول کشید (سند آسیب‌دیده یا ناامن)."));
+      }
+    }, ms);
     pdfWait.set(id, { ok: v => { clearTimeout(t); ok(v); }, no: e => { clearTimeout(t); no(e); } });
     pdfFrame.contentWindow.postMessage({ ...msg, id }, "*", transfer || []);
   });
@@ -898,7 +1082,7 @@ async function openWithPdfjs(file) {
   }
   const out = [];
   for (let n = 1; n <= pages; n++) {
-    if (n === 1 || n % 10 === 0) note(`در حال خواندن «${esc(file.name)}»… صفحه‌ی ${fa(n)} از ${fa(pages)}`);
+    if (n === 1 || n % 10 === 0) note(`در حال خواندن «${file.name}»… صفحه‌ی ${fa(n)} از ${fa(pages)}`);
     const t = await pdfCall({ op: "text", n });
     out.push({ w: t.w, h: t.h, images: !!t.images, items: t.items });
   }
@@ -960,7 +1144,21 @@ function givePicture(n, docId = S.doc && S.doc.id) {
   return picturesGiven.get(key);
 }
 
-function note(html, warn) { const n = $("note"); n.innerHTML = html; n.hidden = false; n.classList.toggle("warn", !!warn); }
+function note(text, warn, action) {
+  const n = $("note");
+  n.replaceChildren(document.createTextNode(String(text ?? "")));
+  if (action && action.label) {
+    n.appendChild(document.createTextNode(" "));
+    const b = document.createElement("button");
+    b.type = "button";
+    if (action.id) b.id = action.id;
+    b.textContent = action.label;
+    if (action.onClick) b.onclick = action.onClick;
+    n.appendChild(b);
+  }
+  n.hidden = false;
+  n.classList.toggle("warn", !!warn);
+}
 $("fileInput").onchange = e => {
   ensureAudio();
   const fs = [...e.target.files];
@@ -969,18 +1167,20 @@ $("fileInput").onchange = e => {
   e.target.value = "";
 };
 let dragDepth = 0;
-addEventListener("dragenter", e => { if ([...e.dataTransfer.types].includes("Files")) { dragDepth++; $("drop").hidden = false; } });
+addEventListener("dragenter", e => { if (document.body.classList.contains("locked")) return; if ([...e.dataTransfer.types].includes("Files")) { dragDepth++; $("drop").hidden = false; } });
 addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("drop").hidden = true; } });
 addEventListener("dragover", e => e.preventDefault());
 addEventListener("drop", e => {
-  e.preventDefault(); dragDepth = 0; $("drop").hidden = true; ensureAudio();
+  e.preventDefault(); dragDepth = 0; $("drop").hidden = true;
+  if (document.body.classList.contains("locked")) return;
+  ensureAudio();
   const fs = [...e.dataTransfer.files];
   if (fs.length > 1 && fs.every(isImage)) openFile(fs[0], fs); else openFile(fs[0]);
 });
 
 /* ---------------- pages ---------------- */
 const pageCache = new Map();  // "page|rev|yeh|tr" -> Promise<paragraphs>
-const translating = () => !!(S.doc && S.doc.canTranslate && S.settings.translate);
+const translating = () => !!(S.doc && S.doc.canTranslate && S.settings.translate && !S.doc.isFinglish);
 // A page request; a scanned page of a pdf.js document is first drawn by pdf.js and read with OCR.
 async function pageReq(url, n, docId = S.doc && S.doc.id) {
   let r = await jget(url);
@@ -1008,10 +1208,15 @@ $("sourceBtn").onclick = async () => {
     if (seq === sourceSeq) box.setAttribute("aria-busy", "false");
   }
 };
+const pageBoxesMap = new Map(); // "docId|page" -> { w, h, paras: [[[x0,top,x1,bot,rtl], ...], ...] }
 function getParas(n) {
   const s = S.settings, tr = translating(), key = `${S.doc.id}|${n}|${!!s.reversed}|${!!s.persianYeh}|${tr}`;
   if (!pageCache.has(key)) {
-    const p = pageReq(`/api/page?doc=${S.doc.id}&n=${n}&rev=${!!s.reversed}&yeh=${!!s.persianYeh}&tr=${tr}`, n).then(r => r.paragraphs);
+    const docId = S.doc.id;
+    const p = pageReq(`/api/page?doc=${docId}&n=${n}&rev=${!!s.reversed}&yeh=${!!s.persianYeh}&tr=${tr}`, n).then(r => {
+      if (r && r.boxes) pageBoxesMap.set(`${docId}|${n}`, r.boxes);
+      return r.paragraphs;
+    });
     p.catch(() => pageCache.delete(key));
     pageCache.set(key, p);
   }
@@ -1020,10 +1225,11 @@ function getParas(n) {
 // A page being translated comes a few paragraphs at a time: {paragraphs, done}. A finished page
 // goes into the cache like any other.
 async function pageSoFar(n) {
-  const s = S.settings, key = `${S.doc.id}|${n}|${!!s.reversed}|${!!s.persianYeh}|true`;
+  const s = S.settings, docId = S.doc.id, key = `${docId}|${n}|${!!s.reversed}|${!!s.persianYeh}|true`;
   if (pageCache.has(key)) return { paragraphs: await pageCache.get(key), done: true };
   const gen = editGen;
-  const r = await pageReq(`/api/page?doc=${S.doc.id}&n=${n}&rev=${!!s.reversed}&yeh=${!!s.persianYeh}&tr=true&partial=1`, n);
+  const r = await pageReq(`/api/page?doc=${docId}&n=${n}&rev=${!!s.reversed}&yeh=${!!s.persianYeh}&tr=true&partial=1`, n);
+  if (r && r.boxes) pageBoxesMap.set(`${docId}|${n}`, r.boxes);
   // (a page asked before a correction was made is not kept: it has the old words)
   if (r.done && gen === editGen) pageCache.set(key, Promise.resolve(r.paragraphs));
   return r;
@@ -1037,10 +1243,19 @@ function growPage(n, paras, done) {
 }
 async function followPage(n, seq) {
   while (seq === S.loadSeq && !S.pageDone) {
-    await sleep(700);
+    await sleep(600);
     if (seq !== S.loadSeq) return;
     const r = await pageSoFar(n);
-    if (r && seq === S.loadSeq) growPage(n, r.paragraphs, r.done);
+    if (r && seq === S.loadSeq) {
+      growPage(n, r.paragraphs, r.done);
+      if (r.done) {
+        if (!reader.active || !readingWaitText) updatePrepBanner("", -1, "", false);
+      } else if (!reader.active) {
+        const tot = r.total || 0;
+        const pct = tot > 0 ? Math.min(99, Math.round((r.paragraphs.length / tot) * 100)) : -1;
+        updatePrepBanner(tot > 0 ? `در حال ترجمه‌ی آفلاین ادامه‌ی صفحه… (${fa(r.paragraphs.length)} از ${fa(tot)} بند)` : "در حال ترجمه‌ی آفلاین ادامه‌ی صفحه…", pct, "بندهای اول آماده‌اند؛ می‌توانید همین الان خواندن را شروع کنید.", true);
+      }
+    }
   }
 }
 
@@ -1065,25 +1280,43 @@ async function loadPage(n, keepReading) {
   try {
   if (translating()) {
     // shown (and readable) from its first translated paragraphs on; the rest follows
+    updatePrepBanner("در حال بارگذاری مدل و ترجمه‌ی آفلاین صفحه…", -1, "اولین بار ممکن است چند ثانیه طول بکشد؛ به‌محض ترجمه‌ی بند اول، نمایش و خواندن شروع می‌شود.", true);
     let r;
     try {
       r = await pageSoFar(n);
-      while (!r.done && !r.paragraphs.length && seq === S.loadSeq) { await sleep(400); r = await pageSoFar(n); }
+      while (!r.done && !r.paragraphs.length && seq === S.loadSeq) {
+        const tot = r.total || 0;
+        const pct = tot > 0 ? Math.min(95, Math.round((r.paragraphs.length / tot) * 100)) : -1;
+        updatePrepBanner(tot > 0 ? `در حال ترجمه‌ی آفلاین صفحه… (${fa(r.paragraphs.length)} از ${fa(tot)} بند)` : "در حال بارگذاری مدل و ترجمه‌ی آفلاین صفحه…", pct, "در حال ترجمه‌ی بند اول — به‌محض آماده شدن نمایش داده می‌شود.", true);
+        await sleep(400);
+        r = await pageSoFar(n);
+      }
     } finally { clearTimeout(waitT); }
     if (seq !== S.loadSeq) return;
     S.paras = r.paragraphs; S.pageDone = r.done;
     renderText();
+    if (r.done) updatePrepBanner("", -1, "", false);
+    else {
+      const tot = r.total || 0;
+      const pct = tot > 0 ? Math.min(99, Math.round((r.paragraphs.length / tot) * 100)) : -1;
+      updatePrepBanner(tot > 0 ? `در حال ترجمه‌ی آفلاین ادامه‌ی صفحه… (${fa(r.paragraphs.length)} از ${fa(tot)} بند)` : "در حال ترجمه‌ی آفلاین ادامه‌ی صفحه…", pct, "بندهای اول آماده‌اند؛ می‌توانید همین الان خواندن را شروع کنید.", true);
+    }
     if (!r.done) followPage(n, seq).catch(e => {
       if (seq !== S.loadSeq) return;
+      updatePrepBanner("", -1, "", false);
       stopReading();
-      note(esc("ترجمه کامل نشد: " + e.message) + ' <button type="button" id="retryTranslation">تلاش دوباره</button>', true);
-      $("retryTranslation").onclick = () => { $("note").hidden = true; loadPage(n); };
+      note("ترجمه کامل نشد: " + e.message, true, {
+        id: "retryTranslation",
+        label: "تلاش دوباره",
+        onClick: () => { $("note").hidden = true; loadPage(n); },
+      });
       announce("ترجمه کامل نشد. دکمه‌ی تلاش دوباره در دسترس است.");
     });
     return;
   }
   const paras = await getParas(n).finally(() => clearTimeout(waitT));
   if (seq !== S.loadSeq) return;
+  updatePrepBanner("", -1, "", false);
   S.paras = paras; S.pageDone = true;
   renderText();
   } catch (e) {
@@ -1101,11 +1334,26 @@ async function loadPage(n, keepReading) {
   }
 }
 function showPage(n, paras, done = true) {  // switch the visible page while reading continues
+  if (typeof reader !== "undefined" && reader.pendingTarget && reader.pendingTarget.page !== n && window.clearPendingStart) window.clearPendingStart();
   S.page = n; S.paras = paras; S.pageDone = done; S.loadSeq++;
   syncChrome(); renderText();
   if (S.view === "page") renderPageImage();
 }
 // every word is its own span (data-s = its offset in the paragraph) so reading can light it up
+function highlightTok(tok, re, found) {
+  if (!re) return esc(tok);
+  re.lastIndex = 0;
+  let out = "", last = 0, m;
+  while ((m = re.exec(tok)) !== null) {
+    if (m[0].length === 0) { re.lastIndex++; continue; }
+    if (m.index > last) out += esc(tok.slice(last, m.index));
+    found();
+    out += `<mark>${esc(m[0])}</mark>`;
+    last = m.index + m[0].length;
+  }
+  if (last < tok.length) out += esc(tok.slice(last));
+  return out;
+}
 function paraHtml(p, i, re, found) {
   // Use the same sentence boundaries as read-aloud, keeping original UTF-16 word offsets.
   const lines = !!(S.settings && S.settings.sentenceLines);
@@ -1114,8 +1362,7 @@ function paraHtml(p, i, re, found) {
     const text = lines ? segment.text.replace(/\s+$/, "") : segment.text;
     const html = text.replace(/\S+|\s+/g, (tok, off) => {
       if (/^\s/.test(tok)) return tok;
-      let w = esc(tok);
-      if (re) w = w.replace(re, m => (found(), `<mark>${m}</mark>`));
+      const w = highlightTok(tok, re, found);
       return `<span class="w" data-s="${segment.start + off}">${w}</span>`;
     });
     return (index ? "<br>" : "") + html;
@@ -1143,7 +1390,7 @@ function renderText(preservePosition = false) {
   if (!S.paras.length) {
     box.innerHTML = '<p class="empty">این صفحه متنی ندارد.</p>';
   } else {
-    const re = q ? new RegExp(reEsc(esc(q)), "g") : null;
+    const re = q ? new RegExp(reEsc(q), "g") : null;
     box.innerHTML = S.paras.map((p, i) => paraHtml(p, i, re, () => count++)).join("") + moreNote();
   }
   $("count").textContent = q ? (count ? fa(count) + " مورد" : "پیدا نشد") : "";
@@ -1159,31 +1406,420 @@ function renderText(preservePosition = false) {
     }
   }
 }
+const pdfBoxes = new Map();
+function normBoxText(s) {
+  let t = String(s || "");
+  try { t = t.normalize("NFKC"); } catch (_) {}
+  return t.toLowerCase()
+    .replace(/[\u0640\u064B-\u065F\u0670\u200c\u200d\u200e\u200f]/g, "")
+    .replace(/[يی]/g, "ی").replace(/[كک]/g, "ک").replace(/[أإآ]/g, "ا").replace(/[ۀة]/g, "ه")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+}
+function revStr(s) { return [...s].reverse().join(""); }
+function buildPageLines(w, h, items) {
+  const clean = (items || []).filter(it => it && typeof it[0] === "string" && it[0].trim() && !/^[─_—\-]+$/.test(it[0].trim()));
+  const lines = [];
+  for (const it of clean) {
+    const [str, x0, top, x1, bot, size, rtl] = it;
+    const mid = (top + bot) * 0.5;
+    let line = lines.find(l => Math.abs(l.mid - mid) <= Math.max(4, Math.min(l.size, size) * 0.55));
+    if (!line) {
+      line = { x0, top, x1, bot, mid, size, rtl: !!rtl, items: [] };
+      lines.push(line);
+    }
+    line.x0 = Math.min(line.x0, x0);
+    line.x1 = Math.max(line.x1, x1);
+    line.top = Math.min(line.top, top);
+    line.bot = Math.max(line.bot, bot);
+    if (rtl) line.rtl = true;
+    line.items.push({ str, x0, top, x1, bot, size });
+  }
+  lines.sort((a, b) => a.top - b.top);
+  for (const l of lines) {
+    // Sort PDF spans in natural reading order (right-to-left for Persian/Arabic, left-to-right for Latin)
+    l.items.sort((a, b) => l.rtl ? (b.x1 - a.x1) : (a.x0 - b.x0));
+    // Reconstruct accurate per-word boxes: merge tiny-gap glyph fragments & proportionally split multi-word spans
+    const rawWords = [];
+    for (const it of l.items) {
+      const s = it.str;
+      const parts = [];
+      let m;
+      const re = /\S+/g;
+      while ((m = re.exec(s)) !== null) parts.push({ text: m[0], start: m.index, end: m.index + m[0].length });
+      if (!parts.length) continue;
+      const spanW = Math.max(1, it.x1 - it.x0);
+      const totalLen = Math.max(1, s.length);
+      for (const p of parts) {
+        let wx0, wx1;
+        if (parts.length === 1) {
+          wx0 = it.x0; wx1 = it.x1;
+        } else if (l.rtl) {
+          wx1 = it.x1 - (p.start / totalLen) * spanW;
+          wx0 = it.x1 - (p.end / totalLen) * spanW;
+        } else {
+          wx0 = it.x0 + (p.start / totalLen) * spanW;
+          wx1 = it.x0 + (p.end / totalLen) * spanW;
+        }
+        rawWords.push({
+          str: p.text, x0: Math.min(wx0, wx1), x1: Math.max(wx0, wx1),
+          top: it.top, bot: it.bot, size: it.size || l.size,
+          joinPrev: p.start === 0 && !/^\s/.test(s),
+        });
+      }
+    }
+    const words = [];
+    for (const rw of rawWords) {
+      const prev = words[words.length - 1];
+      const gap = prev ? (l.rtl ? (prev.x0 - rw.x1) : (rw.x0 - prev.x1)) : 999;
+      if (prev && rw.joinPrev && gap > -rw.size * 0.4 && gap < rw.size * 0.22) {
+        prev.str += rw.str;
+        prev.x0 = Math.min(prev.x0, rw.x0);
+        prev.x1 = Math.max(prev.x1, rw.x1);
+        prev.top = Math.min(prev.top, rw.top);
+        prev.bot = Math.max(prev.bot, rw.bot);
+      } else {
+        words.push({ str: rw.str, x0: rw.x0, x1: rw.x1, top: rw.top, bot: rw.bot });
+      }
+    }
+    for (const wd of words) { wd.norm = normBoxText(wd.str); wd.revNorm = wd.norm ? revStr(wd.norm) : ""; }
+    l.words = words.filter(wd => wd.norm.length > 0);
+    l.text = l.words.map(wd => wd.str).join(" ");
+    l.norm = normBoxText(l.text);
+  }
+  return { w: Math.max(1, w), h: Math.max(1, h), lines: lines.filter(l => l.words.length > 0) };
+}
+function ensurePdfBoxes(n) {
+  if (!S.doc || S.doc.engine !== "pdfjs") return null;
+  const key = `${S.doc.id}|${n}`;
+  const cached = pdfBoxes.get(key);
+  if (cached && !cached.pending) return cached;
+  if (!cached) {
+    pdfBoxes.set(key, { pending: true });
+    pdfCall({ op: "text", n }).then(t => {
+      if (S.doc && `${S.doc.id}|${n}` === key && t) pdfBoxes.set(key, buildPageLines(t.w, t.h, t.items));
+    }).catch(() => pdfBoxes.delete(key));
+  }
+  return null;
+}
+let lastPageHlKey = "";
+let lastSentPlan = null;
+let lastLineAnchor = { page: -1, para: -1, lineIdx: 0 };
+window.clearPageLiveHighlight = function (resetAnchor = false) {
+  lastPageHlKey = "";
+  lastSentPlan = null;
+  if (resetAnchor) lastLineAnchor = { page: -1, para: -1, lineIdx: 0 };
+  const layer = $("pageHlLayer"), cap = $("pageLiveCaption");
+  if (layer) layer.replaceChildren();
+  if (cap) { cap.hidden = true; cap.replaceChildren(); }
+};
+function wordMatchesPdf(spokenNorm, wd) {
+  const pdfNorm = wd && wd.norm, pdfRev = wd && wd.revNorm;
+  if (!spokenNorm || !pdfNorm) return false;
+  if (spokenNorm === pdfNorm || spokenNorm === pdfRev) return true;
+  if (spokenNorm.length >= 3 && pdfNorm.length >= 3) {
+    const ratio = Math.min(spokenNorm.length, pdfNorm.length) / Math.max(spokenNorm.length, pdfNorm.length);
+    if (ratio >= 0.68 && (pdfNorm.startsWith(spokenNorm) || spokenNorm.startsWith(pdfNorm) || pdfRev.startsWith(spokenNorm) || spokenNorm.startsWith(pdfRev))) {
+      return true;
+    }
+  }
+  return false;
+}
+function pageCharBand(paraIdx, start, end) {
+  let before = 0, total = 0;
+  for (let i = 0; i < S.paras.length; i++) {
+    const len = Math.max(12, (S.paras[i] || "").length);
+    if (i < paraIdx) before += len;
+    total += len;
+  }
+  total = Math.max(1, total);
+  const pLen = Math.max(12, (S.paras[paraIdx] || "").length);
+  const s0 = before / total;
+  const s1 = (before + pLen) / total;
+  const c0 = (before + Math.min(pLen, Math.max(0, start || 0))) / total;
+  const c1 = (before + Math.min(pLen, Math.max(start || 0, end > start ? end : pLen))) / total;
+  return { s0, s1, c0: Math.min(0.99, c0), c1: Math.min(1, Math.max(c0 + 0.01, c1)) };
+}
+function planSentenceOnPdf(box, page, paraIdx, start, end, sentText) {
+  const lines = box.lines;
+  const band = pageCharBand(paraIdx, start, end);
+  const expectedLine = Math.min(lines.length - 1, Math.max(0, Math.floor(band.c0 * lines.length)));
+  // Translated books: track strictly by character-weighted line band (never jumps between paragraphs!)
+  if (translating()) {
+    const startLine = Math.min(lines.length - 1, Math.max(0, Math.floor(band.c0 * lines.length)));
+    const endLine = Math.min(lines.length - 1, Math.max(startLine, Math.floor(band.c1 * lines.length)));
+    return { translated: true, lines: lines.slice(startLine, endLine + 1), startLine };
+  }
+  // Original language PDF: search ONLY within a bounded window around expectedLine / lastLineAnchor
+  const rawWords = (sentText.match(/\S+/g) || []);
+  const spokenNorms = rawWords.map(normBoxText);
+  const meaningful = spokenNorms.filter(t => t.length >= 2);
+  let bestStart = -1, bestSpan = 1, bestScore = -1, bestRatio = 0;
+  const samePage = lastLineAnchor.page === page;
+  const advancing = samePage && paraIdx >= lastLineAnchor.para;
+  const center = advancing ? Math.round((lastLineAnchor.lineIdx + expectedLine) * 0.5) : expectedLine;
+  const winLo = advancing ? Math.max(0, lastLineAnchor.lineIdx - 1) : Math.max(0, center - 8);
+  const winHi = Math.min(lines.length - 1, Math.max(center + 10, winLo + 14));
+  if (meaningful.length > 0) {
+    for (let i = winLo; i <= winHi; i++) {
+      for (let span = 1; span <= 3 && i + span <= lines.length; span++) {
+        const flat = [];
+        for (let k = i; k < i + span; k++) for (const wd of lines[k].words) flat.push(wd);
+        let cur = 0, hits = 0;
+        for (const t of meaningful) {
+          for (let j = cur; j < flat.length; j++) {
+            if (wordMatchesPdf(t, flat[j])) { hits++; cur = j + 1; break; }
+          }
+        }
+        const ratio = hits / meaningful.length;
+        if (ratio < 0.40) continue;
+        const dist = Math.abs(i - expectedLine);
+        const prox = Math.max(0, 1 - dist / Math.max(4, lines.length * 0.4));
+        const sc = ratio * 1.5 - (span - 1) * 0.08 + 0.25 * prox;
+        if (sc > bestScore) { bestScore = sc; bestStart = i; bestSpan = span; bestRatio = ratio; }
+      }
+    }
+  }
+  // If Persian PDF glyphs are non-extractable/custom-encoded (weak match), follow smooth monotonic line band
+  if (bestStart < 0 || bestRatio < 0.40) {
+    const startLine = advancing ? Math.min(lines.length - 1, Math.max(lastLineAnchor.lineIdx, expectedLine)) : expectedLine;
+    const endLine = Math.min(lines.length - 1, Math.max(startLine, Math.floor(band.c1 * lines.length)));
+    lastLineAnchor = { page, para: paraIdx, lineIdx: startLine };
+    return { translated: true, lines: lines.slice(startLine, endLine + 1), startLine };
+  }
+  lastLineAnchor = { page, para: paraIdx, lineIdx: bestStart };
+  const matchedLines = lines.slice(bestStart, bestStart + bestSpan);
+  const flatPdf = [];
+  for (let li = 0; li < matchedLines.length; li++) {
+    for (const wd of matchedLines[li].words) flatPdf.push({ ...wd, line: matchedLines[li], lineIdx: li });
+  }
+  // Monotonic forward alignment from each spoken word index -> PDF word box
+  const wordBoxes = new Array(spokenNorms.length).fill(null);
+  let cursor = 0;
+  for (let wi = 0; wi < spokenNorms.length; wi++) {
+    const wn = spokenNorms[wi];
+    if (!wn) continue;
+    const lookLimit = Math.min(flatPdf.length, cursor + 6);
+    for (let j = cursor; j < lookLimit; j++) {
+      if (wordMatchesPdf(wn, flatPdf[j])) {
+        wordBoxes[wi] = flatPdf[j];
+        cursor = j + 1;
+        break;
+      }
+    }
+  }
+  let lastBox = null;
+  for (let wi = 0; wi < wordBoxes.length; wi++) {
+    if (wordBoxes[wi]) { lastBox = wordBoxes[wi]; continue; }
+    let nextBox = null;
+    for (let k = wi + 1; k < wordBoxes.length; k++) { if (wordBoxes[k]) { nextBox = wordBoxes[k]; break; } }
+    if (lastBox) wordBoxes[wi] = lastBox;
+    else if (nextBox) wordBoxes[wi] = nextBox;
+  }
+  return { translated: false, lines: matchedLines, wordBoxes, flatPdf, startLine: bestStart };
+}
+window.updatePageLiveHighlight = function (page, paraIdx, start, end, wordText, fraction, wordIdx = -1, totalWords = 0) {
+  const layer = $("pageHlLayer"), cap = $("pageLiveCaption"), img = $("pageImg");
+  if (!layer || !cap) return;
+  const srvBox = S.doc ? pageBoxesMap.get(`${S.doc.id}|${page}`) : null;
+  const exactParaLines = srvBox && Array.isArray(srvBox.paras) ? srvBox.paras[paraIdx] : null;
+  const hasParaText = !!(S.paras && S.paras[paraIdx]);
+  if (S.view !== "page" || !S.doc || S.page !== page || paraIdx < 0 || (!hasParaText && !(exactParaLines && exactParaLines.length))) {
+    window.clearPageLiveHighlight();
+    return;
+  }
+  const paraText = (S.paras && S.paras[paraIdx]) || "";
+  const sentText = (end > start ? paraText.slice(start, end) : paraText).trim();
+  const rawWords = sentText.match(/\S+/g) || [];
+  const effTotal = totalWords > 0 ? totalWords : rawWords.length;
+  const effIdx = wordIdx >= 0 ? Math.min(Math.max(0, wordIdx), Math.max(0, rawWords.length - 1))
+    : Math.min(Math.max(0, Math.floor((fraction || 0) * rawWords.length)), Math.max(0, rawWords.length - 1));
+  const imgReady = !!(img && img.naturalWidth > 0 && img.dataset.page === String(page));
+  const key = `${page}|${paraIdx}|${start}|${end}|${effIdx}|${imgReady ? 1 : 0}|${translating() ? Math.round((fraction || 0) * 40) : 0}`;
+  if (key === lastPageHlKey && (layer.childElementCount > 0 || !imgReady)) return;
+  lastPageHlKey = key;
+
+  // 1) Sticky live caption pill (exact effIdx word — never shifts the PDF page image below!)
+  if (sentText && rawWords.length) {
+    cap.hidden = false;
+    cap.replaceChildren();
+    let wi = 0, lastPos = 0, m;
+    const re = /\S+/g;
+    while ((m = re.exec(sentText)) !== null) {
+      if (m.index > lastPos) cap.append(document.createTextNode(sentText.slice(lastPos, m.index)));
+      if (wi === effIdx) {
+        const span = document.createElement("span");
+        span.className = "page-cap-now";
+        span.textContent = m[0];
+        cap.append(span);
+      } else {
+        cap.append(document.createTextNode(m[0]));
+      }
+      lastPos = m.index + m[0].length;
+      wi++;
+    }
+    if (lastPos < sentText.length) cap.append(document.createTextNode(sentText.slice(lastPos)));
+  } else {
+    cap.hidden = true;
+  }
+
+  // 2) Wait until the PDF page image is rendered so overlay boxes never land on a 0px unloaded stage
+  layer.replaceChildren();
+  if (!imgReady) return;
+  const pct = (v, m) => Math.max(0, Math.min(100, (v / m) * 100)).toFixed(2) + "%";
+  const addBox = (cls, x0, top, x1, bot, w, h) => {
+    const d = document.createElement("div");
+    d.className = cls;
+    d.style.left = pct(x0 - 2, w);
+    d.style.top = pct(top - 2, h);
+    d.style.width = pct(Math.max(8, x1 - x0 + 4), w);
+    d.style.height = pct(Math.max(10, bot - top + 4), h);
+    layer.append(d);
+    return d;
+  };
+  let focusEl = null;
+  // PRIMARY EXACT PATH: backend-supplied exact 1-to-1 paragraph line boxes from src/text.rs (ZERO jumping across paragraphs!)
+  if (exactParaLines && exactParaLines.length > 0) {
+    const w = Math.max(1, srvBox.w), h = Math.max(1, srvBox.h);
+    const paraLen = Math.max(1, paraText.length);
+    const s0 = paraText.length ? Math.min(0.99, Math.max(0, (start || 0) / paraLen)) : 0;
+    const s1 = paraText.length ? Math.min(1.0, Math.max(s0 + 0.01, (end > start ? end : paraLen) / paraLen)) : 1.0;
+    const curFrac = Math.min(0.999, Math.max(0, s0 + (s1 - s0) * Math.min(0.99, Math.max(0, fraction || 0))));
+    const widths = exactParaLines.map(ln => Math.max(10, ln[2] - ln[0]));
+    const totalW = widths.reduce((a, b) => a + b, 0);
+    let acc = 0, activeLine = exactParaLines[exactParaLines.length - 1], inLineFrac = 0;
+    for (let i = 0; i < exactParaLines.length; i++) {
+      const ln = exactParaLines[i];
+      const f0 = acc / totalW, f1 = (acc + widths[i]) / totalW;
+      acc += widths[i];
+      if (f1 >= s0 - 0.01 && f0 <= s1 + 0.01) {
+        addBox("page-hl-sent", ln[0], ln[1], ln[2], ln[3], w, h);
+      }
+      if (curFrac >= f0 && (curFrac <= f1 || i === exactParaLines.length - 1)) {
+        activeLine = ln;
+        inLineFrac = Math.min(0.96, Math.max(0, (curFrac - f0) / Math.max(0.001, f1 - f0)));
+      }
+    }
+    const [lx0, ltop, lx1, lbot, lrtl] = activeLine;
+    const lw = Math.max(12, lx1 - lx0);
+    const segW = Math.min(lw, Math.max(18, lw * 0.14));
+    const wx0 = lrtl ? (lx1 - segW - inLineFrac * (lw - segW)) : (lx0 + inLineFrac * (lw - segW));
+    focusEl = addBox("page-hl-word", wx0, ltop, wx0 + segW, lbot, w, h);
+  } else {
+    const band = pageCharBand(paraIdx, start, end);
+    const prog = Math.min(0.99, Math.max(0, band.c0 + (band.c1 - band.c0) * Math.min(0.99, Math.max(0, fraction || 0))));
+    const box = ensurePdfBoxes(page);
+    if (box && box.lines.length > 0) {
+      const startLine = Math.min(box.lines.length - 1, Math.max(0, Math.floor(band.c0 * box.lines.length)));
+      const endLine = Math.min(box.lines.length - 1, Math.max(startLine, Math.floor(band.c1 * box.lines.length)));
+      const subLines = box.lines.slice(startLine, endLine + 1);
+      const f = Math.min(0.99, Math.max(0, fraction || 0));
+      const li = Math.min(subLines.length - 1, Math.max(0, Math.floor(f * subLines.length)));
+      const line = subLines[li];
+      const inLineFrac = Math.min(0.95, Math.max(0, f * subLines.length - li));
+      addBox("page-hl-sent", line.x0, line.top, line.x1, line.bot, box.w, box.h);
+      const segW = Math.max(18, (line.x1 - line.x0) * 0.15);
+      const wx0 = line.rtl ? (line.x1 - segW - inLineFrac * (line.x1 - line.x0 - segW)) : (line.x0 + inLineFrac * (line.x1 - line.x0 - segW));
+      focusEl = addBox("page-hl-word", wx0, line.top, wx0 + segW, line.bot, box.w, box.h);
+    } else {
+      const g = document.createElement("div");
+      g.className = "page-hl-guide";
+      g.style.top = (8 + prog * 82).toFixed(1) + "%";
+      layer.append(g);
+      focusEl = g;
+    }
+  }
+  if (focusEl && !reader.paused) {
+    const r = focusEl.getBoundingClientRect();
+    const capBot = cap.hidden ? 0 : cap.getBoundingClientRect().bottom;
+    const topBound = Math.max(document.querySelector(".bar").getBoundingClientRect().bottom, capBot) + 14;
+    const dockTop = $("docTools").getBoundingClientRect().top - 14;
+    if (dockTop > topBound + 40 && (r.top < topBound || r.bottom > dockTop)) {
+      window.scrollBy(0, r.top - (topBound + Math.max(0, dockTop - topBound - r.height) * 0.35));
+    }
+  }
+};
+const pageImgCache = new Map(); // "docId|page|w" -> objectURL (LRU up to 8 pages)
+const pageImgPending = new Map();
+function clearPageImgCache() {
+  for (const url of pageImgCache.values()) { try { URL.revokeObjectURL(url); } catch (_) {} }
+  pageImgCache.clear();
+  pageImgPending.clear();
+  const img = $("pageImg");
+  if (img) { img.removeAttribute("src"); img.dataset.page = ""; img.dataset.blob = ""; }
+}
+function fetchPageImgUrl(id, n, w) {
+  const key = `${id}|${n}|${w}`;
+  if (pageImgCache.has(key)) {
+    const u = pageImgCache.get(key);
+    pageImgCache.delete(key);
+    pageImgCache.set(key, u);
+    return Promise.resolve(u);
+  }
+  if (pageImgPending.has(key)) return pageImgPending.get(key);
+  const p = pdfCall({ op: "render", n, width: w }).then(blob => {
+    pageImgPending.delete(key);
+    if (!(blob instanceof Blob)) throw new Error("تصویر صفحه ساخته نشد.");
+    const u = URL.createObjectURL(blob);
+    if (!S.doc || S.doc.id !== id) { URL.revokeObjectURL(u); return null; }
+    pageImgCache.set(key, u);
+    while (pageImgCache.size > 8) {
+      const [oldK, oldU] = pageImgCache.entries().next().value;
+      pageImgCache.delete(oldK);
+      try { URL.revokeObjectURL(oldU); } catch (_) {}
+    }
+    return u;
+  }).catch(e => { pageImgPending.delete(key); throw e; });
+  pageImgPending.set(key, p);
+  return p;
+}
 function renderPageImage() {
-  const w = Math.round(Math.min(document.querySelector(".sheet").clientWidth, 900) * (devicePixelRatio || 1));
-  if (S.doc.engine === "pdfjs") {
-    // (only a PDF has pictures of its pages: drawn by pdf.js in its frame, back as a PNG)
+  const sheetW = Math.min(document.querySelector(".sheet").clientWidth || 720, 900);
+  const dpr = Math.min(devicePixelRatio || 1, 1.5);
+  const w = Math.max(480, Math.min(1350, Math.round(sheetW * dpr)));
+  if (S.doc && S.doc.engine === "pdfjs") {
     const n = S.page, id = S.doc.id, img = $("pageImg");
-    // (the last page's picture, dimmed until this one comes: never taken for the page in the box)
-    if (img.dataset.page !== String(n)) img.classList.add("stale");
-    pdfCall({ op: "render", n, width: w }).then(blob => {
-      if (!S.doc || S.doc.id !== id || S.page !== n || !(blob instanceof Blob)) return;
-      const old = img.dataset.blob;
-      img.dataset.blob = img.src = URL.createObjectURL(new Blob([blob], { type: "image/png" }));
+    if (!pageBoxesMap.has(`${id}|${n}`)) ensurePdfBoxes(n);
+    const key = `${id}|${n}|${w}`;
+    const cached = pageImgCache.get(key);
+    if (cached) {
+      if (img.src !== cached) img.src = cached;
       img.dataset.page = String(n);
       img.classList.remove("stale");
-      if (old) URL.revokeObjectURL(old);
+      if (n < S.doc.pages && !pageImgCache.has(`${id}|${n + 1}|${w}`)) {
+        fetchPageImgUrl(id, n + 1, w).catch(() => {});
+      }
+      return;
+    }
+    if (img.dataset.page !== String(n)) { img.classList.add("stale"); window.clearPageLiveHighlight(); }
+    fetchPageImgUrl(id, n, w).then(u => {
+      if (!u || !S.doc || S.doc.id !== id || S.page !== n) return;
+      img.src = u;
+      img.dataset.page = String(n);
+      img.classList.remove("stale");
+      // Background prefetch of the next page so page turns & live reading flip instantaneously!
+      if (n < S.doc.pages && !pageImgCache.has(`${id}|${n + 1}|${w}`)) {
+        fetchPageImgUrl(id, n + 1, w).catch(() => {});
+      }
     }).catch(e => toast(e.message));
   }
 }
 function syncChrome() {
   const has = !!S.doc;
+  $("welcome").hidden = has;
   $("skipContent").href = has && S.view === "text" ? "#textView" : "#mainContent";
   // (the book's tools and the player show only with a book open, the search only over its text: app.css)
   document.body.classList.toggle("has-doc", has);
   document.body.classList.toggle("view-text", has && S.view === "text");
+  syncWelcomeMedia();
   $("docTools").hidden = !has; $("searchRow").hidden = !has || S.view !== "text";
   if (!has) return;
+  const isTypedDoc = !!S.doc.isTyped;
+  if ($("closeDocBtn")) {
+    const closeLbl = isTypedDoc ? "پاک کردن متن و بازگشت" : "بستن متن و بازگشت به صفحه‌ی آغاز";
+    $("closeDocBtn").title = closeLbl;
+    $("closeDocBtn").setAttribute("aria-label", closeLbl);
+  }
+  if ($("closeTextLabel")) $("closeTextLabel").textContent = isTypedDoc ? "پاک کردن متن" : "بستن کتاب";
   $("pageInput").value = fa(S.page);
   $("pageCount").textContent = fa(S.doc.pages);
   $("quickPageNumber").textContent = fa(S.page);
@@ -1218,9 +1854,9 @@ const goTyped = () => { const n = numOf($("pageInput").value); if (n >= 1 && S.d
 $("pageInput").onchange = goTyped;
 $("pageInput").onblur = () => { if (numOf($("pageInput").value) !== S.page) goTyped(); };
 $("pageInput").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); goTyped(); } });
-$("viewText").onclick = () => { S.view = "text"; syncChrome(); };
+$("viewText").onclick = () => { S.view = "text"; if ($("moreTools")) $("moreTools").open = false; if ($("zoomMenu")) $("zoomMenu").hidden = true; syncChrome(); };
 $("trBtn").onclick = () => { setSetting("translate", !S.settings.translate); loadPage(S.page); };
-$("viewPage").onclick = () => { S.view = "page"; syncChrome(); renderPageImage(); };
+$("viewPage").onclick = () => { S.view = "page"; if ($("moreTools")) $("moreTools").open = false; window.clearPageLiveHighlight(true); syncChrome(); renderPageImage(); };
 $("q").oninput = renderText;
 $("q").onkeydown = e => {
   if (e.key !== "Enter") return;
@@ -1246,10 +1882,32 @@ addEventListener("keydown", e => {
   if (e.key === "ArrowRight") { e.preventDefault(); $("next").click(); }
   if (e.key === " ") { e.preventDefault(); $("play").click(); }
 });
-$("copy").onclick = () => {
+let clipClearTimer = null, clipActive = false;
+function clearBrowserClip() {
+  if (clipClearTimer) { clearTimeout(clipClearTimer); clipClearTimer = null; }
+  if (!clipActive) return;
+  clipActive = false;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText("").catch(() => {});
+  }
+}
+$("copy").onclick = async () => {
   const text = S.paras.join("\n\n");
   if (!text) return toast("متنی برای کپی نیست.");
-  navigator.clipboard.writeText(text).then(() => toast("متن صفحه کپی شد."), () => toast("کپی نشد؛ متن را انتخاب و کپی کنید."));
+  try {
+    await api("/api/clip", { method: "POST", body: text });
+    toast("متن صفحه کپی شد. پس از یک دقیقه و نیم از حافظه‌ی کپی پاک می‌شود.");
+    return;
+  } catch (e) {}
+  try {
+    await navigator.clipboard.writeText(text);
+    clipActive = true;
+    if (clipClearTimer) clearTimeout(clipClearTimer);
+    clipClearTimer = setTimeout(clearBrowserClip, 90000);
+    toast("متن صفحه کپی شد. پس از یک دقیقه و نیم از حافظه‌ی کپی پاک می‌شود.");
+  } catch (e) {
+    toast("کپی نشد؛ متن را انتخاب و کپی کنید.");
+  }
 };
 
 /* ---------------- reading aloud ----------------
@@ -1386,15 +2044,16 @@ function piecesFor(page, paras, fromPara, fromOff = 0) {
     let first = true;
     for (const sentence of spokenSentences(p)) {
       const start = sentence.start, sent = sentence.text;
-      const parts = sent.length > 240 ? sent.split(/(?<=[،؛,;])\s+/) : [sent];
+      const parts = sent.length > 180 ? sent.split(/(?<=[،؛,:;—–])\s+/) : [sent];
       let off = start;
       parts.forEach((part, k) => {
         const at = p.indexOf(part, off);
         if (/[\p{L}\p{N}]/u.test(part) && !(i === fromPara && at + part.length <= fromOff)) {
           const before = out.length ? out[out.length - 1].text : "";
           const asked = /[؟?!][»”"'’)\]]*$/.test(before);
-          const pause = title ? 1.1 : afterTitle ? 0.8 : first ? 0.9 : k > 0 ? 0.2 : asked ? 0.6 : 0.45;
-          out.push({ page, p: i, start: at, end: at + part.length, text: part.trim(), pause: pause * (({ short: 0.45, long: 1.4 })[S.settings.sentencePause] || 1) });
+          const trailed = /(?:\.\.\.|…)[»”"'’)\]]*$/.test(before);
+          const pause = title ? 0.58 : afterTitle ? 0.48 : first ? 0.52 : k > 0 ? 0.14 : trailed ? 0.42 : asked ? 0.38 : 0.26;
+          out.push({ page, p: i, start: at, end: at + part.length, text: part.trim(), pause: Math.max(0.05, pause * (({ short: 0.45, long: 1.45 })[S.settings.sentencePause] || 1)) });
           afterTitle = title;
         }
         first = false; off = at + part.length;
@@ -1404,20 +2063,126 @@ function piecesFor(page, paras, fromPara, fromOff = 0) {
   return out;
 }
 
-const reader = { active: false, paused: false, run: 0, queue: [], next: 0, playing: [], lastEnd: 0, lastPage: 0, sources: [] };
+const reader = { active: false, paused: false, run: 0, queue: [], next: 0, playing: [], lastEnd: 0, lastPage: 0, sources: [], pendingTarget: null };
+let readingWaitText = "";
+let readingPauseReason = "";
+window.setPauseReason = function (reason) {
+  readingPauseReason = reason ? String(reason) : "";
+  const el = $("readingState");
+  if (el && reader.paused) {
+    el.textContent = readingPauseReason || "خواندن مکث شده";
+  }
+};
+window.clearPendingStart = function () {
+  reader.pendingTarget = null;
+  document.querySelectorAll(".text .w.pending-start").forEach(el => {
+    el.classList.remove("pending-start", "pending-pulse");
+    el.removeAttribute("aria-current");
+  });
+  document.querySelectorAll(".text p.pending-read").forEach(el => el.classList.remove("pending-read"));
+};
+window.markPendingStart = function (paraIdx, offset, wordEl, reason) {
+  window.clearPendingStart();
+  const p = document.querySelector(`.text p[data-i="${paraIdx}"]`);
+  const w = (wordEl && wordEl.isConnected) ? wordEl
+    : (p ? ([...p.querySelectorAll(".w")].find(el => +el.dataset.s >= offset) || p.querySelector(".w")) : null);
+  if (p) p.classList.add("pending-read");
+  if (w) {
+    w.classList.add("pending-start");
+    w.setAttribute("aria-current", "location");
+  }
+  reader.pendingTarget = { page: S.page, para: paraIdx, start: offset, started: false, at: Date.now() };
+  if (window.setReadingWait) window.setReadingWait(reason || "در حال شروع خواندن از کلمه‌ی انتخاب‌شده…");
+};
+let prepStartAt = 0, prepTick = null;
+function updatePrepBanner(reason, progress = -1, sub = "", forceShow = false) {
+  const banner = $("prepBanner");
+  if (!banner) return;
+  const allow = !S.settings || S.settings.showWaitReason !== false;
+  const visible = allow && !!reason && (forceShow || (reader.active && !reader.paused) || !!reader.pendingTarget);
+  if (!visible) {
+    banner.hidden = true;
+    prepStartAt = 0;
+    clearInterval(prepTick); prepTick = null;
+    return;
+  }
+  if (!prepStartAt) {
+    prepStartAt = Date.now();
+    clearInterval(prepTick);
+    prepTick = setInterval(() => {
+      const t = $("prepTimer");
+      if (!t || banner.hidden || !prepStartAt) return;
+      const secs = Math.max(1, Math.floor((Date.now() - prepStartAt) / 1000));
+      t.textContent = fa(secs) + " ثانیه";
+    }, 1000);
+  }
+  banner.hidden = false;
+  if ($("prepTitle") && $("prepTitle").textContent !== reason) $("prepTitle").textContent = reason;
+  const fill = $("prepFill");
+  if (fill) {
+    const det = typeof progress === "number" && progress >= 0 && progress <= 100;
+    fill.classList.toggle("indet", !det);
+    fill.style.width = det ? Math.max(4, Math.round(progress)) + "%" : "38%";
+  }
+  const subEl = $("prepSub");
+  if (subEl) {
+    subEl.textContent = sub || (typeof progress === "number" && progress >= 0
+      ? fa(Math.round(progress)) + "٪ آماده شد — خواندن به‌محض آماده شدن شروع می‌شود."
+      : "همه‌چیز آفلاین روی دستگاه انجام می‌شود؛ به‌محض آماده شدن، خواندن شروع می‌شود.");
+  }
+  const secs = Math.floor((Date.now() - prepStartAt) / 1000);
+  if ($("prepTimer")) $("prepTimer").textContent = secs >= 1 ? fa(secs) + " ثانیه" : "";
+}
+window.setPrepProgress = updatePrepBanner;
+window.setReadingWait = function (reason, progress = -1, sub = "") {
+  const show = !S.settings || S.settings.showWaitReason !== false;
+  readingWaitText = show && reason ? String(reason) : "";
+  const el = $("readingState");
+  const waiting = !!readingWaitText && ((reader.active && !reader.paused) || !!reader.pendingTarget);
+  document.body.classList.toggle("is-waiting", waiting);
+  if (el) {
+    el.setAttribute("aria-busy", String(waiting));
+    const state = waiting ? readingWaitText : (reader.paused ? (readingPauseReason || "خواندن مکث شده") : reader.active ? "در حال خواندن" : "آماده‌ی خواندن");
+    if (el.textContent !== state) el.textContent = state;
+  }
+  updatePrepBanner(waiting ? readingWaitText : "", progress, sub, false);
+  if (window.syncTypeControls && $("typePanel") && !$("typePanel").hidden) {
+    window.syncTypeControls(waiting ? readingWaitText : (reader.active ? (reader.paused ? "خواندن مکث شد." : "در حال خواندن متن شما…") : ""));
+  }
+};
 function setPlayButton() {
   const wasReading = document.body.classList.contains("is-reading");
   const wasPaused = document.body.classList.contains("is-paused");
   if (reader.active && !reader.paused && (!wasReading || wasPaused)) $("moreTools").open = false;
   document.body.classList.toggle("is-paused", !!reader.active && !!reader.paused);
   document.body.classList.toggle("is-reading", !!reader.active);
-  if (!reader.active) { document.body.classList.remove("reading-tools-open"); $("readingToolsBtn").setAttribute("aria-expanded", "false"); $("readingToolsBtn").textContent = "صفحه و سرعت"; }
-  $("play").setAttribute("aria-pressed", String(reader.active && !reader.paused));
-  $("play").setAttribute("aria-label", reader.active && !reader.paused ? "مکث خواندن" : reader.paused ? "ادامه‌ی خواندن" : "شروع خواندن");
-  $("play").textContent = reader.active && !reader.paused ? "❚❚ مکث" : (reader.paused ? "▶ ادامه" : "▶ خواندن");
+  if (!reader.active) {
+    if (!reader.pendingTarget) {
+      readingWaitText = "";
+      if (S.pageDone !== false) updatePrepBanner("", -1, "", false);
+    }
+    document.body.classList.remove("reading-tools-open");
+    $("readingToolsBtn").setAttribute("aria-expanded", "false");
+    $("readingToolsBtn").textContent = "صفحه و سرعت";
+  }
+  const isPlaying = !!(reader.active && !reader.paused);
+  $("play").setAttribute("aria-pressed", String(isPlaying));
+  $("play").setAttribute("aria-label", isPlaying ? "مکث خواندن" : reader.paused ? "ادامه‌ی خواندن" : "شروع خواندن");
+  const playIc = $("play").querySelector(".play-ic"), pauseIc = $("play").querySelector(".pause-ic"), playLbl = $("playLabel");
+  if (playIc && pauseIc && playLbl) {
+    playIc.hidden = isPlaying;
+    pauseIc.hidden = !isPlaying;
+    playLbl.textContent = isPlaying ? "مکث" : (reader.paused ? "ادامه" : "خواندن");
+  } else {
+    $("play").textContent = isPlaying ? "❚❚ مکث" : (reader.paused ? "▶ ادامه" : "▶ خواندن");
+  }
   $("stop").disabled = !reader.active;
-  const state = reader.paused ? "خواندن مکث شده" : reader.active ? "در حال خواندن" : "آماده‌ی خواندن";
+  const waiting = !!readingWaitText && ((reader.active && !reader.paused) || !!reader.pendingTarget);
+  document.body.classList.toggle("is-waiting", waiting);
+  const state = waiting ? readingWaitText : (reader.paused ? (readingPauseReason || "خواندن مکث شده") : reader.active ? "در حال خواندن" : "آماده‌ی خواندن");
   if ($("readingState").textContent !== state) $("readingState").textContent = state;
+  $("readingState").setAttribute("aria-busy", String(waiting));
+  if (window.syncTypeControls) window.syncTypeControls(reader.active ? state : "");
 }
 // a big mouse pointer for people who see badly: drawn here as pictures (black arrow with a white edge; yellow over things that can be pressed)
 let cursorUrls = [];
@@ -1446,8 +2211,8 @@ async function atBookStart(n) {
 
 // fromOff: start at the sentence holding this offset of paragraph i (a click on it); the book's
 // name is said only when reading starts at the very beginning
-async function readFrom(i, fromOff = 0) {
-  stopReading();
+async function readFrom(i, fromOff = 0, opts = {}) {
+  stopReading(!!opts.keepPending);
   if (!S.doc) return;
   ensureAudio();
   const run = ++reader.run;
@@ -1458,6 +2223,7 @@ async function readFrom(i, fromOff = 0) {
   // pages still being translated: their new paragraphs are read before going on
   reader.partial = { [S.page]: S.pageDone === false };
   setPlayButton();
+  setReadingWait(opts.reason || "در حال ساختن صدای جمله‌ی اول…");
   requestAnimationFrame(() => tick(run));
   try {
     let ended = false;
@@ -1496,7 +2262,7 @@ async function readFrom(i, fromOff = 0) {
         }
         starved = reader.next >= reader.queue.length;
       }
-      if (starved) { await sleep(600); continue; }
+      if (starved) { setReadingWait("در حال ترجمه‌ی آفلاین ادامه‌ی صفحه…"); await sleep(600); continue; }
       if (reader.next >= reader.queue.length) {
         // the last page has been read: say so, so the listener knows the book is finished
         if (!ended && reader.lastPage >= S.doc.pages && !S.doc.isTyped) {
@@ -1504,20 +2270,40 @@ async function readFrom(i, fromOff = 0) {
           reader.queue.push({ page: reader.lastPage, p: -1, start: 0, end: 0, text: "پایان متن.", pause: 1.2 });
           continue;
         }
+        setReadingWait("");
         while (reader.run === run && actx.currentTime < reader.lastEnd) await sleep(200);
         break;
       }
       // stay well ahead of what is being heard, so a sentence the voice has to make again
       // (a retry takes a few seconds) never leaves a gap; prepare the following pieces too
       // (and nothing new is asked for while a change of voice waits for its first sentences: they go first)
-      if (reader.lastEnd - actx.currentTime > 30 || reader.restarting) { await sleep(250); continue; }
+      if (reader.lastEnd - actx.currentTime > 45 || reader.restarting) { await sleep(200); continue; }
       const piece = reader.queue[reader.next];
-      const bufP = speechBuffer(piece.text, run);
-      for (let k = 1; k <= 3; k++) if (reader.queue[reader.next + k]) speechBuffer(reader.queue[reader.next + k].text, run).catch(() => {});
+      if (reader.next === 0) setReadingWait(opts.reason || "در حال ساختن صدای جمله‌ی اول…");
+      else if (reader.lastEnd <= actx.currentTime + 0.08) setReadingWait("در حال آماده‌سازی جمله‌ی بعدی برای ادامه‌ی روان… (پردازش آفلاین روی دستگاه)");
+      const lowBuffer = reader.next < 3 || (reader.lastEnd - actx.currentTime) < 10;
+      const bufP = speechBuffer(piece.text, run, lowBuffer);
+      const lookahead = S.settings.smoothBuffer === "extra" ? 8 : 6;
+      for (let k = 1; k <= lookahead; k++) if (reader.queue[reader.next + k]) speechBuffer(reader.queue[reader.next + k].text, run, reader.next + k < 4).catch(() => {});
+      // On older laptops/PCs with "smoothBuffer: extra", pre-buffer the first 3 clauses before starting audio
+      if (reader.next === 0 && S.settings.smoothBuffer === "extra" && !(S.doc && S.doc.isTyped)) {
+        const target = Math.min(3, reader.queue.length);
+        let ready = 0;
+        const warms = [];
+        for (let k = 0; k < target; k++) {
+          warms.push(speechBuffer(reader.queue[k].text, run, true).then(() => {
+            ready++;
+            if (reader.run === run && ready < target) setReadingWait(`در حال آماده‌سازی برای خواندنِ بی‌وقفه… (${fa(ready)} از ${fa(target)} جمله)`, Math.round((ready / target) * 100));
+          }).catch(() => {}));
+        }
+        await Promise.race([Promise.all(warms), sleep(12000)]);
+        if (reader.run !== run) return;
+      }
       let buf;
       // (a sentence dropped because the voice changed is asked for again, in the new voice)
       try { buf = await bufP; } catch (e) { if (reader.run === run && isDropped(e)) { await sleep(100); continue; } throw e; }
       if (reader.run !== run) return;
+      setReadingWait("");
       reader.playing = reader.playing.filter(u => u.t1 > actx.currentTime);
       const src = actx.createBufferSource();
       src.buffer = buf; src.connect(actx.destination);
@@ -1547,6 +2333,7 @@ function tick(run) {
   const now = actx.currentTime;
   const piece = reader.playing.find(u => now >= u.t0 && now < u.t1) || null;
   if (!piece) return;
+  if (reader.pendingTarget) window.clearPendingStart();
   if (piece.page !== S.page) showPage(piece.page, reader.pageParas[piece.page], !reader.partial[piece.page]);
   // the sentence's word spans and their weights are looked up once, not on every frame
   if (!piece.words || !piece.words[0] || !piece.words[0].isConnected) {
@@ -1560,8 +2347,8 @@ function tick(run) {
   }
   const para = piece.para, words = piece.words;
   if (!words.length) return;
-  let pos = (now - piece.t0) / (piece.t1 - piece.t0) * piece.total, cur = words[words.length - 1];
-  for (let k = 0; k < words.length; k++) { pos -= piece.weights[k]; if (pos < 0) { cur = words[k]; break; } }
+  let pos = (now - piece.t0) / (piece.t1 - piece.t0) * piece.total, curIdx = words.length - 1, cur = words[curIdx];
+  for (let k = 0; k < words.length; k++) { pos -= piece.weights[k]; if (pos < 0) { curIdx = k; cur = words[k]; break; } }
   if (reader.shownPiece !== piece || !para.classList.contains("reading")) {
     document.querySelectorAll(".text .sent").forEach(w => w.classList.remove("sent"));
     document.querySelectorAll(".text p.reading").forEach(p => p.classList.remove("reading"));
@@ -1573,47 +2360,76 @@ function tick(run) {
     if (reader.shownWord) reader.shownWord.classList.remove("now");
     cur.classList.add("now");
     reader.shownWord = cur;
-    const r = cur.getBoundingClientRect(), top = $("textView").closest("main").getBoundingClientRect().top;
-    if (r.top < innerHeight * 0.25 || r.bottom > innerHeight * 0.8 || r.top < top)
-      cur.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    if (S.view === "text") {
+      const r = cur.getBoundingClientRect(), top = $("textView").closest("main").getBoundingClientRect().top;
+      if (r.top < innerHeight * 0.25 || r.bottom > innerHeight * 0.8 || r.top < top)
+        cur.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    }
+  }
+  if (S.view === "page" && window.updatePageLiveHighlight) {
+    const frac = Math.min(0.999, Math.max(0, (now - piece.t0) / Math.max(0.01, piece.t1 - piece.t0)));
+    window.updatePageLiveHighlight(piece.page, piece.p, piece.start, piece.end, cur ? cur.textContent : "", frac, curIdx, words.length);
   }
 }
 function clearReadingMarks() {
   document.querySelectorAll(".text .sent, .text .now").forEach(w => w.classList.remove("sent", "now"));
   document.querySelectorAll(".text p.reading").forEach(p => p.classList.remove("reading"));
   reader.shownWord = null; reader.shownPiece = null;
+  if (window.clearPageLiveHighlight) window.clearPageLiveHighlight(true);
 }
-function stopReading() {
+function stopReading(keepPending = false) {
   reader.run++; reader.active = false; reader.paused = false;
   reader.sources.forEach(s => { try { s.stop(); } catch (e) {} });
   reader.sources = []; reader.playing = [];
   if (actx && actx.state === "suspended") actx.resume();
   audio.pause();
   clearReadingMarks();
+  if (!keepPending && window.clearPendingStart) window.clearPendingStart();
   setPlayButton();
 }
 $("play").onclick = () => {
   if (!S.doc || !S.paras.length) return toast("متنی برای خواندن نیست.");
   ensureAudio();
-  if (S.view !== "text") { S.view = "text"; syncChrome(); }
   if (reader.active && !reader.paused) { actx.suspend(); reader.paused = true; return setPlayButton(); }
   if (reader.paused) { reader.paused = false; actx.resume(); return setPlayButton(); }
   readFrom(0);
 };
-$("stop").onclick = stopReading;
+$("stop").onclick = () => stopReading(false);
+let pendingClickT = null;
 $("textView").addEventListener("click", e => {
   const p = e.target.closest("p[data-i]");
   // (editing: a tap on a paragraph opens its window; a selected word is left for the «change the word» button)
   if (S.editing) return;
-  if (!p || e.detail > 1) return;
+  if (!p) return;
+  if (e.detail > 1) {
+    clearTimeout(pendingClickT);
+    if (reader.pendingTarget && !reader.pendingTarget.started) window.clearPendingStart();
+    return;
+  }
   ensureAudio();
   // from the sentence clicked (the word's offset; between words, the paragraph's start)
-  const w = e.target.closest(".w"), off = w ? +w.dataset.s : 0;
+  const w = e.target.closest(".w"), paraIdx = +p.dataset.i, off = w ? +w.dataset.s : 0;
+  // If user taps the exact same word again while we are already preparing to read from it,
+  // confirm visually instead of cancelling & restarting synthesis!
+  const pt = reader.pendingTarget;
+  if (pt && pt.page === S.page && pt.para === paraIdx && pt.start === off && pt.started && reader.active) {
+    if (w) { w.classList.remove("pending-pulse"); void w.offsetWidth; w.classList.add("pending-pulse"); }
+    if (window.setReadingWait) window.setReadingWait("انتخاب شد؛ در حال آماده‌سازی صدا از همین‌جا…");
+    return;
+  }
   const id = S.doc && S.doc.id, page = S.page, seq = S.loadSeq;
-  // wait a moment: a double-click selects a word (to fix its pronunciation) instead of reading
-  setTimeout(() => {
-    if (S.doc && S.doc.id === id && S.page === page && S.loadSeq === seq && p.isConnected && !getSelection().toString()) readFrom(+p.dataset.i, off);
-  }, 300);
+  const startReason = "در حال شروع خواندن از کلمه‌ی انتخاب‌شده…";
+  window.markPendingStart(paraIdx, off, w, startReason);
+  clearTimeout(pendingClickT);
+  // Brief 220ms guard: a double-click selects a word (to fix its pronunciation) instead of reading
+  pendingClickT = setTimeout(() => {
+    if (S.doc && S.doc.id === id && S.page === page && S.loadSeq === seq && p.isConnected && !getSelection().toString()) {
+      if (reader.pendingTarget) reader.pendingTarget.started = true;
+      readFrom(paraIdx, off, { reason: startReason, keepPending: true });
+    } else if (reader.pendingTarget && !reader.pendingTarget.started) {
+      window.clearPendingStart();
+    }
+  }, 220);
 });
 $("textView").addEventListener("keydown", e => {
   const p = e.target.closest("p[data-i]");
@@ -1642,7 +2458,11 @@ function durText(sec, exact) {
   if (!(sec > 0)) return "";
   if (sec < 50 && !exact) return "کمتر از یک دقیقه";
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.round(sec % 60);
-  if (exact) return (h ? fa(h) + " ساعت و " : "") + fa(m) + " دقیقه" + (h ? "" : " و " + fa(s) + " ثانیه");
+  if (exact) {
+    if (h > 0) return fa(h) + " ساعت" + (m > 0 ? " و " + fa(m) + " دقیقه" : "");
+    if (m > 0) return fa(m) + " دقیقه" + (s > 0 ? " و " + fa(s) + " ثانیه" : "");
+    return fa(Math.max(1, s)) + " ثانیه";
+  }
   const mr = Math.round((sec % 3600) / 60);
   return "حدود " + (h ? fa(h) + " ساعت" + (mr ? " و " + fa(mr) + " دقیقه" : "") : fa(Math.max(1, mr)) + " دقیقه");
 }
@@ -1688,7 +2508,7 @@ function showSaveLength() {
 let job = null, pollT;
 var saveKind = "mp3";  // (var: applySettings may run before this line)
 function openSave(kind) {
-  if (!S.doc) return;
+  if (!S.doc) { toast("اول یک فایل را باز کنید."); return; }
   if (!(job && job.status === "running")) {
     saveKind = kind;
     $("mp3Status").hidden = true;
@@ -1717,6 +2537,7 @@ for (const id of ["pageInput", "from", "to"]) $(id).addEventListener("input", e 
 $("from").oninput = $("to").oninput = () => { document.querySelector('input[name=scope][value=range]').checked = true; showSaveLength(); };
 document.querySelectorAll("input[name=scope]").forEach(r => r.addEventListener("change", showSaveLength));
 $("mp3Start").onclick = async () => {
+  if (reader.active) stopReading(false);
   const scope = document.querySelector("input[name=scope]:checked").value;
   let first = S.page, last = S.page;
   if (scope === "all") { first = 1; last = S.doc.pages; }
@@ -1816,10 +2637,12 @@ async function libShow() {
     + (mb >= 1024 ? " فایل‌هایی را که دیگر لازم ندارید حذف کنید تا گوشی جا داشته باشد." : "");
   for (const f of r.files) {
     const row = document.createElement("div"); row.className = "librow";
-    const name = document.createElement("div"); name.className = "name"; name.textContent = f.name;
+    const info = document.createElement("div"); info.className = "lib-info";
+    const name = document.createElement("bdi"); name.className = "name"; name.dir = "auto"; name.textContent = f.name;
     const acts = document.createElement("div"); acts.className = "acts";
     const size = document.createElement("span"); size.className = "size";
     size.textContent = (f.seconds > 0 ? durText(f.seconds, true) + " · " : "") + (f.bytes >= 1048576 ? fa((f.bytes / 1048576).toFixed(1)) + " مگابایت" : fa(Math.max(1, Math.round(f.bytes / 1024))) + " کیلوبایت");
+    info.append(name, size);
     const q = "name=" + encodeURIComponent(f.name);
     const play = document.createElement("button"); play.type = "button"; play.className = "primary"; play.textContent = "▶ پخش";
     play.onclick = async () => {
@@ -1843,8 +2666,8 @@ async function libShow() {
       if (!sure) { sure = true; del.textContent = "تأیید حذف"; setTimeout(() => { sure = false; del.textContent = "حذف"; }, 4000); return; }
       try { if ($("libNow").textContent === f.name) libStop(); await jpost("/api/library_delete?" + q, {}); toast("حذف شد."); libShow(); } catch (e) { toast(e.message); }
     };
-    acts.append(size, play, out, del);
-    row.append(name, acts);
+    acts.append(play, out, del);
+    row.append(info, acts);
     list.append(row);
   }
 }
@@ -1855,10 +2678,21 @@ new MutationObserver(() => { if ($("libPanel").hidden) libStop(); }).observe($("
 let toastT;
 // (1.29) a message stays long enough to be read slowly or through a magnifier: at least 6 seconds and longer for a longer message,
 // twice as long with «نمایش درشت و پررنگ»; a touch closes it sooner (it used to vanish after 3.5 seconds, however long it was)
-function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT);
+function toast(msg, onTap = null) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.toggle("clickable", typeof onTap === "function");
+  t.hidden = false;
+  clearTimeout(toastT);
   const ms = Math.max(6000, 2500 + String(msg).length * 70) * (S.settings && S.settings.lowVision ? 2 : 1);
-  t.onclick = () => { clearTimeout(toastT); t.hidden = true; };
-  toastT = setTimeout(() => t.hidden = true, ms); }
+  t.onclick = () => {
+    clearTimeout(toastT);
+    t.hidden = true;
+    t.classList.remove("clickable");
+    if (typeof onTap === "function") onTap();
+  };
+  toastT = setTimeout(() => { t.hidden = true; t.classList.remove("clickable"); }, ms);
+}
 let resizeT; addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => S.doc && S.view === "page" && renderPageImage(), 250); });
 
 async function init() {
@@ -1876,7 +2710,7 @@ async function init() {
     fillVoices(r.voices);
     applySettings(); renderLexicon(); syncChrome(); setPlayButton();
     if (S.settings.startSound !== false) startChime();
-  } catch (e) { note("برنامه درست اجرا نشد: " + esc(e.message), true); }
+  } catch (e) { note("برنامه درست اجرا نشد: " + e.message, true); }
 }
 // (after every script has run: web/lock.js comes after this one)
 if (document.readyState === "loading") addEventListener("DOMContentLoaded", init); else init();
@@ -1933,6 +2767,9 @@ function armParagraphs() {
     p.contentEditable = "plaintext-only";
     p.tabIndex = 0;
     if (p.contentEditable !== "plaintext-only") p.contentEditable = "true";
+    p.spellcheck = false;
+    p.setAttribute("autocorrect", "off");
+    p.setAttribute("autocomplete", "off");
     p.setAttribute("role", "textbox"); p.setAttribute("aria-multiline", "true");
     p.setAttribute("aria-label", `بند ${fa(+p.dataset.i + 1)}، قابل ویرایش`);
   });
@@ -2042,18 +2879,95 @@ if (/Windows/i.test(navigator.userAgent)) {
   document.querySelector("input[name=afmt][value=wav]").checked = true;
   { const n = [...$("mp3Btn").childNodes].reverse().find(x => x.nodeType === 3); if (n) n.textContent = "ذخیره‌ی صدا"; } // (only the words: the icon stays)
 }
-async function openTyped() {
+let lastTypedKey = "";
+function syncTypeControls(statusMsg) {
+  const btn = $("typeRead"), stop = $("typeStop"), st = $("typeReadStatus");
+  if (!btn) return;
+  const inType = $("typePanel") && !$("typePanel").hidden && S.doc && S.doc.isTyped;
+  if (inType && reader.active) {
+    btn.textContent = reader.paused ? "▶ ادامه" : "❚❚ مکث";
+    if (stop) stop.hidden = false;
+  } else {
+    btn.textContent = "▶ خواندن";
+    if (stop) stop.hidden = true;
+  }
+  if (st) {
+    if (statusMsg !== undefined) {
+      st.textContent = statusMsg;
+      st.hidden = !statusMsg;
+    } else if (!inType || !reader.active) {
+      st.textContent = "";
+      st.hidden = true;
+    }
+  }
+}
+window.syncTypeControls = syncTypeControls;
+function closeCurrentDoc(clearTypedBox = false, toastMsg = "") {
+  const wasTyped = !!(S.doc && S.doc.isTyped);
+  stopReading(false);
+  if (clearTypedBox || wasTyped) {
+    if (clearTypedBox && $("typeText")) $("typeText").value = "";
+    lastTypedKey = "";
+  }
+  S.doc = null;
+  S.page = 1;
+  S.paras = [];
+  S.pageDone = true;
+  S.letters = null;
+  S.loadSeq++;
+  if ($("textView")) { $("textView").replaceChildren(); $("textView").hidden = true; }
+  if ($("pageView")) $("pageView").hidden = true;
+  if ($("fileName")) { $("fileName").textContent = ""; $("fileName").title = ""; }
+  if ($("note")) { $("note").replaceChildren(); $("note").hidden = true; }
+  updatePrepBanner("", -1, "", false);
+  clearPageImgCache();
+  pageBoxesMap.clear();
+  pdfBoxes.clear();
+  pageCache.clear();
+  $("welcome").hidden = false;
+  syncChrome();
+  setPlayButton();
+  syncTypeControls("");
+  jpost("/api/close", {}).catch(() => {});
+  if (toastMsg) toast(toastMsg);
+}
+if ($("closeDocBtn")) $("closeDocBtn").onclick = () => {
+  const isTyped = !!(S.doc && S.doc.isTyped);
+  closeCurrentDoc(isTyped, isTyped ? "متن پاک شد." : "");
+};
+if ($("closeTextBtn")) $("closeTextBtn").onclick = () => {
+  const isTyped = !!(S.doc && S.doc.isTyped);
+  if ($("moreTools")) $("moreTools").open = false;
+  closeCurrentDoc(isTyped, isTyped ? "متن پاک شد." : "");
+};
+async function openTyped(stayInPanel = false) {
   const t = $("typeText").value.trim();
   if (!t) { toast("اول متنی بنویسید."); return false; }
-  stopReading();
-  const d = await (await api("/api/open?source=typed&name=" + encodeURIComponent("متن من.txt"), { method: "POST", body: new TextEncoder().encode(t).buffer })).json();
-  if (d.error) { toast(d.error); return false; }
+  const fg = $("typeFinglish") && $("typeFinglish").checked ? "1" : "0";
+  if (stayInPanel) syncTypeControls("در حال آماده‌سازی صدا…");
+  else stopReading();
+  const d = await (await api("/api/open?source=typed&finglish=" + fg + "&name=" + encodeURIComponent("متن من.txt"), { method: "POST", body: new TextEncoder().encode(t).buffer })).json();
+  if (d.error) { syncTypeControls(""); toast(d.error); return false; }
+  lastTypedKey = t + "|" + fg;
   S.doc = d; S.page = 1; S.view = "text"; S.letters = null;
-  loadLengths();
+  pageCache.clear();
   $("fileName").textContent = d.name;
-  $("welcome").hidden = true;
   $("from").value = fa(1); $("to").value = fa(d.pages);
-  note(`متن شما آماده است. با دکمه‌ی «خواندن» آن را بشنوید، با «ذخیره‌ی صدا» فایل صدا بسازید و با «ویرایش متن» آن را عوض کنید.`);
+  $("welcome").hidden = true;
+  note("متن شما آماده است. با «خواندن» بشنوید، با «نوشتن متن» ویرایش کنید، یا با دکمه‌ی روبه‌رو آن را پاک کنید.", false, {
+    id: "clearTypedBannerBtn",
+    label: "پاک کردن متن",
+    onClick: () => closeCurrentDoc(true, "متن پاک شد."),
+  });
+  if (stayInPanel) {
+    const r = await jget(`/api/page?doc=${d.id}&n=1&rev=${!!S.settings.reversed}&yeh=${!!S.settings.persianYeh}&tr=false`);
+    S.paras = r.paragraphs || [];
+    S.pageDone = true;
+    renderText();
+    syncChrome();
+    return true;
+  }
+  loadLengths();
   $("typePanel").hidden = true;
   await loadPage(1);
   return true;
@@ -2087,6 +3001,7 @@ $("sttFile").onclick = () => { if (!sttBusy) $("sttInput").click(); };
 $("sttInput").onchange = async () => {
   const f = $("sttInput").files[0]; $("sttInput").value = "";
   if (!f || sttBusy) return;
+  if (f.size > 400 * 1024 * 1024) { sttSay("فایل صوتی خیلی بزرگ است."); return; }
   sttSay("فایل خوانده می‌شود…");
   await sttRun("/api/stt_start?lang=fa&name=" + encodeURIComponent(f.name), await f.arrayBuffer());
 };
@@ -2112,12 +3027,14 @@ $("sttLive").onclick = async () => {
     if (cur.length >= 16000) { chunks.push(Int16Array.from(cur)); cur = []; }
   };
   src.connect(node); node.connect(ctx.destination);
-  sttRec = { stop: false };
+  sttRec = { stop: false, cancel: false };
   $("sttLive").textContent = "■ پایان ضبط"; $("sttFile").disabled = true;
   const t0 = Date.now();
   while (!sttRec.stop && Date.now() - t0 < 2 * 3600 * 1000) { sttSay("در حال ضبط… " + sttMMSS((Date.now() - t0) / 1000) + " (برای پایان، «پایان ضبط» را بزنید)"); await sleep(250); }
+  const cancelled = !!sttRec.cancel;
   node.disconnect(); src.disconnect(); stream.getTracks().forEach(t => t.stop()); ctx.close();
   sttRec = null; $("sttLive").textContent = "🎤 ضبط و نوشتن"; $("sttFile").disabled = false;
+  if (cancelled) { chunks.forEach(c => c.fill(0)); cur.length = 0; sttSay(""); return; }
   if (cur.length) chunks.push(Int16Array.from(cur));
   const all = new Int16Array(chunks.reduce((n, c) => n + c.length, 0)); let at = 0;
   for (const c of chunks) { all.set(c, at); at += c.length; }
@@ -2125,11 +3042,58 @@ $("sttLive").onclick = async () => {
   sttSay("ضبط تمام شد؛ نوشتن شروع می‌شود…");
   await sttRun("/api/stt_start?lang=fa&pcm=1", all.buffer);
 };
-const showType = () => { openPanel("typePanel"); $("typeText").focus(); };
+const showType = () => { openPanel("typePanel"); syncTypeControls(); $("typeText").focus(); };
 $("typeBtn").onclick = showType;
 $("typeBtn2").onclick = showType;
-$("typeRead").onclick = async () => { ensureAudio(); if (await openTyped() && S.paras.length) readFrom(0); };
-$("typeSave").onclick = async () => { if (await openTyped()) openSave("mp3"); };
+let typeBusy = false;
+$("typeRead").onclick = async () => {
+  if (typeBusy) return;
+  ensureAudio();
+  const curText = $("typeText").value.trim();
+  const fg = $("typeFinglish") && $("typeFinglish").checked ? "1" : "0";
+  if (!curText) return toast("اول متنی بنویسید.");
+  // If already reading this exact typed text inside "نوشتن متن", toggle pause/resume directly (works even while #docTools is inert!)
+  if (reader.active && S.doc && S.doc.isTyped && (curText + "|" + fg) === lastTypedKey) {
+    if (window.togglePause) window.togglePause();
+    else if (actx) {
+      reader.paused = !reader.paused;
+      if (reader.paused) actx.suspend(); else actx.resume();
+      setPlayButton();
+    }
+    syncTypeControls(reader.paused ? "خواندن مکث شد." : "در حال خواندن متن شما…");
+    return;
+  }
+  typeBusy = true;
+  $("typeRead").disabled = true;
+  try {
+    if (await openTyped(true) && S.paras.length) {
+      syncTypeControls("در حال ساختن صدای متن شما…");
+      await readFrom(0, 0, { reason: "در حال ساختن صدای متن شما…" });
+    }
+  } catch (e) {
+    syncTypeControls("");
+    toast(e.message || "خواندن متن شروع نشد.");
+  } finally {
+    typeBusy = false;
+    $("typeRead").disabled = false;
+  }
+};
+if ($("typeStop")) $("typeStop").onclick = () => { stopReading(false); syncTypeControls(""); };
+if ($("typeClear")) $("typeClear").onclick = () => {
+  $("typeText").value = "";
+  lastTypedKey = "";
+  if (S.doc && S.doc.isTyped) closeCurrentDoc(true, "متن پاک شد.");
+  else { stopReading(false); syncTypeControls(""); }
+  $("typeText").focus();
+};
+if ($("typePanel")) {
+  new MutationObserver(() => {
+    if ($("typePanel").hidden && !$("typeText").value.trim() && S.doc && S.doc.isTyped) {
+      closeCurrentDoc(true);
+    }
+  }).observe($("typePanel"), { attributes: true, attributeFilter: ["hidden"] });
+}
+$("typeSave").onclick = async () => { if (await openTyped(false)) openSave("mp3"); };
 
 /* ---------------- editing the text by voice: for people who cannot see the screen well ---------------- */
 // The user says a command; the app repeats what it understood, in a spoken sentence, and asks «درست است؟»; only «بله» changes the text.
@@ -2137,18 +3101,41 @@ let voiceBusy = false, voiceHelped = false;
 const buzz = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
 const vstatus = t => { const b = $("voiceStatus"); b.textContent = t; b.hidden = !t; };
 async function speakWait(text) {
-  ensureAudio();
-  const url = await ttsUrl(text);
-  audio.src = url;
-  await new Promise(done => { audio.onended = audio.onerror = () => done(); audio.play().catch(() => done()); setTimeout(done, 25000); });
+  const ctx = ensureAudio();
+  try {
+    const r = await api("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice: S.settings.voice, speed: S.settings.speed, quick: true }) });
+    const buf = await r.arrayBuffer();
+    if (buf.byteLength > 44) {
+      if (ctx.state === "suspended") await ctx.resume();
+      const decoded = await ctx.decodeAudioData(buf.slice(0));
+      await new Promise(done => {
+        const src = ctx.createBufferSource();
+        src.buffer = decoded;
+        src.connect(ctx.destination);
+        const t = setTimeout(done, Math.min(25000, Math.ceil(decoded.duration * 1000) + 1200));
+        src.onended = () => { clearTimeout(t); done(); };
+        src.start();
+      });
+      await sleep(300); // let speaker reverberation settle before opening the microphone
+      return;
+    }
+  } catch (_) {}
+  try {
+    const url = await ttsUrl(text);
+    audio.src = url;
+    await new Promise(done => { audio.onended = audio.onerror = () => done(); audio.play().catch(() => done()); setTimeout(done, 25000); });
+    await sleep(300);
+  } catch (_) {}
 }
 // one recording from the microphone, until the user stops speaking (or the time is up); the recognizer's answer: {text, cmd, yes}
-async function listenOnce(maxMs, mode, endQuiet = 1.2) {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-  let ctx, src, node, rate = 16000, hidden = document.hidden;
+async function listenOnce(maxMs, mode, endQuiet = 1.35) {
+  // echoCancellation: false avoids Android WebView / Bluetooth AEC muting the user right after prompt speech!
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: true } });
+  let ctx, src, node, sink, rate = 16000, hidden = document.hidden || document.body.classList.contains("locked");
   const chunks = [], t0 = Date.now();
-  let heard = false, quiet = 0, floor = 0, seen = 0;
-  const left = () => { if (document.hidden) { hidden = true; stream.getTracks().forEach(track => track.stop()); } };
+  let heard = false, quiet = 0, floor = 0.008, floorInit = false, seen = 0, maxRms = 0;
+  const left = () => { if (document.hidden || document.body.classList.contains("locked")) { hidden = true; stream.getTracks().forEach(track => track.stop()); } };
   document.addEventListener('visibilitychange', left);
   try {
     if (hidden) throw new Error("برای ویرایش با صدا، برنامه را روی صفحه نگه دارید.");
@@ -2156,39 +3143,60 @@ async function listenOnce(maxMs, mode, endQuiet = 1.2) {
     try { await ctx.resume(); } catch (e) {}
     rate = ctx.sampleRate;
     src = ctx.createMediaStreamSource(stream); node = ctx.createScriptProcessor(4096, 1, 1);
+    sink = ctx.createGain(); sink.gain.value = 0;
     node.onaudioprocess = e => {
       const d = e.inputBuffer.getChannelData(0); chunks.push(new Float32Array(d));
       let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
       const rms = Math.sqrt(sum / d.length), secs = d.length / ctx.sampleRate;
       seen += secs;
-      if (seen < 0.35) { floor = Math.max(floor, rms); return; }
-      if (rms > Math.max(0.008, floor * 2.5)) { heard = true; quiet = 0; } else if (heard) quiet += secs;
+      // Ignore the initial 100ms mic-open pop so it never poisons the noise floor
+      if (seen < 0.10) return;
+      if (rms > maxRms) maxRms = rms;
+      if (!floorInit) { floor = Math.min(0.02, Math.max(0.002, rms)); floorInit = true; }
+      else if (!heard) { floor = floor * 0.85 + Math.min(rms, floor * 1.15) * 0.15; }
+      const thr = Math.max(0.006, Math.min(0.032, floor * 2.1));
+      if (rms > thr) {
+        if (!heard) { heard = true; vstatus("🎤 صدایتان را می‌شنوم…"); }
+        quiet = 0;
+      } else if (heard) {
+        quiet += secs;
+      }
     };
-    src.connect(node); node.connect(ctx.destination);
-    while (!hidden && Date.now() - t0 < maxMs && !(heard && quiet > endQuiet) && !(!heard && Date.now() - t0 > 7000)) await sleep(100);
+    src.connect(node); node.connect(sink); sink.connect(ctx.destination);
+    while (!hidden && !document.body.classList.contains("locked") && Date.now() - t0 < maxMs && !(heard && quiet > endQuiet) && !(!heard && Date.now() - t0 > 7500)) await sleep(100);
+    if (document.body.classList.contains("locked")) hidden = true;
     if (hidden) throw new Error("ضبط با خروج از برنامه متوقف شد. دوباره تلاش کنید.");
   } finally {
     document.removeEventListener('visibilitychange', left);
     stream.getTracks().forEach(track => track.stop());
-    if (node) node.disconnect(); if (src) src.disconnect(); if (ctx) ctx.close().catch(() => {});
+    try { if (node) node.disconnect(); } catch (_) {}
+    try { if (sink) sink.disconnect(); } catch (_) {}
+    try { if (src) src.disconnect(); } catch (_) {}
+    if (ctx) ctx.close().catch(() => {});
     if (hidden) chunks.forEach(chunk => chunk.fill(0));
   }
   const all = new Float32Array(chunks.reduce((n, c) => n + c.length, 0)); let at = 0;
   for (const c of chunks) { all.set(c, at); at += c.length; }
-  if (!heard) return { text: "", cmd: null, yes: false, go: null, silent: true };
-  // a quiet voice is made louder (the loudest part to about 70% of the range, at most 30 times)
-  // (the loudness is taken from the 99.5th percentile, not the single loudest sample: one click or bump must not turn the voice down)
+  // Drop first 100ms mic-open click before computing peak & sending to Vosk
+  const trim = Math.min(Math.floor(rate * 0.10), Math.max(0, all.length - Math.floor(rate * 0.4)));
+  const sig = trim > 0 ? all.subarray(trim) : all;
   let peak = 0;
   { const bins = new Uint32Array(1001);
-    for (let i = 0; i < all.length; i++) bins[Math.floor(Math.min(1, Math.abs(all[i])) * 1000)]++;
-    let acc = 0; const want = all.length * 0.995;
+    for (let i = 0; i < sig.length; i++) bins[Math.floor(Math.min(1, Math.abs(sig[i])) * 1000)]++;
+    let acc = 0; const want = sig.length * 0.995;
     for (let b = 0; b <= 1000; b++) { acc += bins[b]; if (acc >= want) { peak = (b + 1) / 1000; break; } } }
-  const gain = peak > 0.001 ? Math.min(30, 0.7 / peak) : 1;
+  // Only skip Vosk if the microphone captured pure silence (never throw away quiet speech!)
+  if (!heard && peak < 0.0025 && maxRms < 0.002) {
+    vstatus("صدایی از میکروفون دریافت نشد.");
+    return { text: "", cmd: null, yes: false, go: null, silent: true };
+  }
+  vstatus("در حال تشخیص گفتار…");
+  const gain = peak > 0.001 ? Math.min(35, 0.72 / peak) : 1;
   // 16 kHz, 16-bit: each output sample is the mean of the input samples it covers
-  const ratio = rate / 16000, out = new Int16Array(Math.floor(all.length / ratio));
+  const ratio = rate / 16000, out = new Int16Array(Math.floor(sig.length / ratio));
   for (let i = 0; i < out.length; i++) {
     const a = Math.floor(i * ratio), b = Math.max(a + 1, Math.floor((i + 1) * ratio));
-    let m = 0; for (let k = a; k < b && k < all.length; k++) m += all[k];
+    let m = 0; for (let k = a; k < b && k < sig.length; k++) m += sig[k];
     out[i] = Math.max(-1, Math.min(1, gain * m / (b - a))) * 32767;
   }
   const r = await (await api("/api/listen?mode=" + mode + "&doc=" + encodeURIComponent(S.doc.id), { method: "POST", body: out.buffer })).json();
@@ -2224,8 +3232,14 @@ async function voiceEdit() {
   try {
     vstatus("در حال آماده شدن…");
     let r1 = await ask("بفرمایید.", "بگویید، مثلاً: «تلفظ این کلمه را درست کن» · «کسره‌ی اضافه» · «این بند را عوض کن» · «این کلمه را جدا کن» · «این کلمه را عوض کن» · «این بند را حذف کن»", "cmd", 10000);
-    // (not understood, or nothing heard — a noisy room, a word run together: once more, before giving up)
-    if (!r1.cmd) r1 = await ask("متوجه نشدم. دوباره بگویید.", "دوباره بگویید، مثلاً: «تلفظ این کلمه» · «کسره‌ی اضافه» · «این بند را عوض کن»", "cmd", 10000);
+    // (not understood, or nothing heard — show what was heard or if mic was silent before asking once more)
+    if (!r1.cmd) {
+      const heardTxt = clean(r1.text);
+      const retryMsg = r1.silent
+        ? "صدایی نشنیدم. دوباره نزدیک‌تر به میکروفون بگویید."
+        : (heardTxt ? `شنیدم «${heardTxt}» اما متوجه دستور نشدم. دوباره بگویید.` : "متوجه نشدم. دوباره بگویید.");
+      r1 = await ask(r1.silent ? "صدایی نشنیدم. دوباره بگویید." : "متوجه نشدم. دوباره بگویید.", retryMsg + "\nمثلاً: «تلفظ این کلمه» · «کسره‌ی اضافه» · «این بند را عوض کن»", "cmd", 10000);
+    }
     const kind = r1.cmd;
     if (!kind) { await stop("متوجه نشدم."); return; }
     let q, apply;
@@ -2398,12 +3412,12 @@ if (typeof ResizeObserver !== "undefined") {
 (function () {
   let touchStartX = 0, touchStartY = 0;
   document.addEventListener("touchstart", e => {
-    if (e.touches.length !== 1 || !S.doc || document.documentElement.classList.contains("android-reader")) return; // (Android has its own swipe: android.js)
+    if (document.body.classList.contains("locked") || document.querySelector(".panel:not([hidden])") || e.touches.length !== 1 || !S.doc || document.documentElement.classList.contains("android-reader")) { touchStartX = 0; return; }
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
   }, { passive: true });
   document.addEventListener("touchend", e => {
-    if (!S.doc || !touchStartX || document.documentElement.classList.contains("android-reader")) return;
+    if (document.body.classList.contains("locked") || document.querySelector(".panel:not([hidden])") || !S.doc || !touchStartX || document.documentElement.classList.contains("android-reader")) return;
     const touchEndX = e.changedTouches[0].clientX;
     const touchEndY = e.changedTouches[0].clientY;
     const dx = touchEndX - touchStartX, dy = touchEndY - touchStartY;
@@ -2432,21 +3446,24 @@ if (typeof ResizeObserver !== "undefined") {
   $("pageImg").addEventListener("load", applyView);
   window.resetPdfZoom = () => { rot = 0; updateZoom(1); }; // Reset zoom when opening new document
   $("zoomBtn").onclick = e => { const menu = $("zoomMenu"); menu.hidden = !menu.hidden; };
+  document.addEventListener("pointerdown", e => { const m = $("zoomMenu"); if (m && !m.hidden && !m.contains(e.target) && !e.target.closest("#zoomBtn")) m.hidden = true; });
   $("zoomOut").onclick = () => { updateZoom(Math.max(0.5, pdfZoom - 0.1)); $("zoomMenu").hidden = true; };
   $("zoomReset").onclick = () => { updateZoom(1); $("zoomMenu").hidden = true; };
   $("rotLeft").onclick = () => turn(-90);
   $("rotRight").onclick = () => turn(90);
   $("zoomIn").onclick = () => { updateZoom(Math.min(3, pdfZoom + 0.1)); $("zoomMenu").hidden = true; };
-  // Keyboard shortcuts for zoom: + and - keys
+  // Keyboard shortcuts for zoom: + and - keys (never intercept while locked, in modals, or typing in inputs)
   document.addEventListener("keydown", e => {
-    if (!S.doc || S.view !== "page") return;
+    if (!S.doc || S.view !== "page" || document.body.classList.contains("locked")) return;
+    if (document.querySelector(".panel:not([hidden])")) return;
+    if (e.target && e.target.closest && e.target.closest("input,textarea,select,[contenteditable]")) return;
     if ((e.key === "+" || e.key === "=") && !e.ctrlKey && !e.metaKey) { e.preventDefault(); updateZoom(Math.min(3, pdfZoom + 0.1)); }
     else if (e.key === "-" && !e.ctrlKey && !e.metaKey) { e.preventDefault(); updateZoom(Math.max(0.5, pdfZoom - 0.1)); }
   });
   // Pinch-to-zoom for touch devices
   let lastDistance = 0;
   document.addEventListener("touchmove", e => {
-    if (!S.doc || S.view !== "page" || e.touches.length !== 2) { lastDistance = 0; return; }
+    if (document.body.classList.contains("locked") || document.querySelector(".panel:not([hidden])") || !S.doc || S.view !== "page" || e.touches.length !== 2) { lastDistance = 0; return; }
     const dx = e.touches[0].clientX - e.touches[1].clientX;
     const dy = e.touches[0].clientY - e.touches[1].clientY;
     const distance = Math.hypot(dx, dy);
@@ -2476,3 +3493,51 @@ function askConfirm(message) {
     back.querySelector(".confirm-no").focus();
   });
 }
+
+// Keep --dock-height synced to the live bottom player height so text never hides under it on any screen/orientation.
+(function () {
+  const dock = $("docTools");
+  if (!dock) return;
+  const syncDockHeight = () => {
+    const h = dock.hidden ? 0 : Math.ceil(dock.getBoundingClientRect().height);
+    document.documentElement.style.setProperty("--dock-height", h + "px");
+  };
+  if (window.ResizeObserver) new ResizeObserver(syncDockHeight).observe(dock);
+  addEventListener("resize", syncDockHeight);
+  syncDockHeight();
+})();
+
+// Privacy hooks called by lock.js when locking/unlocking: stop active mic capture, scrub open book DOM & caches,
+// and cleanly re-fetch the current page after unlock.
+window.khanaOnLock = () => {
+  try { stopReading(); } catch (e) {}
+  try { stopRecording(false); } catch (e) {}
+  try { clearBrowserClip(); } catch (e) {}
+  if (typeof sttRec !== "undefined" && sttRec) { sttRec.cancel = true; sttRec.stop = true; }
+  document.querySelectorAll(".confirm-back .confirm-no").forEach(b => b.click());
+  if ($("zoomMenu")) $("zoomMenu").hidden = true;
+  if ($("moreTools")) $("moreTools").open = false;
+  if ($("textView")) $("textView").innerHTML = "";
+  if ($("fileName")) $("fileName").textContent = "";
+  if ($("note")) { $("note").textContent = ""; $("note").hidden = true; }
+  if ($("sourceText")) $("sourceText").textContent = "";
+  if ($("bookmarkList")) $("bookmarkList").innerHTML = "";
+  if ($("libList")) $("libList").innerHTML = "";
+  if ($("lexList")) $("lexList").innerHTML = "";
+  clearPageImgCache();
+  pageBoxesMap.clear();
+  pdfBoxes.clear();
+  S.paras = [];
+  pageCache.clear();
+  for (const p of ttsCache.values()) {
+    Promise.resolve(p).then(u => { if (typeof u === "string" && u.startsWith("blob:")) try { URL.revokeObjectURL(u); } catch (e) {} }).catch(() => {});
+  }
+  ttsCache.clear();
+  bufCache.clear();
+};
+window.khanaOnUnlock = () => {
+  if (S.doc) {
+    if ($("fileName")) $("fileName").textContent = S.doc.name;
+    loadPage(S.page).catch(() => {});
+  }
+};

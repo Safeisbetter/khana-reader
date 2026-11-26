@@ -91,9 +91,11 @@ fn without_final_marks(w: &str) -> Option<&str> {
 
 impl OnnxG2P {
     pub fn new(dir: &Path) -> ort::Result<Self> {
+        // Tiny ByT5 G2P runs ~100 autoregressive steps/sentence; capping threads prevents waking all 8 cores per step
+        let threads = if cfg!(shell) { Some(2) } else { Some(4) };
         Ok(OnnxG2P {
-            enc: onnx::session(&dir.join("g2p_encoder.onnx"), None)?,
-            dec: onnx::session(&dir.join("g2p_decoder.onnx"), None)?,
+            enc: onnx::session(&dir.join("g2p_encoder.onnx"), threads)?,
+            dec: onnx::session(&dir.join("g2p_decoder.onnx"), threads)?,
             max_len: 512,
         })
     }

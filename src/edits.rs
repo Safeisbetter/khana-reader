@@ -109,7 +109,11 @@ impl Edits {
         if std::fs::metadata(path).map_or(false, |m| m.len() > MAX_FILE_BYTES) {
             return Edits::default();
         }
-        let v: Value = match std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()) {
+        let v: Value = match crate::vault::read_bytes(path).ok().and_then(|mut b| {
+            let parsed = serde_json::from_slice(&b).ok();
+            crate::ffi::wipe::bytes(&mut b);
+            parsed
+        }) {
             Some(v) => v,
             None => return Edits::default(),
         };
@@ -123,7 +127,7 @@ impl Edits {
 
     pub fn save(&self, path: &Path) -> Result<(), String> {
         if self.is_empty() {
-            let _ = std::fs::remove_file(path);
+            crate::private_fs::wipe_and_remove(path);
             return Ok(());
         }
         if let Some(d) = path.parent() {
@@ -131,7 +135,10 @@ impl Edits {
         }
         let v = json!({"paras": self.paras.iter().map(|(a, b)| json!([a, b])).collect::<Vec<_>>(),
                        "words": self.words.iter().map(|(a, b)| json!([a, b])).collect::<Vec<_>>()});
-        crate::private_fs::atomic_write(path, serde_json::to_string_pretty(&v).unwrap().as_bytes()).map_err(|e| e.to_string())
+        let mut bytes = serde_json::to_vec_pretty(&v).unwrap();
+        let res = crate::vault::write_bytes(path, &bytes).map_err(|e| e.to_string());
+        crate::ffi::wipe::bytes(&mut bytes);
+        res
     }
 
     pub fn words_applied(&self, p: &str) -> String {

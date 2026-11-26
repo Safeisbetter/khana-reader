@@ -365,6 +365,7 @@ pub fn fa_read_line(gray: &[u8], h: usize, w: usize) -> String {
     let oh = (h2 as f64 * (48.0 / h2 as f64)).round_ties_even() as usize;
     let ow = (w as f64 * (nw as f64 / w as f64)).round_ties_even() as usize;
     let im = zoom_bilinear(&crop, h2, w, oh, ow);
+    #[cfg(debug_assertions)]
     if std::env::var("KHANA_OCRDEBUG").is_ok() {
         let gs: u64 = gray.iter().map(|v| *v as u64).sum();
         eprintln!("line h={h} w={w} graysum={gs} peak={peak} top={top} bot={bot} a={a} b={b} nw={nw} oh={oh} ow={ow} imsum={}", im.iter().map(|v| *v as f64).sum::<f64>());
@@ -1159,6 +1160,9 @@ fn fix_ocr_farsi_first(text: &str) -> String {
         }
         false
     };
+    let costs = crate::vocab::word_costs();
+    let wcost = |x: &str| costs.get(x).map_or(20.0f32, |c| c.cost);
+    const KEEP_APART_OCR: &[&str] = &["و", "از", "در", "به", "با", "بر", "که", "را", "تا", "یا", "این", "آن", "هم", "نیز", "اما", "ولی", "اگر", "است", "بود", "شد", "می", "نمی"];
     let mut k = 0;
     while k + 1 < out.len() {
         let mut joined = false;
@@ -1168,7 +1172,17 @@ fn fix_ocr_farsi_first(text: &str) -> String {
             }
             let parts = &out[k..k + n];
             let whole: String = parts.concat();
-            if fullmatch(r"[\w‌]+", &whole) && vocab.contains(&whole) && parts.iter().any(|x| fragment(x)) {
+            let join_frag = fullmatch(r"[\w‌]+", &whole) && vocab.contains(&whole) && parts.iter().any(|x| fragment(x));
+            let join_broken_pair = !join_frag
+                && n == 2
+                && fullmatch(r"[\p{L}‌]+", &whole)
+                && !KEEP_APART_OCR.contains(&parts[0].as_str())
+                && !KEEP_APART_OCR.contains(&parts[1].as_str())
+                && costs.get(whole.as_str()).is_some_and(|c| {
+                    let (ca, cb) = (wcost(&parts[0]), wcost(&parts[1]));
+                    c.cost <= 12.5 && (!vocab.contains(&parts[0]) || !vocab.contains(&parts[1]) || ca >= 13.5 || cb >= 13.5) && c.cost + 2.5 < ca + cb
+                });
+            if join_frag || join_broken_pair {
                 out.splice(k..k + n, [whole]);
                 joined = true;
                 break;

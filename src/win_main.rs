@@ -92,13 +92,20 @@ pub fn run() {
             responder.respond(resp);
         });
     };
-    let mut web_context = WebContext::new(Some(khana::app::data_dir().join("webview-offline")));
+    let wv_tmp = khana::private_fs::TempDir::new().ok();
+    let wv_dir = wv_tmp.as_ref().map(|d| d.join("webview-offline"));
+    let mut web_context = WebContext::new(wv_dir);
     let webview = WebViewBuilder::new_with_web_context(&mut web_context)
+        .with_initialization_script(
+            "for (const k of ['RTCPeerConnection','webkitRTCPeerConnection','RTCDataChannel','RTCSessionDescription','RTCIceCandidate']) { try { Object.defineProperty(window, k, { value: undefined, configurable: false, writable: false }); } catch (_) {} }\n",
+        )
         .with_additional_browser_args(concat!(
-            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection ",
-            "--host-resolver-rules=\"MAP * ~NOTFOUND\" ",
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,AutofillServerCommunication,OptimizationHints,MediaRouter ",
+            "--host-resolver-rules=\"MAP * ~NOTFOUND, EXCLUDE khana.localhost\" ",
             "--proxy-server=\"http://0.0.0.0:1\" --proxy-bypass-list=\"<-loopback>\" ",
-            "--disable-background-networking --disable-component-update --disable-domain-reliability --no-pings"
+            "--force-webrtc-ip-handling-policy=disable_non_proxied_udp ",
+            "--disable-background-networking --disable-component-update --disable-domain-reliability ",
+            "--disable-crash-reporter --disable-breakpad --disable-sync --disable-spell-checking --metrics-recording-only --no-pings"
         ))
         .with_asynchronous_custom_protocol("khana".into(), handler)
         .with_url(START_URL)
@@ -115,6 +122,7 @@ pub fn run() {
         .build(&window)
         .expect("webview");
 
+    let mut wv_tmp = wv_tmp;
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
@@ -126,6 +134,7 @@ pub fn run() {
             }
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
                 app.shutdown();
+                let _ = wv_tmp.take();
                 *control_flow = ControlFlow::Exit;
             }
             _ => {}

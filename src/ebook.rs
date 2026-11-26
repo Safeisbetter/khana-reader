@@ -2,10 +2,12 @@
 use crate::pyre::*;
 use std::io::Read;
 
-const PART_LIMIT: u64 = 64 * 1024 * 1024;
-const TOTAL_LIMIT: u64 = 128 * 1024 * 1024;
+const PART_LIMIT: u64 = 32 * 1024 * 1024;
+const TOTAL_LIMIT: u64 = 96 * 1024 * 1024;
 pub const MAX_PARAGRAPHS: usize = 2_000_000;
-const MAX_XML_NODES: u32 = 4_000_000;
+const MAX_XML_NODES: u32 = 1_000_000;
+pub const MAX_ZIP_ENTRIES: usize = 5_000;
+const MAX_FB2_BYTES: usize = 64 * 1024 * 1024;
 
 pub fn xml_options<'a>(allow_dtd: bool) -> roxmltree::ParsingOptions<'a> {
     roxmltree::ParsingOptions { allow_dtd, nodes_limit: MAX_XML_NODES, ..Default::default() }
@@ -37,9 +39,44 @@ fn xml_safe(html: &str) -> String {
 
 const BLOCKS: &[&str] = &["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "td", "th", "dd", "dt", "pre", "title", "subtitle", "v", "text-author"];
 
+fn strip_doctype(xml: &str) -> String {
+    // Strip <!DOCTYPE ...> (including internal [...] subsets) so allow_dtd: false cleanly parses
+    // legitimate EPUB XHTML without ever executing XML entity expansion (Billion Laughs / XXE).
+    let b = xml.as_bytes();
+    let mut out = String::with_capacity(xml.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'<' && i + 9 <= b.len() && b[i..i + 9].eq_ignore_ascii_case(b"<!doctype") {
+            i += 9;
+            let mut bracket_depth = 0usize;
+            let mut quote: u8 = 0;
+            while i < b.len() {
+                let c = b[i];
+                i += 1;
+                if quote != 0 {
+                    if c == quote { quote = 0; }
+                } else if c == b'"' || c == b'\'' {
+                    quote = c;
+                } else if c == b'[' {
+                    bracket_depth += 1;
+                } else if c == b']' && bracket_depth > 0 {
+                    bracket_depth -= 1;
+                } else if c == b'>' && bracket_depth == 0 {
+                    break;
+                }
+            }
+            continue;
+        }
+        let ch = xml[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
 fn blocks(xml: &str) -> Vec<String> {
-    let opt = xml_options(true);
-    let safe = xml_safe(xml);
+    let opt = xml_options(false);
+    let safe = xml_safe(&strip_doctype(xml));
     let Ok(doc) = roxmltree::Document::parse_with_options(&safe, opt) else { return Vec::new() };
     if too_deep(&doc) {
         return Vec::new();
@@ -72,12 +109,15 @@ pub fn epub_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
     let bad = || "این کتاب EPUB باز نشد. شاید خراب باشد.".to_string();
     let too_big = || "این کتاب EPUB خیلی بزرگ است.".to_string();
     let mut z = zip::ZipArchive::new(std::io::Cursor::new(data)).map_err(|_| bad())?;
+    if z.len() > MAX_ZIP_ENTRIES {
+        return Err(too_big());
+    }
     let container = part(&mut z, "META-INF/container.xml").ok_or_else(bad)?;
     let c = roxmltree::Document::parse_with_options(&container, xml_options(false)).map_err(|_| bad())?;
     let opf_path = c.descendants().find(|n| n.tag_name().name() == "rootfile").and_then(|n| n.attribute("full-path")).ok_or_else(bad)?.to_string();
     let base = opf_path.rsplit_once('/').map(|(d, _)| format!("{d}/")).unwrap_or_default();
     let opf = part(&mut z, &opf_path).ok_or_else(bad)?;
-    let o = roxmltree::Document::parse_with_options(&opf, xml_options(true)).map_err(|_| bad())?;
+    let o = roxmltree::Document::parse_with_options(&opf, xml_options(false)).map_err(|_| bad())?;
     let items: Vec<(String, String)> = o
         .descendants()
         .filter(|n| n.tag_name().name() == "item")
@@ -88,7 +128,8 @@ pub fn epub_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
     let mut used: u64 = 0;
     let mut out = Vec::new();
     for r in o.descendants().filter(|n| n.tag_name().name() == "itemref") {
-        let Some(href) = r.attribute("idref").and_then(|id| by_id.get(id)).map(|h| h.to_string()) else { continue };
+        let Some(href) = r.attribute("idref").and_then(|id| by_id.get(id)) else { continue };
+        if href.len().saturating_add(base.len()) > 4096 { return Err(too_big()); }
         let mut path: Vec<&str> = Vec::new();
         let full = format!("{base}{}", href.split('#').next().unwrap_or(""));
         for seg in full.split('/') {
@@ -119,6 +160,9 @@ pub fn epub_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
 }
 
 pub fn fb2_paragraphs(data: &[u8]) -> Result<Vec<String>, String> {
+    if data.len() > MAX_FB2_BYTES {
+        return Err("این کتاب FB2 خیلی بزرگ است.".into());
+    }
     let text = String::from_utf8_lossy(data);
     let body: String = findall(r"(?s)<body[^>]*>.*?</body>", &text).join("\n");
     let out = blocks(&format!("<fb>{body}</fb>"));

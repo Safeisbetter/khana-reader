@@ -3,9 +3,13 @@
 ## English
 
 **Download safely.** Only download the app from this repository's [Releases](../../releases) page. Each release has a `SHA256SUMS.txt`; compare the file's SHA-256 with it
-(`shasum -a 256 file` on Mac/Linux, `Get-FileHash file` in Windows PowerShell). The Android APKs are all signed with one key; its SHA-256 certificate fingerprint is
-`32:44:BB:08:80:95:34:D3:42:78:5A:FD:CA:E9:C8:16:03:B9:B2:63:FC:7B:C2:3D:E5:78:32:D5:C1:D9:E0:F9`
+(`shasum -a 256 file` on Mac/Linux, `Get-FileHash file` in Windows PowerShell). The Android APKs in release v1.34 are signed with the release key. Its SHA-256 certificate fingerprint is
+`2D:19:9B:16:38:13:D3:35:4E:27:C7:7B:02:0B:DB:5B:D0:51:CE:1B:71:8C:EE:EC:5A:EB:A4:1E:49:58:AD:8D`
 (`apksigner verify --print-certs file.apk`). A file with another fingerprint is not from this project.
+
+The new, separately installed Android app (`org.khana.reader.next`) has certificate SHA-256 fingerprint
+`EA:5A:BD:6B:BA:AC:8D:EB:50:DF:CA:F1:4F:71:0D:02:7E:50:02:14:C3:84:98:00:F1:22:79:42:90:74:95:0F`.
+It cannot update the older `org.khana.reader` app in place. Keep the old app until you have exported any data you need.
 
 **What the app does.** It works fully offline. The Android app has no internet permission. Nothing you open is sent anywhere.
 

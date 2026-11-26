@@ -13,7 +13,7 @@ crate-type = ["rlib", "staticlib"]
 debug = false
 strip = "symbols"
 debug-assertions = false
-overflow-checks = false
+overflow-checks = true
 
 [dependencies]
 fancy-regex = "0.16"

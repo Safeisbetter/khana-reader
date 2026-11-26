@@ -87,7 +87,8 @@ impl Bridge {
                     } else {
                         serde_json::json!({"op": "password", "value": String::from_utf8_lossy(body)})
                     };
-                    g.jobs.push_back(job.to_string());
+                    let mut serialized = job.to_string();
+                    g.jobs.push_back(std::mem::take(&mut serialized));
                     self.wake.notify_all();
                     drop(g);
                     return self.wait(open_id, rx);
@@ -112,6 +113,7 @@ impl Bridge {
                 let ctype = match a.kind {
                     "json" => "application/json; charset=utf-8",
                     "png" => "image/png",
+                    "jpeg" => "image/jpeg",
                     "gray" => "application/octet-stream",
                     _ => "text/plain; charset=utf-8",
                 };
@@ -159,6 +161,7 @@ impl Bridge {
                 let kind = match q.get("kind").map(String::as_str) {
                     Some("json") => "json",
                     Some("png") => "png",
+                    Some("jpeg") => "jpeg",
                     Some("gray") => "gray",
                     Some("password") => "password",
                     Some("error") => "error",

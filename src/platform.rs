@@ -58,7 +58,10 @@ mod imp {
     use std::path::{Path, PathBuf};
 
     pub fn data_dir() -> PathBuf {
-        let base = std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+        let base = std::env::var_os("LOCALAPPDATA")
+            .or_else(|| std::env::var_os("APPDATA"))
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."));
         base.join(crate::app::APP_NAME)
     }
 
@@ -73,7 +76,20 @@ mod imp {
     pub fn saved(_path: &Path, _kind: &str) {}
 
     pub fn reveal(p: &Path) {
-        let _ = std::process::Command::new("explorer").arg(format!("/select,{}", p.display())).spawn();
+        let Ok(canon) = std::fs::canonicalize(p) else { return };
+        if !canon.is_file() {
+            return;
+        }
+        let s = canon.to_string_lossy();
+        let display = s.strip_prefix(r"\\?\").unwrap_or(&s);
+        if display.chars().any(|c| c.is_control() || matches!(c, ',' | ';' | '"')) {
+            return;
+        }
+        let explorer = std::env::var_os("SystemRoot")
+            .map(|r| PathBuf::from(r).join("explorer.exe"))
+            .filter(|e| e.is_file())
+            .unwrap_or_else(|| PathBuf::from(r"C:\Windows\explorer.exe"));
+        let _ = std::process::Command::new(explorer).arg(format!("/select,{display}")).spawn();
     }
 
     pub fn to_wav24k(src: &Path, dst: &Path) -> bool {

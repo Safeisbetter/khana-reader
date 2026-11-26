@@ -72,6 +72,27 @@ fn split_long_phrase(tp: &str, max_words: usize) -> Vec<String> {
             cut = Some(i);
         }
     }
+    if cut.is_none() && words.len() > 14 {
+        let mid = words.len() / 2;
+        let num_like = |s: &str| {
+            let c = strip_chars(s, "«»()\"'.,;:!?،؛:-\u{200c}");
+            NF_ONES.contains(&c)
+                || NF_TEENS.contains(&c)
+                || NF_TENS.contains(&c)
+                || NF_HUNDREDS.contains(&c)
+                || ["صفر", "هزار", "میلیون", "میلیارد", "تریلیون"].contains(&c)
+        };
+        cut = (4..words.len().saturating_sub(3))
+            .filter(|&i| words[i] == "و" && !(num_like(words[i - 1]) && num_like(words[i + 1])))
+            .min_by_key(|&i| i.abs_diff(mid));
+        if cut.is_none() {
+            cut = (max_words.min(words.len() - 3)..words.len().saturating_sub(2)).find(|&i| {
+                words[i] != "و"
+                    && words[i - 1] != "و"
+                    && !["هزار", "میلیون", "میلیارد", "تریلیون"].contains(&words[i])
+            });
+        }
+    }
     match cut {
         None => vec![tp.to_string()],
         Some(c) => {
@@ -178,9 +199,28 @@ fn light_verb(w: &str) -> bool {
     TTS_LIGHT_VERBS.contains(&w)
 }
 
+fn number_rank(w: &str) -> Option<u8> {
+    let b = w.trim_end_matches('1');
+    match b {
+        "terilyun" => Some(7),
+        "milyArd" => Some(6),
+        "milyun" => Some(5),
+        "hezAr" => Some(4),
+        "sad" | "devist" | "divist" | "sisad" | "CArsad" | "CArSad" | "CAhArsad" | "CahArsad"
+        | "CehArsad" | "CehArSad" | "pAnsad" | "pAnSad" | "SeSsad" | "haftsad" | "haStsad"
+        | "nohsad" => Some(3),
+        "bist" | "si" | "Cehel" | "panjAh" | "Sast" | "haftAd" | "haStAd" | "navad" => Some(2),
+        "dah" | "yAzdah" | "davAzdah" | "sizdah" | "CAhArdah" | "CahArdah" | "CehArdah"
+        | "CArdah" | "pAnzdah" | "SAnzdah" | "hefdah" | "hejdah" | "hijdah" | "nuzdah" => Some(1),
+        "sefr" | "yek" | "do" | "se" | "CAr" | "CAhAr" | "CahAr" | "CehAr" | "panj" | "SeS"
+        | "haft" | "haSt" | "noh" => Some(1),
+        _ if w != "?o" && NUMBER_PH.contains(&b) => Some(1),
+        _ => None,
+    }
+}
+
 fn number_word(w: &str) -> bool {
-    const MORE: &[&str] = &["hejdah", "hijdah", "hefdah", "SAnzdah", "pAnzdah", "yAzdah", "davAzdah", "sizdah", "nuzdah", "CAhArdah", "CahArdah", "CArdah", "devist", "sisad", "CArsad", "CAhArsad", "pAnsad", "SeSsad", "haftsad", "haStsad", "nohsad", "CAr", "CAhAr"];
-    w != "?o" && (NUMBER_PH.contains(&w) || MORE.contains(&w))
+    number_rank(w).is_some()
 }
 
 fn number_with_e(w: &str) -> Option<&str> {
@@ -188,8 +228,29 @@ fn number_with_e(w: &str) -> Option<&str> {
     (base.len() >= 3 && base != "dah" && number_word(base)).then_some(base)
 }
 
+fn canonical_number_ph(w: &str) -> String {
+    let (core, suf) = if let Some(b) = w.strip_suffix("e1") {
+        (b, "e1")
+    } else if let Some(b) = w.strip_suffix('1') {
+        (b, "1")
+    } else if let Some(b) = number_with_e(w) {
+        (b, "e")
+    } else {
+        (w, "")
+    };
+    let fixed = match core {
+        "CArSad" | "CehArSad" | "CehArsad" | "CArsad" | "CAhArsad" => "CahArsad",
+        "CehAr" | "CAhAr" => "CahAr",
+        "CehArdah" | "CAhArdah" | "CArdah" => "CahArdah",
+        "pAnSad" => "pAnsad",
+        "divist" => "devist",
+        _ => return w.to_string(),
+    };
+    format!("{fixed}{suf}")
+}
+
 pub fn number_rhythm(ph: &str) -> String {
-    let mut w: Vec<String> = split_ws(ph).iter().map(|s| s.to_string()).collect();
+    let mut w: Vec<String> = split_ws(ph).iter().map(|s| canonical_number_ph(s)).collect();
     for i in 0..w.len() {
         if let Some(base) = w[i].strip_suffix("e1") {
             if number_word(base) {
@@ -197,7 +258,7 @@ pub fn number_rhythm(ph: &str) -> String {
                 continue;
             }
         }
-        let after_number = i >= 2 && w[i - 1] == "?o" && number_word(&w[i - 2]);
+        let after_number = i >= 2 && (w[i - 1] == "?o" || w[i - 1] == "va") && number_word(&w[i - 2]);
         if let Some(base) = number_with_e(&w[i]) {
             if base != "CAr" || after_number {
                 w[i] = base.to_string();
@@ -205,6 +266,14 @@ pub fn number_rhythm(ph: &str) -> String {
         }
     }
     for i in 1..w.len() {
+        if w[i] == "va" {
+            if let (Some(r_prev), Some(r_next)) = (number_rank(&w[i - 1]), w.get(i + 1).and_then(|n| number_rank(n))) {
+                if r_prev > r_next && !(r_prev == 2 && r_next == 1 && w[i + 1].len() >= 5) {
+                    w[i] = "?o".to_string();
+                    continue;
+                }
+            }
+        }
         if w[i] == "?o" && number_word(&w[i - 1]) && !w.get(i + 1).is_some_and(|n| number_word(n)) {
             w[i] = "va".to_string();
         }
@@ -213,15 +282,48 @@ pub fn number_rhythm(ph: &str) -> String {
 }
 
 pub fn number_atoms(words: &[String]) -> Vec<String> {
+    const PREFIXES: &[&str] = &["sAle", "sAle1", "qarne", "qarne1", "safheye", "safheye1", "mAhe", "mAhe1"];
+    const UNITS: &[&str] = &[
+        "sAl", "sAle", "sAle1", "milAdi", "Samsi", "xorSidi", "darsad", "darsade", "darsade1",
+        "safhe", "nafar", "mAh", "ruz", "qarn",
+    ];
+    let advance_num = |mut j: usize| -> usize {
+        while j < words.len() {
+            if j + 1 < words.len() && words[j] == "?o" {
+                if let (Some(rp), Some(rn)) = (number_rank(&words[j - 1]), number_rank(&words[j + 1])) {
+                    if rp > rn {
+                        j += 2;
+                        continue;
+                    }
+                }
+            }
+            if let (Some(rp), Some(rn)) = (number_rank(&words[j - 1]), number_rank(&words[j])) {
+                if rn >= 4 && rp < rn {
+                    j += 1;
+                    continue;
+                }
+            }
+            break;
+        }
+        j
+    };
     let mut out = Vec::new();
     let mut i = 0;
     while i < words.len() {
-        if number_word(&words[i]) {
-            let mut j = i + 1;
-            while j + 1 < words.len() && words[j] == "?o" && number_word(&words[j + 1]) {
-                j += 2;
+        if PREFIXES.contains(&words[i].as_str()) && words.get(i + 1).is_some_and(|n| number_word(n)) {
+            let mut j = advance_num(i + 2);
+            if words.get(j).is_some_and(|n| UNITS.contains(&n.as_str())) && j - i <= 8 {
+                j += 1;
             }
-            if words.get(j).is_some_and(|n| ["sAl", "sAle", "sAle1", "darsad", "darsade", "darsade1", "safhe", "nafar", "mAh", "ruz", "qarn"].contains(&n.as_str())) {
+            if j - i <= 9 {
+                out.push(words[i..j].join(" "));
+                i = j;
+                continue;
+            }
+        }
+        if number_word(&words[i]) {
+            let mut j = advance_num(i + 1);
+            if words.get(j).is_some_and(|n| UNITS.contains(&n.as_str())) && j - i <= 8 {
                 j += 1;
             }
             out.push(words[i..j].join(" "));

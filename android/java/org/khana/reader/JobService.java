@@ -34,7 +34,10 @@ public final class JobService extends Service {
     public void onCreate() {
         super.onCreate();
         NotificationManager nm = getSystemService(NotificationManager.class);
-        nm.createNotificationChannel(new NotificationChannel(CHANNEL, "ساختن MP3 و PDF", NotificationManager.IMPORTANCE_LOW));
+        NotificationChannel ch = new NotificationChannel(CHANNEL, "ساختن MP3 و PDF", NotificationManager.IMPORTANCE_LOW);
+        ch.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
+        ch.setShowBadge(false);
+        nm.createNotificationChannel(ch);
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_IMMUTABLE);
         Notification n = new Notification.Builder(this, CHANNEL)
@@ -42,6 +45,7 @@ public final class JobService extends Service {
                 .setContentTitle("خوانا")
                 .setContentText("در حال ساختن فایل… برای سرعت، خوانا را روی صفحه نگه دارید.")
                 .setContentIntent(open)
+                .setVisibility(Notification.VISIBILITY_PRIVATE)
                 .setOngoing(true)
                 .build();
         // («special use»: a job can take longer than the 6 hours Android 15 and newer allow a data-sync
@@ -56,11 +60,11 @@ public final class JobService extends Service {
     private void check() {
         new Thread(() -> {
             tellBattery();
-            Exporter.drain(this);
+            if (!Server.isLocked()) Exporter.drain(this);
             if (Native.busy()) {
                 handler.postDelayed(this::check, CHECK_MS);
             } else {
-                Exporter.drain(this);
+                if (!Server.isLocked()) Exporter.drain(this);
                 // (1.29 deep check: asked again on the main thread; a job started in between kept its service)
                 handler.post(() -> { if (Native.busy()) handler.postDelayed(this::check, CHECK_MS); else stopSelf(); });
             }

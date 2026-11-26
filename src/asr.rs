@@ -48,11 +48,15 @@ pub fn transcribe16(_pcm: &[i16], _grammar: Option<&[String]>) -> String {
 pub fn transcribe16(pcm: &[i16], grammar: Option<&[String]>) -> String {
     let Some(m) = model() else { return String::new() };
     let rec = match grammar {
-        Some(g) => vosk::Recognizer::new_with_grammar(m, 16000.0, g),
+        Some(g) => vosk::Recognizer::new_with_grammar(m, 16000.0, g)
+            .or_else(|| vosk::Recognizer::new(m, 16000.0)),
         None => vosk::Recognizer::new(m, 16000.0),
     };
     let Some(mut rec) = rec else { return String::new() };
-    let _ = rec.accept_waveform(pcm);
+    // Feed in 0.25s chunks (4000 samples @ 16kHz) so Vosk's streaming decoder stays responsive on mobile
+    for chunk in pcm.chunks(4000) {
+        let _ = rec.accept_waveform(chunk);
+    }
     match rec.final_result() {
         vosk::CompleteResult::Single(s) => s.text.to_string(),
         vosk::CompleteResult::Multiple(m) => m.alternatives.first().map(|a| a.text.to_string()).unwrap_or_default(),
@@ -61,18 +65,23 @@ pub fn transcribe16(pcm: &[i16], grammar: Option<&[String]>) -> String {
 
 pub fn heard_score(phonemes: &str, speech: &[f32], rate: usize) -> (Option<f64>, Vec<String>) {
     let raw: Vec<String> = split_ws(phonemes).iter().map(|w| w.replace('1', "")).collect();
-    let eng = english_ph().lock().unwrap().clone();
     let mut pairs: Vec<(String, bool)> = Vec::new();
-    for w in &raw {
-        let skip = NUMBER_PH.contains(&w.as_str()) || NAMES.contains(&w.as_str()) || eng.contains(w);
-        let s = sub(r"[aeoiuAy?1\-]", "", &w.replace("zh", ";"));
-        if !s.is_empty() {
-            pairs.push((s, skip));
+    {
+        let eng = english_ph().lock().unwrap();
+        for w in &raw {
+            let skip = NUMBER_PH.contains(&w.as_str()) || NAMES.contains(&w.as_str()) || eng.contains(w);
+            let s = sub(r"[aeoiuAy?1\-]", "", &w.replace("zh", ";"));
+            if !s.is_empty() {
+                pairs.push((s, skip));
+            }
         }
     }
+    let checked_chars: usize = pairs.iter().filter(|(_, skip)| !*skip).map(|(s, _)| len(s)).sum();
     let words: Vec<&String> = pairs.iter().map(|p| &p.0).collect();
     let want: String = words.iter().map(|s| s.as_str()).collect();
-    if model().is_none() || len(&want) < 4 || (speech.len() as f64) < rate as f64 * 0.3 {
+    // Skip ASR check for standalone numbers (e.g. "286") or proper names where Vosk's spelling differs
+    // and would otherwise trigger false retries/stalls.
+    if model().is_none() || checked_chars < 4 || len(&want) < 4 || (speech.len() as f64) < rate as f64 * 0.3 {
         return (None, Vec::new());
     }
     let pcm16 = if rate == 24000 { crate::audio::resample_poly(speech, 2, 3) } else { speech.to_vec() };

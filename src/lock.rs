@@ -56,6 +56,15 @@ struct Sha256 {
     total: u64,
 }
 
+impl Drop for Sha256 {
+    fn drop(&mut self) {
+        wipe::u32s(&mut self.state);
+        wipe::bytes(&mut self.buf);
+        self.fill = 0;
+        self.total = 0;
+    }
+}
+
 impl Sha256 {
     fn new() -> Sha256 {
         Sha256 { state: H0, buf: [0; 64], fill: 0, total: 0 }
@@ -167,7 +176,7 @@ pub fn pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: u32, out: &mut [u
     }
 }
 
-fn same_bytes(a: &[u8], b: &[u8]) -> bool {
+pub(crate) fn same_bytes(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
@@ -187,7 +196,7 @@ const ITERATIONS: u32 = 300_000;
 pub const MIN_CHARS: usize = 4;
 pub const MAX_CHARS: usize = 128;
 const MAX_BYTES: usize = 2048;
-pub const TIMEOUTS: [i64; 5] = [-1, 60, 300, 1800, 3600];
+pub const TIMEOUTS: [i64; 6] = [-1, 0, 60, 300, 1800, 3600];
 const DEFAULT_TIMEOUT: i64 = 300;
 const FREE_TRIES: u32 = 5;
 
@@ -357,6 +366,7 @@ impl Lock {
         if let Some(r) = &s.rec {
             if r.timeout > 0 && (now < last || now - last >= r.timeout as u64) {
                 s.locked = true;
+                crate::vault::clear_key();
             }
         }
     }
@@ -382,6 +392,7 @@ impl Lock {
         let mut s = self.st();
         if s.rec.is_some() || s.corrupt {
             s.locked = true;
+            crate::vault::clear_key();
         }
     }
 
@@ -428,6 +439,13 @@ impl Lock {
 
     pub fn unlock(&self, pw: &str, now: u64) -> Result<(), LockError> {
         self.attempt(pw, now)?;
+        let (salt, iter) = {
+            let s = self.st();
+            let r = s.rec.as_ref().ok_or(LockError::NotEnabled)?;
+            (from_hex(&r.salt).unwrap_or_default(), r.iter)
+        };
+        let key = crate::vault::derive_key(pw, &salt, iter);
+        crate::vault::install_key(key);
         let mut s = self.st();
         s.locked = false;
         s.last = now;
@@ -438,8 +456,9 @@ impl Lock {
         if pw.len() > MAX_BYTES {
             return Err(LockError::Long);
         }
-        let n = normalize(pw);
+        let mut n = normalize(pw);
         let chars = n.chars().count();
+        wipe::string(&mut n);
         if chars < MIN_CHARS {
             return Err(LockError::Short);
         }
@@ -447,15 +466,28 @@ impl Lock {
             return Err(LockError::Long);
         }
         let had = self.enabled();
-        if had {
-            self.attempt(current.ok_or(LockError::NeedCurrent)?, now)?;
-        }
+        let old_key = if had {
+            let cur_pw = current.ok_or(LockError::NeedCurrent)?;
+            self.attempt(cur_pw, now)?;
+            crate::vault::take_key().or_else(|| {
+                let s = self.st();
+                s.rec.as_ref().map(|r| crate::vault::derive_key(cur_pw, &from_hex(&r.salt).unwrap_or_default(), r.iter))
+            })
+        } else {
+            None
+        };
         let salt = crate::app::random_bytes::<16>();
         let mut hash = derive(pw, &salt, ITERATIONS);
+        let new_key = crate::vault::derive_key(pw, &salt, ITERATIONS);
         let timeout = self.st().rec.as_ref().map_or(DEFAULT_TIMEOUT, |r| r.timeout);
         let rec = Stored { v: 1, salt: to_hex(&salt), iter: ITERATIONS, hash: to_hex(&hash), timeout, fails: 0, until: 0 };
         wipe::bytes(&mut hash);
         self.save(&rec)?;
+        if let Some(dir) = self.path.parent() {
+            crate::vault::migrate_to_key(dir, old_key.as_ref(), &new_key);
+        }
+        drop(old_key);
+        crate::vault::install_key(new_key);
         let mut s = self.st();
         s.rec = Some(rec);
         s.corrupt = false;
@@ -469,11 +501,16 @@ impl Lock {
             return Err(LockError::NotEnabled);
         }
         self.attempt(pw, now)?;
-        match std::fs::remove_file(&self.path) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(LockError::Io(e.to_string())),
+        let old_key = crate::vault::take_key().or_else(|| {
+            let s = self.st();
+            s.rec.as_ref().map(|r| crate::vault::derive_key(pw, &from_hex(&r.salt).unwrap_or_default(), r.iter))
+        });
+        if let (Some(dir), Some(key)) = (self.path.parent(), old_key.as_ref()) {
+            crate::vault::migrate_to_plain(dir, key);
         }
+        drop(old_key);
+        crate::vault::clear_key();
+        crate::private_fs::wipe_and_remove(&self.path);
         let mut s = self.st();
         s.rec = None;
         s.corrupt = false;
@@ -495,8 +532,9 @@ impl Lock {
     }
 
     pub fn erase(&self) {
-        let _ = std::fs::remove_file(&self.path);
-        let _ = std::fs::remove_file(self.path.with_extension("tmp"));
+        crate::vault::clear_key();
+        crate::private_fs::wipe_and_remove(&self.path);
+        crate::private_fs::wipe_and_remove(&self.path.with_extension("tmp"));
         let mut s = self.st();
         s.rec = None;
         s.corrupt = false;

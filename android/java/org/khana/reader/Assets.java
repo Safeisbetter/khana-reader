@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.res.AssetManager;
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -23,24 +22,29 @@ final class Assets {
 
     static void unpack(Context ctx, File dest, String version) throws IOException {
         File mark = new File(dest, ".version");
-        if (mark.isFile() && version.equals(new String(Files.readAllBytes(mark.toPath()), StandardCharsets.UTF_8))) return;
+        if (mark.isFile() && version.equals(Files.readString(mark.toPath(), StandardCharsets.UTF_8))) return;
         File tmp = new File(dest.getPath() + ".new");
         delete(tmp);
         AssetManager am = ctx.getAssets();
         byte[] buf = new byte[1 << 20];
         try (BufferedReader list = new BufferedReader(new InputStreamReader(am.open("app.files"), StandardCharsets.UTF_8))) {
-            for (String line; (line = list.readLine()) != null; ) {
+            String line;
+            while ((line = list.readLine()) != null) {
                 if (line.isEmpty()) continue;
                 int tab = line.indexOf('\t');
                 String rel = tab < 0 ? line : line.substring(0, tab);
                 if (rel.startsWith("/") || rel.contains("..")) throw new IOException("bad asset name " + rel);
                 File out = new File(tmp, rel);
-                //noinspection ResultOfMethodCallIgnored
-                out.getParentFile().mkdirs();
+                File parent = out.getParentFile();
+                if (parent != null) {
+                    //noinspection ResultOfMethodCallIgnored
+                    parent.mkdirs();
+                }
                 long want = tab < 0 ? -1 : Long.parseLong(line.substring(tab + 1));
                 long got = 0;
-                try (InputStream in = am.open("app/" + rel, AssetManager.ACCESS_STREAMING); OutputStream o = new FileOutputStream(out)) {
-                    for (int n; (n = in.read(buf)) > 0; ) {
+                try (InputStream in = am.open("app/" + rel, AssetManager.ACCESS_STREAMING); OutputStream o = Files.newOutputStream(out.toPath())) {
+                    int n;
+                    while ((n = in.read(buf)) > 0) {
                         o.write(buf, 0, n);
                         got += n;
                     }
@@ -48,7 +52,7 @@ final class Assets {
                 if (want >= 0 && got != want) throw new IOException(rel + ": " + got + " of " + want + " bytes");
             }
         }
-        try (OutputStream o = new FileOutputStream(new File(tmp, ".version"))) {
+        try (OutputStream o = Files.newOutputStream(new File(tmp, ".version").toPath())) {
             o.write(version.getBytes(StandardCharsets.UTF_8));
         }
         delete(dest);

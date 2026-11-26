@@ -79,12 +79,12 @@
     st.appendChild(tip);
   }
   // «کپی متن صفحه»: through the shell (Server.copySensitive), which marks the text as sensitive and takes it off the clipboard
-  // again after a minute and a half
+  // when Android permits clipboard access
   const copyBtn = $("copy");
   if (copyBtn) copyBtn.onclick = () => {
     const text = S.paras.join("\n\n");
     if (!text) return toast("متنی برای کپی نیست.");
-    api("/api/clip", { method: "POST", body: text }).then(() => toast("متن صفحه کپی شد. پس از یک دقیقه و نیم از حافظه‌ی کپی پاک می‌شود."),
+    api("/api/clip", { method: "POST", body: text }).then(() => toast("متن صفحه کپی شد. خوانا پس از ۹۰ ثانیه تلاش می‌کند آن را پاک کند؛ در پس‌زمینه ممکن است متن باقی بماند."),
       () => toast("کپی نشد؛ متن را انتخاب و کپی کنید."));
   };
   // The screen guard (MainActivity.applyScreenGuard): on unless the reader switches it off here.
@@ -145,7 +145,7 @@ if (window.KHANA_NO_MIC) {
     api("/api/shellbar", { method: "POST", body: msg }).catch(() => { last = ""; });
   }
   const later = () => setTimeout(send, 60); // (after the look's colours are applied)
-  new MutationObserver(later).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  new MutationObserver(later).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-osdark"] });
   if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", later);
   addEventListener("load", later);
   setTimeout(send, 1500);
@@ -157,23 +157,41 @@ if (window.KHANA_NO_MIC) {
   const pageStop = stopReading;
   let control = Promise.resolve(), timer = null, polling = false, lastPosition = null, finishing = false, startAt = null;
   const command = (path, body = {}) => (control = control.catch(() => {}).then(() => jpost(path, body)));
-  stopReading = function () {
-    pageStop(); clearTimeout(timer); lastPosition = null; reader.nativePosition = null;
+  stopReading = function (keepPending = false) {
+    pageStop(keepPending); clearTimeout(timer); lastPosition = null; reader.nativePosition = null;
     command('/api/read_stop').catch(() => {});
   };
   function highlight(pos) {
-    clearReadingMarks();
-    if (pos.para < 0) return;
+    // Keep the tapped word's pending-selection indicator visible until audio actually starts playing!
+    if (pos.phase && pos.phase !== 'playing' && reader.pendingTarget) return;
+    if (pos.phase === 'playing' && reader.pendingTarget && window.clearPendingStart) window.clearPendingStart();
+    document.querySelectorAll('.text .sent, .text .now').forEach(w => w.classList.remove('sent', 'now'));
+    document.querySelectorAll('.text p.reading').forEach(p => p.classList.remove('reading'));
+    if (pos.para < 0) { if (window.clearPageLiveHighlight) window.clearPageLiveHighlight(); return; }
     const paragraph = document.querySelector(`.text p[data-i="${pos.para}"]`);
-    if (!paragraph) return;
+    const fraction = Math.min(0.999, Math.max(0, pos.elapsed / Math.max(0.01, pos.duration)));
+    if (!paragraph) {
+      if (S.view === 'page' && window.updatePageLiveHighlight) {
+        window.updatePageLiveHighlight(pos.page, pos.para, pos.start, pos.end, '', fraction, -1, 0);
+      }
+      return;
+    }
     paragraph.classList.add('reading');
     const words = [...paragraph.querySelectorAll('.w')].filter(w => +w.dataset.s >= pos.start && +w.dataset.s < pos.end);
     words.forEach(w => w.classList.add('sent'));
-    const fraction = Math.min(0.999, Math.max(0, pos.elapsed / Math.max(0.01, pos.duration)));
-    const current = words[Math.floor(fraction * words.length)];
+    // Character-length + punctuation weighted timing (matches real spoken rhythm instead of equal time for 1-letter words!)
+    let wordIdx = 0;
+    if (words.length > 1) {
+      const weights = words.map(w => w.textContent.length + 1.5 + (/[.!?؟،؛:,]$/.test(w.textContent) ? 3 : 0));
+      const total = weights.reduce((a, b) => a + b, 0);
+      let rem = fraction * total;
+      wordIdx = words.length - 1;
+      for (let k = 0; k < words.length; k++) { rem -= weights[k]; if (rem < 0) { wordIdx = k; break; } }
+    }
+    const current = words[wordIdx];
     if (current) {
       current.classList.add('now');
-      if (!reader.paused && !getSelection().toString().trim()) {
+      if (S.view === 'text' && !reader.paused && !getSelection().toString().trim()) {
         const rect = current.getBoundingClientRect();
         const top = document.querySelector('.bar').getBoundingClientRect().bottom + 12;
         const bottom = $('docTools').getBoundingClientRect().top - 12;
@@ -181,6 +199,9 @@ if (window.KHANA_NO_MIC) {
           window.scrollBy(0, rect.top - (top + Math.max(0, bottom - top - rect.height) * 0.35));
         }
       }
+    }
+    if (S.view === 'page' && window.updatePageLiveHighlight) {
+      window.updatePageLiveHighlight(pos.page, pos.para, pos.start, pos.end, current ? current.textContent : '', fraction, wordIdx, words.length);
     }
   }
   async function poll(run, waiting = 0) {
@@ -190,30 +211,57 @@ if (window.KHANA_NO_MIC) {
       const pos = await jget('/api/read_status');
       if (reader.run !== run) return;
       if (!pos.active) {
-        if (waiting < 15 && !lastPosition && !pos.error) { timer = setTimeout(() => poll(run, waiting + 1), 200); return; }
-        const error = pos.error; stopReading(); if (error) toast(error); return;
+        if (waiting < 15 && !lastPosition && !pos.error && !pos.stopReason) { timer = setTimeout(() => poll(run, waiting + 1), 200); return; }
+        const error = pos.error, stopReason = pos.stopReason;
+        stopReading(false);
+        if (error) toast(error);
+        else if (stopReason) {
+          toast(stopReason);
+          if ($('readingState')) $('readingState').textContent = stopReason;
+        }
+        return;
       }
-      if (!S.doc || pos.doc !== S.doc.id) { stopReading(); return; }
+      if (!S.doc || pos.doc !== S.doc.id) { stopReading(false); return; }
       lastPosition = pos;
       reader.nativePosition = pos;
       if (pos.page !== S.page) {
-        const paras = await getParas(pos.page);
+        if (translating()) {
+          // Non-blocking partial fetch: switches page IMMEDIATELY as soon as ReadService starts paragraph 0
+          // instead of freezing behind the voice waiting for the entire next page to translate!
+          const r = await pageSoFar(pos.page);
+          if (reader.run !== run) return;
+          showPage(pos.page, r.paragraphs || [], !!r.done);
+          if (!r.done && typeof followPage === 'function') followPage(pos.page, S.loadSeq).catch(() => {});
+        } else {
+          const paras = await getParas(pos.page);
+          if (reader.run !== run) return;
+          showPage(pos.page, paras);
+        }
+      } else if (translating() && pos.para >= S.paras.length) {
+        // Keep translated paragraphs synced immediately with ReadService so Original Page View never lags behind!
+        const r = await pageSoFar(pos.page);
         if (reader.run !== run) return;
-        showPage(pos.page, paras);
+        if (r && Array.isArray(r.paragraphs)) growPage(pos.page, r.paragraphs, !!r.done);
       }
-      reader.paused = !!pos.paused; setPlayButton(); highlight(pos);
-    } catch (e) { if (reader.run === run) { stopReading(); toast(e.message); } }
+      reader.paused = !!pos.paused;
+      if (window.setPauseReason) window.setPauseReason(pos.paused && pos.pauseReason ? pos.pauseReason : '');
+      if (window.setReadingWait) window.setReadingWait(!pos.paused && pos.waitReason ? pos.waitReason : '', typeof pos.progress === 'number' ? pos.progress : -1);
+      setPlayButton(); highlight(pos);
+    } catch (e) { if (reader.run === run) { stopReading(false); toast(e.message); } }
     finally { polling = false; }
-    if (reader.run === run && reader.active) timer = setTimeout(() => poll(run), 250);
+    if (reader.run === run && reader.active) timer = setTimeout(() => poll(run), 220);
   }
-  readFrom = async function (para, offset = 0) {
+  readFrom = async function (para, offset = 0, opts = {}) {
     // (finishing: a new voice or speed: the phone ends the sentence being heard by itself, so it is not stopped here)
     const exact = finishing; finishing = false;
-    if (exact) { pageStop(); clearTimeout(timer); lastPosition = null; reader.nativePosition = null; } else stopReading();
+    const keepPending = !!opts.keepPending;
+    if (exact) { pageStop(keepPending); clearTimeout(timer); lastPosition = null; reader.nativePosition = null; } else stopReading(keepPending);
     if (!S.doc) return;
     const run = reader.run, doc = S.doc, settings = { ...S.settings }, first = S.page;
     startAt = { page: first, para, start: offset, end: offset };
     reader.active = true; reader.paused = false; setPlayButton();
+    const initReason = opts.reason || 'در حال آماده‌سازی صدا…';
+    if (window.setReadingWait) window.setReadingWait(initReason);
     try {
       // The sandboxed PDF renderer needs a visible page to prepare scans. OCR them once before
       // native reading starts; no pictures or book files are written to shared storage.
@@ -223,46 +271,48 @@ if (window.KHANA_NO_MIC) {
         for (let n = first; n <= last; n++) {
           if (reader.run !== run || !S.doc || S.doc.id !== doc.id) return;
           if (lengths.letters[n - 1] < 0) {
-            $('readingState').textContent = `آماده کردن صفحه‌ی اسکن‌شده… ${fa(n)} از ${fa(last)}`;
+            if (window.setReadingWait) window.setReadingWait(`در حال تشخیص متن صفحه‌ی اسکن‌شده… ${fa(n)} از ${fa(last)}`);
             await pageReq(`/api/page?doc=${doc.id}&n=${n}&tr=false`, n, doc.id);
           }
         }
       }
       const announceTitle = false;
       if (reader.run !== run) return;
-      const request = { doc: doc.id, pages: doc.pages, page: first, para, start: offset,
-        voice: settings.voice, speed: Number(settings.speed) || 1, tr: !!(doc.canTranslate && settings.translate),
-        rev: !!settings.reversed, yeh: !!settings.persianYeh, autoNext: settings.autoNext !== false, announceEnd: !doc.isTyped, announceTitle, exact };
+      const request = { doc: doc.id, pages: doc.pages, page: first, para, start: offset, isTyped: !!doc.isTyped,
+        voice: settings.voice, speed: Number(settings.speed) || 1, sentencePause: settings.sentencePause || 'normal', smoothBuffer: settings.smoothBuffer || 'normal', tr: !!(doc.canTranslate && settings.translate && !doc.isFinglish),
+        rev: !!settings.reversed, yeh: !!settings.persianYeh, autoNext: settings.autoNext !== false, announceEnd: !doc.isTyped, announceTitle, exact, reason: initReason };
       control = control.catch(() => {}).then(() => reader.run === run ? jpost('/api/read_start', request) : null);
       await control;
       if (reader.run === run) poll(run);
-    } catch (e) { if (reader.run === run) { stopReading(); toast(e.message); } }
+    } catch (e) { if (reader.run === run) { stopReading(false); toast(e.message); } }
   };
   async function pause(paused) {
     reader.paused = paused; setPlayButton();
-    try { await command('/api/read_pause', { paused }); } catch (e) { stopReading(); toast(e.message); }
+    try { await command('/api/read_pause', { paused }); } catch (e) { stopReading(false); toast(e.message); }
   }
+  window.togglePause = () => { if (reader.active) pause(!reader.paused); };
   $('play').onclick = () => {
     if (!S.doc || !S.paras.length) return toast('متنی برای خواندن نیست.');
-    if (S.view !== 'text') { S.view = 'text'; syncChrome(); }
     if (reader.active) pause(!reader.paused); else readFrom(0);
   };
-  $('stop').onclick = stopReading;
-  restartReading = function () {
+  $('stop').onclick = () => stopReading(false);
+  restartReading = function (immediate = false, reason = '') {
     clearTimeout(restartT);
     if (!reader.active) return;
-    restartT = setTimeout(async () => {
+    if (reason && window.setReadingWait) window.setReadingWait(reason);
+    const runRestart = async () => {
       if (!reader.active) return;
       // (1.29 deep check: before the phone reports a position, where this reading was started, not the top of the page)
       const pos = lastPosition || (startAt && startAt.page === S.page ? startAt : null), paused = reader.paused;
       if (pos && pos.para < 0) return;  // (the closing «پایان متن.»: nothing is left to read again)
-      // A new voice or speed: the sentence being heard is finished in the old one while the next is made in the new one, and the
-      // reading goes on right after it (before, it was cut and the same sentence made again from nothing: a long silence).
+      // A new voice or speed: the sentence being heard finishes smoothly while the next is made in parallel in the new voice.
       const finish = !paused && pos && pos.para >= 0 && pos.page === S.page && pos.end > pos.start;
       finishing = !!finish;
-      await readFrom(pos && pos.para >= 0 ? pos.para : 0, pos && pos.para >= 0 ? (finish ? pos.end : pos.start) : 0);
+      await readFrom(pos && pos.para >= 0 ? pos.para : 0, pos && pos.para >= 0 ? (finish ? pos.end : pos.start) : 0, { reason: reason || 'در حال تعویض صدا…' });
       if (paused && reader.active) await pause(true);
-    }, 400);
+    };
+    if (immediate) runRestart();
+    else restartT = setTimeout(runRestart, 350);
   };
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && reader.active) { clearTimeout(timer); poll(reader.run); }

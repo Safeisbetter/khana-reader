@@ -5,6 +5,7 @@ use std::ptr::NonNull;
 
 unsafe extern "C" {
     fn k_vision_ocr(gray: *const u8, w: c_int, h: c_int) -> *mut c_char;
+    fn k_vision_free(p: *mut c_char);
 }
 
 /// Grey page picture (w*h bytes) -> one line per recognized line, "x\ty\tw\th\ttext" with Vision's
@@ -16,8 +17,8 @@ pub fn recognize(gray: &[u8], w: usize, h: usize) -> Option<String> {
     let (cw, ch) = (c_int::try_from(w).ok()?, c_int::try_from(h).ok()?);
     // SAFETY: `gray` holds exactly w*h bytes (checked above), which is all the shim reads.
     let p = NonNull::new(unsafe { k_vision_ocr(gray.as_ptr(), cw, ch) })?;
-    // SAFETY: the shim returns a NUL-terminated malloc'd string; it is copied, then freed once.
+    // SAFETY: the shim returns a NUL-terminated malloc'd string; it is copied, then wiped and freed once.
     let s = unsafe { CStr::from_ptr(p.as_ptr()) }.to_string_lossy().into_owned();
-    unsafe { libc::free(p.as_ptr().cast()) };
+    unsafe { k_vision_free(p.as_ptr()) };
     Some(s)
 }

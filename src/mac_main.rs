@@ -9,6 +9,8 @@ use tao::window::WindowBuilder;
 use wry::http::{header, Request, Response};
 use wry::{WebViewBuilder, WebViewBuilderExtDarwin};
 
+const NO_WEBRTC_JS: &str = "for (const k of ['RTCPeerConnection','webkitRTCPeerConnection','RTCDataChannel','RTCSessionDescription','RTCIceCandidate']) { try { Object.defineProperty(window, k, { value: undefined, configurable: false, writable: false }); } catch (_) {} }\n";
+
 const START_URL: &str = "khana://reader/";
 
 const PDF_URL: &str = "khanapdf://pdf/pdfjs/frame.html";
@@ -71,12 +73,11 @@ enum UserEvent {
     Menu(MenuEvent),
     PageGone,
     PdfGone,
+    ResetPdf,
 }
 
 fn dead_end_proxy() -> Option<wry::ProxyConfig> {
-    let v = std::fs::read_to_string("/System/Library/CoreServices/SystemVersion.plist").unwrap_or_default();
-    let major: u32 = v.split("<key>ProductVersion</key>").nth(1).and_then(|r| r.split("<string>").nth(1))
-        .and_then(|r| r.split(['.', '<']).next()).and_then(|m| m.trim().parse().ok()).unwrap_or(0);
+    let major = khana::ffi::network_guard::macos_major_version();
     (major >= 14).then(|| wry::ProxyConfig::Http(wry::ProxyEndpoint { host: "127.0.0.1".into(), port: "1".into() }))
 }
 
@@ -90,6 +91,7 @@ pub fn run() {
         std::thread::sleep(std::time::Duration::from_secs(15));
     });
     let app = Arc::new(App::new(khana::engines::engines()));
+    khana::ffi::network_guard::protect_data_dir(&khana::app::data_dir());
     let web = khana::vocab::web_dir();
 
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
@@ -133,16 +135,28 @@ pub fn run() {
     };
     let a = app.clone();
     let b = bridge.clone();
+    let pdf_reset = event_loop.create_proxy();
     let handler = move |_id: wry::WebViewId, req: Request<Vec<u8>>, responder: wry::RequestAsyncResponder| {
         let a = a.clone();
         let b = b.clone();
         let web = web.clone();
+        let pdf_reset = pdf_reset.clone();
         std::thread::spawn(move || {
             let method = req.method().as_str().to_string();
             let path = req.uri().path().to_string();
             let qs = req.uri().query().unwrap_or("").to_string();
             let token = req.headers().get("X-Khana-Token").and_then(|v| v.to_str().ok()).map(|s| s.to_string());
-            let r = if method == "POST" && path == "/api/pdfview" && khana::app::token_ok(token.as_deref(), &a.token) && a.locked() {
+            let r = if method == "POST" && path == "/api/clip" && khana::app::token_ok(token.as_deref(), &a.token) {
+                if a.locked() {
+                    khana::app::Reply { status: 423, ctype: "application/json", body: br#"{"error":"locked","locked":true}"#.to_vec(), headers: Vec::new() }
+                } else if req.body().len() > 512 * 1024 {
+                    khana::app::Reply { status: 413, ctype: "application/json", body: br#"{"error":"too large"}"#.to_vec(), headers: Vec::new() }
+                } else {
+                    let text = String::from_utf8_lossy(req.body());
+                    khana::ffi::network_guard::copy_transient(&text, 90);
+                    khana::app::Reply { status: 200, ctype: "application/json", body: br#"{"ok":true}"#.to_vec(), headers: Vec::new() }
+                }
+            } else if method == "POST" && path == "/api/pdfview" && khana::app::token_ok(token.as_deref(), &a.token) && a.locked() {
                 khana::app::Reply { status: 423, ctype: "application/json", body: br#"{"error":"locked","locked":true}"#.to_vec(), headers: Vec::new() }
             } else if method == "POST" && path == "/api/pdfview" && khana::app::token_ok(token.as_deref(), &a.token) {
                 let (status, ctype, headers, body) = b.call(&khana::app::query(&qs), req.body());
@@ -150,6 +164,17 @@ pub fn run() {
             } else {
                 a.handle(&method, &path, &qs, token.as_deref(), req.body(), &web)
             };
+            if method == "POST" && r.status == 200 && matches!(path.as_str(), "/api/close" | "/api/lock_now" | "/api/forget") {
+                khana::ffi::network_guard::clear_transient();
+            }
+            if r.status == 423 || (method == "POST" && r.status == 200 && matches!(path.as_str(), "/api/settings" | "/api/unlock" | "/api/lock_now" | "/api/forget")) {
+                let allow_shots = !a.locked() && khana::app::load_settings().get("allowScreenshots").and_then(|v| v.as_bool()).unwrap_or(false);
+                khana::ffi::network_guard::set_window_sharing(allow_shots);
+            }
+            if method == "POST" && r.status == 200 && matches!(path.as_str(), "/api/close" | "/api/forget") {
+                b.reset();
+                let _ = pdf_reset.send_event(UserEvent::ResetPdf);
+            }
             let mut b = Response::builder()
                 .status(r.status)
                 .header(header::CONTENT_TYPE, r.ctype)
@@ -165,9 +190,8 @@ pub fn run() {
     };
     let gone = event_loop.create_proxy();
     let mut builder = WebViewBuilder::new()
-        .with_initialization_script("window.KHANA_PDF_VIEW = true;\n")
+        .with_initialization_script(format!("{NO_WEBRTC_JS}window.KHANA_PDF_VIEW = true;\n").as_str())
         .with_asynchronous_custom_protocol("khana".into(), handler)
-        .with_url(START_URL)
         .with_incognito(true)
         .with_navigation_handler(|url| url == "khana://reader" || url.starts_with("khana://reader/"))
         .with_new_window_req_handler(|_url, _features| wry::NewWindowResponse::Deny)
@@ -186,11 +210,17 @@ pub fn run() {
         builder = builder.with_proxy_config(p);
     }
     let webview = builder.build(&window).expect("webview");
+    khana::ffi::network_guard::install(&webview);
+    {
+        let allow_shots = !app.locked() && khana::app::load_settings().get("allowScreenshots").and_then(|v| v.as_bool()).unwrap_or(false);
+        khana::ffi::network_guard::set_window_sharing(allow_shots);
+    }
+    webview.load_url(START_URL).expect("load reader page");
 
     let pdf_gone = event_loop.create_proxy();
     let mut pdf_builder = WebViewBuilder::new()
+        .with_initialization_script(NO_WEBRTC_JS)
         .with_asynchronous_custom_protocol("khanapdf".into(), pdf_handler)
-        .with_url(PDF_URL)
         .with_incognito(true)
         .with_navigation_handler(|url| url.starts_with("khanapdf://pdf/"))
         .with_new_window_req_handler(|_url, _features| wry::NewWindowResponse::Deny)
@@ -208,6 +238,8 @@ pub fn run() {
         pdf_builder = pdf_builder.with_proxy_config(p);
     }
     let pdfview = pdf_builder.build_as_child(&window).expect("pdf view");
+    khana::ffi::network_guard::install(&pdfview);
+    pdfview.load_url(PDF_URL).expect("load PDF frame");
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -227,7 +259,13 @@ pub fn run() {
                 bridge.reset();
                 let _ = pdfview.load_url(PDF_URL);
             }
+            Event::UserEvent(UserEvent::ResetPdf) => {
+                bridge.reset();
+                let _ = pdfview.load_url(PDF_URL);
+            }
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                khana::ffi::network_guard::clear_transient();
+                bridge.reset();
                 app.shutdown();
                 *control_flow = ControlFlow::Exit;
             }

@@ -274,7 +274,23 @@ pub fn source_is_dutch() -> bool {
     SOURCE_DUTCH.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+static FINGLISH_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_finglish(on: bool) {
+    FINGLISH_MODE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn is_finglish() -> bool {
+    FINGLISH_MODE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 pub fn latin_phonemes(word: &str) -> Option<String> {
+    if is_finglish() {
+        let ph = crate::phon::finglish_word_to_phonemes(word);
+        if !ph.is_empty() {
+            return Some(ph);
+        }
+    }
     let abbreviation = word.chars().count() <= 6 && word.chars().all(|c| c.is_uppercase());
     if !source_is_dutch() || abbreviation {
         return english_phonemes(word).or_else(|| if abbreviation { None } else { foreign_phonemes(word) });

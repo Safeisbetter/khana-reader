@@ -675,7 +675,15 @@ fn caption_block(page: &[String], foot: bool) -> Option<usize> {
     None
 }
 
-pub fn join_across_pages(mut pages: Vec<Vec<String>>) -> Vec<Vec<String>> {
+pub fn join_across_pages(pages: Vec<Vec<String>>) -> Vec<Vec<String>> {
+    join_across_pages_with_boxes(pages, Vec::new()).0
+}
+
+pub fn join_across_pages_with_boxes(
+    mut pages: Vec<Vec<String>>,
+    mut boxes: Vec<Vec<Vec<[f64; 5]>>>,
+) -> (Vec<Vec<String>>, Vec<Vec<Vec<[f64; 5]>>>) {
+    let has_boxes = boxes.len() == pages.len();
     let mut carry: Option<(usize, usize, usize)> = None;
     for n in 0..pages.len().saturating_sub(1) {
         let target = match caption_block(&pages[n], true) {
@@ -707,7 +715,12 @@ pub fn join_across_pages(mut pages: Vec<Vec<String>>) -> Vec<Vec<String>> {
                     pages[m][j] = rest;
                     head
                 }
-                None => pages[m].remove(j),
+                None => {
+                    if has_boxes && j < boxes[m].len() {
+                        boxes[m].remove(j);
+                    }
+                    pages[m].remove(j)
+                }
             };
             let last = &mut pages[t][i];
             last.push(' ');
@@ -715,7 +728,7 @@ pub fn join_across_pages(mut pages: Vec<Vec<String>>) -> Vec<Vec<String>> {
             carry = Some((n + 1, t, i));
         }
     }
-    pages
+    (pages, boxes)
 }
 
 pub const MAX_PARAGRAPH_CHARS_IN_PAGE: usize = 8000;
@@ -1486,7 +1499,7 @@ fn word_cut_in_two(left: &str, right: &str) -> bool {
     const STAND_ALONE: &[&str] = &["می", "نمی", "بی", "به", "هم", "نا", "یک", "دو", "سه", "تک", "پی", "پس", "تن", "کم", "پر", "دی", "در", "بر", "از", "آن", "این"];
     const ENDINGS: &[&str] = &["ها", "ی", "ای", "ام", "ات", "اش", "تر", "ان", "اند", "ایم", "اید", "رو", "گر", "گو", "زا", "کن", "سو", "ماه", "بار", "وار",
                                "های", "هایی", "هایش", "هایم", "هایت", "هایشان", "هایمان", "ترین", "است", "شان", "مان", "تان", "گری", "گرا", "گرایی", "وار"];
-    if STAND_ALONE.contains(&l.as_str()) || ENDINGS.contains(&r.as_str()) {
+    if STAND_ALONE.contains(&l.as_str()) || (ENDINGS.contains(&r.as_str()) && !(nl == 1 && l != "و")) {
         return false;
     }
     let c = crate::vocab::word_costs();
@@ -1640,9 +1653,19 @@ pub fn layout_lines(items: &[LayoutItem], page_h: f64) -> Vec<LLine> {
         for k in 1..g.len() {
             let (p, it) = (g[k - 1], g[k]);
             let gap = if right_to_left { p.x0 - it.x1 } else { it.x0 - p.x1 };
-            if gap > 0.05 * it.size.min(p.size) {
+            let sz = it.size.min(p.size);
+            let fa_pair = right_to_left && farsi_end(&p.s) && farsi_start(&it.s);
+            // Persian PDFs often add 0.06..0.16em tracking/kerning inside a single word (especially after non-connecting letters);
+            // keep such pieces joined when glyph evidence or Persian vocabulary confirms they belong to one word.
+            let same_word_gap = fa_pair
+                && !p.s.ends_with(' ')
+                && !it.s.starts_with(' ')
+                && gap > 0.05 * sz
+                && ((gap <= 0.11 * sz && (cut_evidence(&p.s) == Some(false) || word_cut_in_two(&p.s, &it.s)))
+                    || (gap <= 0.17 * sz && word_cut_in_two(&p.s, &it.s)));
+            if gap > 0.05 * sz && !same_word_gap {
                 space[k] = !p.s.ends_with(' ') && !it.s.starts_with(' ');
-            } else if right_to_left && farsi_end(&p.s) && farsi_start(&it.s) {
+            } else if fa_pair {
                 touch[k] = true;
             }
         }
@@ -1762,25 +1785,82 @@ fn is_note_mark(m: &LayoutItem, items: &[&LayoutItem]) -> bool {
     })
 }
 
+fn is_rule_line(t: &str) -> bool {
+    let s = strip(t);
+    let mut n = 0usize;
+    for c in s.chars() {
+        if c.is_whitespace() {
+            continue;
+        }
+        if matches!(c, '_' | '-' | '–' | '—' | '─' | '━' | '═' | 'ـ' | '=' | '¯' | '⎯') {
+            n += 1;
+        } else {
+            return false;
+        }
+    }
+    n >= 3
+}
+
+fn is_footnote_cue(line: &str) -> bool {
+    if note_number(line).is_some() {
+        return true;
+    }
+    is_match_start(
+        r"\s*(?:\*{1,3}|†|‡|[\(\[]\s*[\d۰-۹٠-٩]{1,3}\s*[\)\]]|پانویس|پاورقی|همانجا|همان\s*جا|همان\b|ر\.?\s*ک\.?|نک\.?|مترجم\s*[:\-]|ـ\s*م\.?)",
+        line,
+    )
+}
+
 pub fn drop_footnote_lines(lines: &mut Vec<LLine>, page_h: f64) -> Vec<u32> {
     let mut weights: Vec<(f64, usize)> = Vec::new();
     for l in lines.iter() {
+        if is_rule_line(&l.text) {
+            continue;
+        }
         let n = len(&l.text);
         match weights.iter_mut().find(|(k, _)| (*k - l.size).abs() < 0.05) {
             Some(w) => w.1 += n,
             None => weights.push((l.size, n)),
         }
     }
-    let Some(&(body, _)) = weights.iter().max_by_key(|w| w.1) else { return Vec::new() };
-    let body_bottom = lines.iter().filter(|l| l.size >= body * 0.93).map(|l| l.bot).fold(f64::NEG_INFINITY, f64::max);
-    let below = |l: &LLine| l.size < body * 0.93 && l.top >= body_bottom - 2.0;
-    let body_lines: Vec<&LLine> = lines.iter().filter(|l| l.size >= body * 0.93).collect();
+    let Some(&(body, _)) = weights.iter().max_by_key(|w| w.1) else {
+        lines.retain(|l| !is_rule_line(&l.text));
+        return Vec::new();
+    };
+    let mut numbers: Vec<u32> = Vec::new();
+
+    // 1) Explicit footnote separator rule (vector PDF rule emitted as "─────" or literal text rule "_____")
+    if let Some(rule_idx) = (0..lines.len()).find(|&k| {
+        is_rule_line(&lines[k].text)
+            && lines[k].top > 0.42 * page_h
+            && lines[..k].iter().filter(|l| !is_rule_line(&l.text)).count() >= 2
+    }) {
+        let below_lines = &lines[rule_idx + 1..];
+        let looks_like_notes = !below_lines.is_empty()
+            && below_lines.len() <= 18
+            && (below_lines.iter().any(|l| is_footnote_cue(&l.text) || l.size < body * 0.98)
+                || lines[rule_idx].top > 0.52 * page_h);
+        if looks_like_notes {
+            numbers.extend(below_lines.iter().filter_map(|l| note_number(&l.text)));
+            lines.truncate(rule_idx);
+        }
+    }
+    // Always remove bare horizontal rule lines so TTS never reads "_____"
+    lines.retain(|l| !is_rule_line(&l.text));
+
+    let body_bottom = lines
+        .iter()
+        .filter(|l| l.size >= body * 0.96 && !(l.top > 0.60 * page_h && is_footnote_cue(&l.text)))
+        .map(|l| l.bot)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let below = |l: &LLine| l.size < body * 0.96 && l.top >= body_bottom - 2.0;
+    let body_lines: Vec<&LLine> = lines.iter().filter(|l| l.size >= body * 0.96).collect();
     let right = body_lines.iter().map(|l| l.x1).fold(f64::NEG_INFINITY, f64::max);
     let left = body_lines.iter().map(|l| l.x0).fold(f64::INFINITY, f64::min);
-    let at_margin = |l: &LLine| if rtl(&l.text) { (l.x1 - right).abs() <= 0.3 * body } else { (l.x0 - left).abs() <= 0.3 * body };
+    let at_margin = |l: &LLine| if rtl(&l.text) { (l.x1 - right).abs() <= 0.35 * body } else { (l.x0 - left).abs() <= 0.35 * body };
     let start = (0..lines.len()).find(|&k| {
         let l = &lines[k];
-        below(l) && l.top > 0.5 * page_h && (at_margin(l) || note_number(&l.text).is_some() || k == 0 || l.top - lines[k - 1].bot >= 0.9 * body)
+        below(l) && l.top > 0.48 * page_h && (at_margin(l) || is_footnote_cue(&l.text) || k == 0 || l.top - lines[k - 1].bot >= 0.85 * body)
     });
     let mut mid: Vec<usize> = Vec::new();
     let mut k = 0;
@@ -1790,7 +1870,7 @@ pub fn drop_footnote_lines(lines: &mut Vec<LLine>, page_h: f64) -> Vec<u32> {
             while k < lines.len() && lines[k].size < body * 0.85 {
                 k += 1;
             }
-            if lines[k..].iter().any(|l| l.size >= body * 0.93) {
+            if lines[k..].iter().any(|l| l.size >= body * 0.96) {
                 mid.extend(from..k);
             }
         } else {
@@ -1801,18 +1881,29 @@ pub fn drop_footnote_lines(lines: &mut Vec<LLine>, page_h: f64) -> Vec<u32> {
     for &k in mid.iter().rev() {
         lines.remove(k);
     }
-    let start = start.filter(|_| mid.is_empty());
-    let Some(start) = start else { return mid_marks };
-    let first_top = lines[start].top;
-    let is_note = |l: &LLine| below(l) && l.top >= first_top;
-    let mut numbers: Vec<u32> = lines.iter().filter(|l| is_note(l)).filter_map(|l| note_number(&l.text)).collect();
+    if let Some(start) = start.filter(|_| mid.is_empty()) {
+        let first_top = lines[start].top;
+        let is_note = |l: &LLine| below(l) && l.top >= first_top;
+        numbers.extend(lines.iter().filter(|l| is_note(l)).filter_map(|l| note_number(&l.text)));
+        lines.retain(|l| !is_note(l));
+    } else if let Some(gap_start) = (1..lines.len()).find(|&idx| {
+        // Same-size Persian footnote block separated from body by a clear vertical gap in the bottom 45%
+        let l = &lines[idx];
+        l.top > 0.55 * page_h
+            && l.top - lines[idx - 1].bot >= 0.85 * body
+            && is_footnote_cue(&l.text)
+            && lines[idx..].len() <= 14
+            && lines[idx..].iter().all(|u| u.size <= body * 1.02)
+    }) {
+        numbers.extend(lines[gap_start..].iter().filter_map(|l| note_number(&l.text)));
+        lines.truncate(gap_start);
+    }
     numbers.append(&mut mid_marks);
-    lines.retain(|l| !is_note(l));
     numbers
 }
 
 fn note_number(line: &str) -> Option<u32> {
-    let g = fullmatch_groups(r"\s*(?:\.\s*([\d۰-۹٠-٩]{1,3})|([\d۰-۹٠-٩]{1,3})\s*[.)\-]?)(?:\s.*)?", line)?;
+    let g = fullmatch_groups(r"\s*(?:\.\s*([\d۰-۹٠-٩]{1,3})|[\(\[]?([\d۰-۹٠-٩]{1,3})\s*[\)\].\-–—:])(?:\s.*)?", line)?;
     digits_value(g[1].as_deref().or(g[2].as_deref())?)
 }
 
@@ -1854,6 +1945,10 @@ pub fn drop_running_lines(pages: &mut [(Vec<LLine>, f64)]) {
 }
 
 pub fn paragraphs_from_lines(lines: &[LLine]) -> Vec<String> {
+    paragraphs_with_boxes(lines).0
+}
+
+pub fn paragraphs_with_boxes(lines: &[LLine]) -> (Vec<String>, Vec<Vec<[f64; 5]>>) {
     let mut widths: Vec<f64> = lines.iter().map(|l| l.x1 - l.x0).collect();
     widths.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let full = widths.get(widths.len() * 4 / 5).copied().unwrap_or(0.0);
@@ -1886,6 +1981,7 @@ pub fn paragraphs_from_lines(lines: &[LLine]) -> Vec<String> {
         w.get(w.len() * 4 / 5).copied().unwrap_or(full)
     };
     let mut paras: Vec<String> = Vec::new();
+    let mut pboxes: Vec<Vec<[f64; 5]>> = Vec::new();
     let mut prev: Option<&LLine> = None;
     for l in lines {
         let heading = |t: &str| notes_heading(t) || contents_heading(t);
@@ -1900,20 +1996,25 @@ pub fn paragraphs_from_lines(lines: &[LLine]) -> Vec<String> {
             let turn = search(r#"[.!?؟…]\s*[»"”)\]]?\s*$"#, &p.text) && search(PARAGRAPH_OPENER, &l.text);
             close && same_size && !ended && !label && !turn
         });
-        match (same_para, paras.last_mut()) {
-            (true, Some(last)) => {
+        let lb = [l.x0, l.top, l.x1, l.bot, if rtl(&l.text) { 1.0 } else { 0.0 }];
+        match (same_para, paras.last_mut(), pboxes.last_mut()) {
+            (true, Some(last), Some(last_b)) => {
                 if search(r"[A-Za-z]-$", last) && is_match_start(r"[a-z]", &l.text) {
                     last.pop();
                 } else {
                     last.push(' ');
                 }
                 last.push_str(&l.text);
+                last_b.push(lb);
             }
-            _ => paras.push(l.text.clone()),
+            _ => {
+                paras.push(l.text.clone());
+                pboxes.push(vec![lb]);
+            }
         }
         prev = Some(l);
     }
-    paras
+    (paras, pboxes)
 }
 
 

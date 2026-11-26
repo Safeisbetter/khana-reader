@@ -15,10 +15,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Answers every request of the WebView inside the app. The page's address, https://khana.invalid,
+ * Answers every request of the WebView inside the app. The page's address, {@code https://khana.invalid},
  * is a name that can never be looked up (RFC 6761): nothing reaches a network, and the app has no
  * permission to use one. A request for any other address is refused here.
- *
+ * <p>
  * WebView does not pass request bodies on, so the page sends a body first through a message port
  * that only the reader page holds (web/android.js), in base64 pieces, then names it in the request
  * (X-Khana-Body). A body is used once and dropped.
@@ -29,6 +29,9 @@ final class Server {
 
     static final String HOST = "khana.invalid";
     static final String ORIGIN = "https://" + HOST;
+    static final String PDF_HOST = "khana-pdf.invalid";
+    @SuppressWarnings("unused")
+    static final String PDF_ORIGIN = "https://" + PDF_HOST;
     /** bodies larger than this are refused (the app's own limit for a document is 300 MB) */
     private static final long MAX_BODY = 420L * 1024 * 1024;
 
@@ -46,8 +49,11 @@ final class Server {
         }
 
         synchronized void write(byte[] p, int len) {
-            if (n + len > buf.length) {
-                byte[] bigger = new byte[(int) Math.min(Integer.MAX_VALUE - 8, Math.max((long) buf.length * 2, (long) n + len))];
+            long need = (long) n + len;
+            if (need > MAX_BODY) throw new IllegalArgumentException();
+            if (need > buf.length) {
+                int cap = (int) Math.min(MAX_BODY, Math.max((long) buf.length * 2, need));
+                byte[] bigger = new byte[cap];
                 System.arraycopy(buf, 0, bigger, 0, n);
                 Arrays.fill(buf, (byte) 0);
                 buf = bigger;
@@ -124,7 +130,7 @@ final class Server {
             Body b = bodies.computeIfAbsent(id, k -> new Body());
             if (piece != null) b.write(piece, piece.length);
             else port.postMessage(new WebMessage("A" + id));
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException | OutOfMemoryError e) {
             // Clear the channel's incomplete uploads; never acknowledge a truncated body as complete.
             clearBodies();
             port.postMessage(new WebMessage("F" + id));
@@ -135,10 +141,17 @@ final class Server {
 
     WebResourceResponse handle(WebResourceRequest req) {
         Uri u = req.getUrl();
-        if (!"https".equals(u.getScheme()) || !HOST.equals(u.getHost()) || (u.getPort() != -1 && u.getPort() != 443) || u.getUserInfo() != null) return refuse();
+        if (!"https".equals(u.getScheme()) || (u.getPort() != -1 && u.getPort() != 443) || u.getUserInfo() != null) return refuse();
+        String host = u.getHost();
+        boolean isApp = HOST.equals(host);
+        boolean isPdf = PDF_HOST.equals(host);
+        if (!isApp && !isPdf) return refuse();
         String method = req.getMethod() == null ? "GET" : req.getMethod().toUpperCase(Locale.ROOT);
         // (as the Mac window passes them: the path and query still percent-encoded)
         String path = u.getEncodedPath() == null || u.getEncodedPath().isEmpty() ? "/" : u.getEncodedPath();
+        // Site isolation: khana-pdf.invalid only serves GET /pdfjs/*; khana.invalid never serves /pdfjs/*.
+        if (isPdf && (!"GET".equals(method) || !path.startsWith("/pdfjs/"))) return refuse();
+        if (isApp && path.startsWith("/pdfjs/")) return refuse();
         String query = u.getEncodedQuery() == null ? "" : u.getEncodedQuery();
         String tok = header(req, "X-Khana-Token");
         byte[] body = null;
@@ -166,10 +179,14 @@ final class Server {
                 } catch (Exception e) { return json(400, "{\"error\":\"خواندن شروع نشد. دوباره تلاش کنید.\"}"); }
             }
             // a voice sample other than WAV is decoded by Android first (the Mac uses afconvert); only for the page itself
-            if ("/api/myvoice".equals(path) && body != null) {
+            if ("POST".equals(method) && "/api/myvoice".equals(path) && body != null) {
                 if (!tokenOk(tok)) {
                     Arrays.fill(body, (byte) 0);
                     return json(403, "{}");
+                }
+                if (body.length > 50 * 1024 * 1024) {
+                    Arrays.fill(body, (byte) 0);
+                    return json(400, "{\"error\":\"فایل صوتی خیلی بزرگ است. یک ضبط کوتاه (۱۰ تا ۳۰ ثانیه) کافی است.\"}");
                 }
                 String name = u.getQueryParameter("name");
                 if (name != null && !name.toLowerCase(Locale.ROOT).endsWith(".wav")) {
@@ -188,10 +205,13 @@ final class Server {
             // what it looks like now, «#rrggbb #rrggbb» (ground, writing). Only two colours are read, nothing else.
             if ("POST".equals(method) && "/api/shellbar".equals(path)) {
                 if (!tokenOk(tok)) return json(403, "{}");
+                if (body != null && body.length > 64) return json(400, "{}");
                 String t = body == null ? "" : Native.text(body);
                 java.util.regex.Matcher m = java.util.regex.Pattern.compile("^#([0-9a-fA-F]{6}) #([0-9a-fA-F]{6})$").matcher(t.trim());
                 if (!m.find()) return json(400, "{}");
-                MainActivity.paintBar(0xFF000000 | Integer.parseInt(m.group(1), 16), 0xFF000000 | Integer.parseInt(m.group(2), 16));
+                String g1 = m.group(1), g2 = m.group(2);
+                if (g1 == null || g2 == null) return json(400, "{}");
+                MainActivity.paintBar(0xFF000000 | Integer.parseInt(g1, 16), 0xFF000000 | Integer.parseInt(g2, 16));
                 return json(200, "{\"ok\":true}");
             }
             if ("POST".equals(method) && "/api/clip".equals(path)) {
@@ -200,27 +220,41 @@ final class Server {
                     if (body != null) Arrays.fill(body, (byte) 0);
                     return json(423, "{\"locked\":true}");
                 }
+                if (body != null && body.length > 512 * 1024) {
+                    Arrays.fill(body, (byte) 0);
+                    return json(413, "{\"error\":\"متن برای کپی خیلی بزرگ است.\"}");
+                }
                 copySensitive(ctx, body == null ? "" : Native.text(body));
                 if (body != null) Arrays.fill(body, (byte) 0);
                 return json(200, "{\"ok\":true}");
             }
             if ("POST".equals(method) && tokenOk(tok) && ("/api/open".equals(path) || "/api/open_layout".equals(path) || "/api/open_pages".equals(path) || "/api/close".equals(path) || "/api/lock_now".equals(path) || "/api/forget".equals(path) || "/api/lock_erase".equals(path))) ReadService.stop(ctx);
+            if ("POST".equals(method) && tokenOk(tok) && ("/api/close".equals(path) || "/api/lock_now".equals(path) || "/api/forget".equals(path) || "/api/lock_erase".equals(path))) clearClipboard(ctx);
             Native.Reply r = new Native.Reply(Native.handle(Native.utf8(method), Native.utf8(path), Native.utf8(query), Native.utf8(tok), body));
             if (body != null) Arrays.fill(body, (byte) 0); // (the document's bytes: the core has its own copy now)
             if ("/api/tts".equals(path)) lastSpeech = android.os.SystemClock.elapsedRealtime();
-            if (r.status == 200 && "POST".equals(method) && ("/api/settings".equals(path) || "/api/forget".equals(path) || "/api/unlock".equals(path))) MainActivity.applyScreenGuard(); // (after an unlock too: the setting could not be read while the app was locked)
+            if (r.status == 200 && "POST".equals(method) && ("/api/forget".equals(path) || "/api/lock_erase".equals(path))) {
+                Exporter.clearAll(ctx);
+                MainActivity.clearWebData();
+            }
+            if (r.status == 423 || (r.status == 200 && "POST".equals(method) && ("/api/settings".equals(path) || "/api/forget".equals(path) || "/api/unlock".equals(path) || "/api/lock_now".equals(path)))) {
+                MainActivity.applyScreenGuard();
+            }
+            if (r.status == 200 && "POST".equals(method) && "/api/unlock".equals(path)) {
+                Exporter.onUnlocked();
+            }
             if (r.status == 200 && "POST".equals(method) && ("/api/mp3".equals(path) || "/api/pdf".equals(path))) {
                 JobService.start(ctx);
             }
-            if (path.startsWith("/api/")) Exporter.drain(ctx);
-            return response(r);
+            if (path.startsWith("/api/") && r.status != 423 && !isLocked()) Exporter.drain(ctx);
+            return response(r, isApp);
         } finally {
             if (body != null) Arrays.fill(body, (byte) 0);
         }
     }
 
     /** Whether the app lock is on and the app locked now (the core says so; it refuses the request itself otherwise). */
-    private static boolean isLocked() {
+    static boolean isLocked() {
         try {
             Native.Reply r = new Native.Reply(Native.handle(Native.utf8("GET"), Native.utf8("/api/lock_status"), Native.utf8(""), Native.token(), null));
             return Native.text(r.body).replace(" ", "").contains("\"locked\":true");
@@ -241,8 +275,9 @@ final class Server {
         return null;
     }
 
-    private static WebResourceResponse response(Native.Reply r) {
+    private static WebResourceResponse response(Native.Reply r, boolean isApp) {
         String ctype = r.headers.getOrDefault("Content-Type", "application/octet-stream");
+        if (ctype == null) ctype = "application/octet-stream";
         String mime = ctype, charset = null;
         int semi = ctype.indexOf(';');
         if (semi >= 0) {
@@ -252,6 +287,10 @@ final class Server {
         }
         Map<String, String> headers = new HashMap<>(noStore());
         headers.put("Referrer-Policy", "no-referrer");
+        if (isApp) {
+            headers.put("Cross-Origin-Opener-Policy", "same-origin");
+            headers.put("Cross-Origin-Resource-Policy", "same-origin");
+        }
         headers.putAll(r.headers);
         headers.remove("Content-Type");
         int status = r.status >= 300 && r.status < 400 || r.status < 100 || r.status > 599 ? 500 : r.status;
@@ -273,31 +312,58 @@ final class Server {
     }
 
     private static final String CLIP_LABEL = "Khana";
+    private static final long CLIP_LIFETIME_MS = 90_000;
+    // Used only on the main thread. An old timer must never clear a newer copy.
+    private static long clipboardExpiresAt;
+    private static long clipboardGeneration;
+
+    static void clearClipboard(Context ctx) {
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> tryClearClipboard(ctx));
+    }
+
+    static void clearExpiredClipboard(Context ctx) {
+        if (clipboardExpiresAt != 0 && android.os.SystemClock.elapsedRealtime() >= clipboardExpiresAt) {
+            tryClearClipboard(ctx);
+        }
+    }
+
+    private static void tryClearClipboard(Context ctx) {
+        android.content.ClipboardManager cm = (android.content.ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+        if (cm == null) return;
+        try {
+            // Android may hide the clipboard while the app is in the background.
+            android.content.ClipDescription d = cm.getPrimaryClipDescription();
+            if (d == null) return;
+            if (d.getLabel() != null && CLIP_LABEL.contentEquals(d.getLabel())) {
+                if (android.os.Build.VERSION.SDK_INT >= 28) cm.clearPrimaryClip();
+                else cm.setPrimaryClip(android.content.ClipData.newPlainText("", ""));
+            }
+            clipboardExpiresAt = 0;
+        } catch (Exception ignored) {
+            // The next window focus retries an expired copy.
+        }
+    }
 
     private static void copySensitive(Context ctx, String text) {
-        final android.content.ClipboardManager cm = (android.content.ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+        android.content.ClipboardManager cm = (android.content.ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
         if (cm == null) return;
         android.content.ClipData clip = android.content.ClipData.newPlainText(CLIP_LABEL, text);
         android.os.PersistableBundle extras = new android.os.PersistableBundle();
         extras.putBoolean("android.content.extra.IS_SENSITIVE", true);
-        if (android.os.Build.VERSION.SDK_INT >= 24) clip.getDescription().setExtras(extras);
-        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+        clip.getDescription().setExtras(extras);
+        android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+        main.post(() -> {
             try {
+                if (isLocked()) return;
                 cm.setPrimaryClip(clip);
-            } catch (Throwable e) {
+            } catch (Exception e) {
                 return;
             }
-            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                try {
-                    // (only if it is still this app's text: what the reader copied elsewhere since is left alone)
-                    android.content.ClipDescription d = cm.getPrimaryClipDescription();
-                    if (d == null || d.getLabel() == null || !CLIP_LABEL.contentEquals(d.getLabel())) return;
-                    if (android.os.Build.VERSION.SDK_INT >= 28) cm.clearPrimaryClip();
-                    else cm.setPrimaryClip(android.content.ClipData.newPlainText("", ""));
-                } catch (Throwable e) {
-                    // (the clipboard cannot be read from the background on newer Android: the text stays until something else is copied)
-                }
-            }, 90_000);
+            long generation = ++clipboardGeneration;
+            clipboardExpiresAt = android.os.SystemClock.elapsedRealtime() + CLIP_LIFETIME_MS;
+            main.postDelayed(() -> {
+                if (generation == clipboardGeneration) clearExpiredClipboard(ctx);
+            }, CLIP_LIFETIME_MS);
         });
     }
 
@@ -314,6 +380,7 @@ final class Server {
         Map<String, String> h = new HashMap<>();
         h.put("Cache-Control", "no-store");
         h.put("X-Content-Type-Options", "nosniff");
+        h.put("Origin-Agent-Cluster", "?1");
         // (the fallback policy of every reply that brings none of its own: nothing at all may run or load in it. The page, pdf.js's
         // frame and its scripts send their own policies from the core, which replace this one)
         h.put("Content-Security-Policy", "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");

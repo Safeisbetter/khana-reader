@@ -19,8 +19,9 @@
   /* ---------------- the lock screen ---------------- */
   const isShown = () => document.body.classList.contains("locked");
   function show(message) {
+    document.documentElement.classList.remove("boot-dark");
     if (isShown()) { if (message) $("lockErr").textContent = message; return; }
-    try { stopReading(); } catch (e) { /* (nothing is being read yet) */ }
+    try { if (window.khanaOnLock) window.khanaOnLock(); else stopReading(); } catch (e) { /* (nothing is being read yet) */ }
     // whatever was open is shut, and nothing under the screen can be reached by keyboard or by a screen reader
     document.querySelectorAll(".panel").forEach(p => { p.hidden = true; });
     document.body.classList.add("locked");
@@ -38,6 +39,7 @@
     $("lockScreen").hidden = true;
     $("lockPw").value = "";
     renderCard();
+    try { if (window.khanaOnUnlock) window.khanaOnUnlock(); } catch (e) {}
     waiting.splice(0).forEach(f => f());
   }
 
@@ -50,7 +52,8 @@
       hide();
     } catch (e) {
       $("lockErr").textContent = e.message;
-      $("lockPw").select();
+      $("lockPw").value = "";
+      $("lockPw").focus();
     } finally {
       $("lockGo").disabled = false;
     }
@@ -58,9 +61,14 @@
   $("lockGo").onclick = tryUnlock;
   $("lockPw").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); tryUnlock(); } });
   $("lockReset").onclick = async () => {
-    if (!confirm("همه‌ی اطلاعات خوانا (ویرایش‌ها، صدای ضبط‌شده، تنظیمات و خودِ قفل) از این دستگاه پاک شود؟ این کار برگشت ندارد.")) return;
-    if (!confirm("مطمئن هستید؟ بعد از این نمی‌شود آن‌ها را پس گرفت.")) return;
-    try { await jpost("/api/forget", {}); location.reload(); } catch (e) { $("lockErr").textContent = e.message; }
+    const ask = typeof askConfirm === "function" ? askConfirm : (m => Promise.resolve(confirm(m)));
+    if (!await ask("همه‌ی اطلاعات خوانا (ویرایش‌ها، صدای ضبط‌شده، تنظیمات و خودِ قفل) از این دستگاه پاک شود؟ این کار برگشت ندارد.")) return;
+    if (!await ask("مطمئن هستید؟ بعد از این نمی‌شود آن‌ها را پس گرفت.")) return;
+    try {
+      await jpost("/api/forget", {});
+      try { localStorage.clear(); } catch (e) {}
+      location.reload();
+    } catch (e) { $("lockErr").textContent = e.message; }
   };
 
   // app.js asks for this before it starts (the lock screen comes up and the start waits for the password), and calls khanaLockHit
@@ -114,6 +122,11 @@
   $("lockChange").onclick = () => openForm("change");
   $("lockOff").onclick = () => openForm("off");
   $("lockFormOk").onclick = submitForm;
+  if ($("lockForm")) {
+    new MutationObserver(() => {
+      if ($("lockForm").hidden) for (const id of ["lockCur", "lockNew", "lockRep"]) $(id).value = "";
+    }).observe($("lockForm"), { attributes: true, attributeFilter: ["hidden"] });
+  }
   for (const id of ["lockCur", "lockNew", "lockRep"]) $(id).addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submitForm(); } });
   $("lockNow").onclick = async () => { try { st = await jpost("/api/lock_now", {}); show(); } catch (e) { toast(e.message); } };
   $("lockTimeout").onchange = async () => {

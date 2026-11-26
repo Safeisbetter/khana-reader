@@ -3,14 +3,32 @@ pub fn stretch(input: &[f32], speed: f64, rate: usize) -> Vec<f32> {
     if (speed - 1.0).abs() < 0.008 || input.len() < rate / 10 {
         return input.to_vec();
     }
+    stretch_curve(input, rate, |_, _| speed)
+}
+
+/// Pitch-preserving variable-speed time scaler (TD-PSOLA / PICOLA with raised-cosine crossfade).
+/// Allows smooth human prosodic tempo changes (e.g. phrase-final slowing down) independent of pitch.
+pub fn stretch_curve(input: &[f32], rate: usize, speed_fn: impl Fn(f64, f64) -> f64) -> Vec<f32> {
+    if input.len() < rate / 10 {
+        return input.to_vec();
+    }
+    let total_secs = input.len() as f64 / rate as f64;
     let min_p = rate / 400;
     let max_p = rate / 65;
     let max_required = 2 * max_p;
-    let mut out: Vec<f32> = Vec::with_capacity((input.len() as f64 / speed) as usize + 4096);
+    let mut out: Vec<f32> = Vec::with_capacity(input.len() + input.len() / 6 + 4096);
     let mut position = 0usize;
     let mut remaining = 0usize;
     let mut prev_period = 0usize;
     while position + max_required <= input.len() {
+        let speed = speed_fn(position as f64 / rate as f64, total_secs).clamp(0.55, 2.0);
+        if (speed - 1.0).abs() < 0.008 {
+            let n = (rate / 50).min(input.len() - position - max_required).max(1);
+            out.extend_from_slice(&input[position..position + n]);
+            position += n;
+            remaining = 0;
+            continue;
+        }
         if remaining > 0 {
             let n = max_required.min(remaining);
             out.extend_from_slice(&input[position..position + n]);
@@ -24,26 +42,27 @@ pub fn stretch(input: &[f32], speed: f64, rate: usize) -> Vec<f32> {
             let new_samples = if speed >= 2.0 {
                 (period as f64 / (speed - 1.0)) as usize
             } else {
-                remaining = (period as f64 * (2.0 - speed) / (speed - 1.0)) as usize;
+                remaining = ((period as f64 * (2.0 - speed) / (speed - 1.0)) as usize).min(rate / 20);
                 period
             };
-            overlap_add(&mut out, new_samples, input, position, input, position + period);
-            position += period + new_samples;
+            overlap_add(&mut out, new_samples.max(1), input, position, input, position + period);
+            position += period + new_samples.max(1);
         } else {
             let new_samples = if speed < 0.5 {
                 (period as f64 * speed / (1.0 - speed)) as usize
             } else {
-                remaining = (period as f64 * (2.0 * speed - 1.0) / (1.0 - speed)) as usize;
+                remaining = ((period as f64 * (2.0 * speed - 1.0) / (1.0 - speed)) as usize).min(rate / 20);
                 period
             };
             out.extend_from_slice(&input[position..position + period]);
-            overlap_add(&mut out, new_samples, input, position + period, input, position);
-            position += new_samples;
+            overlap_add(&mut out, new_samples.max(1), input, position + period, input, position);
+            position += new_samples.max(1);
         }
     }
     let tail = &input[position.min(input.len())..];
     if !tail.is_empty() {
-        let n = ((tail.len() as f64) / speed).round().max(1.0) as usize;
+        let end_speed = speed_fn(total_secs, total_secs).clamp(0.55, 2.0);
+        let n = ((tail.len() as f64) / end_speed).round().max(1.0) as usize;
         for i in 0..n {
             let x = i as f64 * (tail.len() - 1) as f64 / (n.max(2) - 1) as f64;
             let a = x.floor() as usize;
@@ -56,9 +75,12 @@ pub fn stretch(input: &[f32], speed: f64, rate: usize) -> Vec<f32> {
 }
 
 fn overlap_add(out: &mut Vec<f32>, n: usize, down: &[f32], down_pos: usize, up: &[f32], up_pos: usize) {
+    let denom = n.max(1) as f32;
     for t in 0..n {
         let (d, u) = (down.get(down_pos + t).copied().unwrap_or(0.0), up.get(up_pos + t).copied().unwrap_or(0.0));
-        out.push((d * (n - t) as f32 + u * t as f32) / n as f32);
+        // Smooth raised-cosine (Hann) crossfade avoids metallic edges during pitch-synchronous splicing
+        let w_up = 0.5 * (1.0 - (std::f32::consts::PI * t as f32 / denom).cos());
+        out.push(d * (1.0 - w_up) + u * w_up);
     }
 }
 

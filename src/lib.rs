@@ -30,7 +30,8 @@ pub mod pdfview;
 #[cfg(target_os = "macos")]
 pub mod mac;
 pub mod platform;
-mod private_fs;
+pub mod private_fs;
+pub mod vault;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub mod android;
 pub mod engines;

@@ -32,7 +32,13 @@ fn with_model<R>(f: impl FnOnce(&mut Translator) -> R) -> Option<R> {
     }
     let mut l = slot().lock().unwrap_or_else(|e| e.into_inner());
     if l.t.is_none() && !l.failed {
-        let threads = (std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4) * 3 / 5).clamp(1, 6);
+        // On mobile SoCs (big+mid+little cores), capping CTranslate2 at 3 threads keeps fast cores hot without
+        // OpenMP barrier stalls on little cores or starving parallel TTS synthesis.
+        let threads = if cfg!(shell) {
+            3
+        } else {
+            (std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4) * 3 / 5).clamp(1, 6)
+        };
         match Translator::load(&translate_dir(), threads) {
             Ok(t) => l.t = Some(t),
             Err(e) => {
@@ -44,6 +50,12 @@ fn with_model<R>(f: impl FnOnce(&mut Translator) -> R) -> Option<R> {
     let r = l.t.as_mut().map(f);
     l.used = std::time::Instant::now();
     r
+}
+
+static ACCURATE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_accurate(v: bool) {
+    ACCURATE.store(v, std::sync::atomic::Ordering::Relaxed);
 }
 
 pub fn ready() -> bool {
@@ -358,7 +370,16 @@ fn model_words(sentences: &[String], lang: &str) -> Option<Vec<String>> {
             t.join(" ")
         })
         .collect();
-    let opts = Options { beam: 3, max_batch: 16, max_len: 300, repetition_penalty: 1.1 };
+    let accurate = ACCURATE.load(std::sync::atomic::Ordering::Relaxed);
+    let opts = if cfg!(shell) && !accurate {
+        // Mobile CPU fast mode: greedy beam=1 is ~3x faster with smooth streaming
+        Options { beam: 1, max_batch: 8, max_len: 192, repetition_penalty: 1.1 }
+    } else if cfg!(shell) {
+        // Mobile CPU accurate mode: beam=3 for noticeably better Persian fluency
+        Options { beam: 3, max_batch: 8, max_len: 260, repetition_penalty: 1.12 }
+    } else {
+        Options { beam: 3, max_batch: 16, max_len: 300, repetition_penalty: 1.1 }
+    };
     let out = with_model(|m| m.translate(&lines.join("\n"), "pes_Arab", &opts))??;
     complete_model_output(sentences,
         out.split('\n')
@@ -383,7 +404,8 @@ fn word_count(s: &str) -> usize {
 
 fn lost_words(src: &str, fa: &str) -> bool {
     let n = word_count(src);
-    n >= 8 && (word_count(fa) as f32) < 0.6 * n as f32
+    let min_ratio = if cfg!(shell) && !ACCURATE.load(std::sync::atomic::Ordering::Relaxed) { 0.42 } else { 0.60 };
+    n >= 8 && (word_count(fa) as f32) < min_ratio * n as f32
 }
 
 fn two_clauses(s: &str) -> Option<(String, String, &'static str)> {
@@ -403,7 +425,8 @@ fn two_clauses(s: &str) -> Option<(String, String, &'static str)> {
 fn recover_lost(sentences: &[String], first: Vec<String>, lang: &str) -> Vec<String> {
     let mut parts: Vec<Vec<(String, String, &'static str)>> =
         sentences.iter().zip(&first).map(|(s, f)| vec![(s.clone(), f.clone(), "")]).collect();
-    for _ in 0..2 {
+    let passes = if cfg!(shell) { 1 } else { 2 };
+    for _ in 0..passes {
         let mut asked: Vec<String> = Vec::new();
         for sent in parts.iter_mut() {
             let mut next = Vec::new();

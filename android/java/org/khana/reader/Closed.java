@@ -18,8 +18,15 @@ final class Closed {
         Runnable[] end = new Runnable[1];
         long until = android.os.SystemClock.uptimeMillis() + 60_000;
         end[0] = () -> {
-            if (Exporter.WRITING.get() > 0 && android.os.SystemClock.uptimeMillis() < until) h.postDelayed(end[0], 200);
-            else android.os.Process.killProcess(android.os.Process.myPid());
+            if (Exporter.WRITING.get() > 0 && android.os.SystemClock.uptimeMillis() < until) {
+                h.postDelayed(end[0], 200);
+            } else {
+                try {
+                    Native.handle(Native.utf8("POST"), Native.utf8("/api/close"), Native.utf8(""), Native.token(), null);
+                    Native.shutdown();
+                } catch (Throwable ignored) { }
+                android.os.Process.killProcess(android.os.Process.myPid());
+            }
         };
         h.postDelayed(end[0], 400);
     }

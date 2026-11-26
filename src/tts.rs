@@ -17,8 +17,21 @@ use std::sync::{Arc, Mutex};
 pub const RATE: usize = 24000;
 const PACE_LOW: f64 = 0.72;
 const PACE_HIGH: f64 = 1.6;
-const PACE_TRIES: usize = 5;
+const PACE_TRIES: usize = if cfg!(shell) { 3 } else { 4 };
 static MAX_TRIES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(PACE_TRIES);
+static READ_RTF: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x4000_0000); // 2.0f32
+
+/// Records recent synthesis speed (speech_seconds / wall_seconds) so retries adapt to prevent stalls.
+pub fn set_read_rtf(rtf: f64) {
+    if rtf.is_finite() && rtf > 0.05 {
+        let clamped = (rtf as f32).clamp(0.1, 20.0);
+        READ_RTF.store(clamped.to_bits(), std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+fn read_rtf() -> f64 {
+    f32::from_bits(READ_RTF.load(std::sync::atomic::Ordering::Relaxed)) as f64
+}
 
 pub static PROFILE: [std::sync::atomic::AtomicU64; 6] = [const { std::sync::atomic::AtomicU64::new(0) }; 6];
 fn lap(slot: usize, t: std::time::Instant) {
@@ -38,8 +51,8 @@ pub fn heat() -> u8 {
 pub fn cool_down() {
     match heat() {
         0 => {}
-        1 => std::thread::sleep(std::time::Duration::from_millis(300)),
-        2 => std::thread::sleep(std::time::Duration::from_millis(1500)),
+        1 => std::thread::sleep(std::time::Duration::from_millis(80)),
+        2 => std::thread::sleep(std::time::Duration::from_millis(400)),
         _ => {
             for _ in 0..150 {
                 if heat() < 3 {
@@ -100,15 +113,39 @@ struct Slots {
 static SLOTS: Slots = Slots { state: Mutex::new((0, Vec::new())), turn: std::sync::Condvar::new() };
 static TICKETS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1 << 62);
 fn slot_count() -> usize {
-    (std::thread::available_parallelism().map_or(4, |n| n.get()).saturating_sub(2)).clamp(2, 12)
+    static SLOTS_MAX: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *SLOTS_MAX.get_or_init(|| {
+        if cfg!(shell) {
+            // Mobile SoCs (e.g. Tensor G2) throttle past 80C when 6 ONNX models thrash all 8 cores;
+            // 2 concurrent slots x 2 intra-op threads keeps big/mid cores fast and cool.
+            2
+        } else {
+            (std::thread::available_parallelism().map_or(4, |n| n.get()).saturating_sub(2)).clamp(2, 12)
+        }
+    })
+}
+pub fn wake_waiters() {
+    SLOTS.turn.notify_all();
 }
 struct Slot;
 impl Slot {
-    fn take(ticket: u64) -> Slot {
+    fn take(ticket: u64, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Slot, String> {
         let mut st = SLOTS.state.lock().unwrap_or_else(|e| e.into_inner());
         st.1.push(ticket);
-        while !(st.0 < slot_count() && st.1.iter().min() == Some(&ticket)) {
-            st = SLOTS.turn.wait(st).unwrap_or_else(|e| e.into_inner());
+        loop {
+            if cancel() {
+                if let Some(i) = st.1.iter().position(|t| *t == ticket) {
+                    st.1.swap_remove(i);
+                }
+                drop(st);
+                SLOTS.turn.notify_all();
+                return Err("cancelled".to_string());
+            }
+            if st.0 < slot_count() && st.1.iter().min() == Some(&ticket) {
+                break;
+            }
+            let (guard, _) = SLOTS.turn.wait_timeout(st, std::time::Duration::from_millis(60)).unwrap_or_else(|e| e.into_inner());
+            st = guard;
         }
         if let Some(i) = st.1.iter().position(|t| *t == ticket) {
             st.1.swap_remove(i);
@@ -116,7 +153,7 @@ impl Slot {
         st.0 += 1;
         drop(st);
         SLOTS.turn.notify_all();
-        Slot
+        Ok(Slot)
     }
 }
 impl Drop for Slot {
@@ -266,9 +303,12 @@ impl Engine {
         let f = |k: &str| c[k].as_f64().unwrap();
         let w = load_npz(&dir.join("weights.npz"))?;
         let get = |k: &str| f32s(&w.iter().find(|x| x.0 == k).unwrap().1).to_vec();
-        let threads = std::env::var("KHANA_TTS_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(if cfg!(shell) { 1usize } else { 2 });
+        let threads = std::env::var("KHANA_TTS_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(2usize);
+        // On mobile, Mimi runs 1 tiny latent frame at a time (50+ calls/sentence): 1 intra-op thread
+        // eliminates ~1,500 thread-pool synchronization barriers per sentence across 2 concurrent workers!
+        let dec_threads = if cfg!(shell) { 1usize } else { threads };
         let opts = |p: &Path| onnx::session(p, Some(threads)).map_err(|e| e.to_string());
-        let s_dec = opts(&dir.join("mimi_decoder_step_kv.onnx"))?;
+        let s_dec = onnx::session(&dir.join("mimi_decoder_step_kv.onnx"), Some(dec_threads)).map_err(|e| e.to_string())?;
         let dec_in: Vec<String> = s_dec.inputs.iter().map(|i| i.name.clone()).collect();
         let dec_out: Vec<String> = s_dec.outputs.iter().map(|o| o.name.clone()).collect();
         let init = load_npz(&dir.join("decode_state_init.npz"))?;
@@ -384,6 +424,15 @@ impl Engine {
             a = audio::resample_poly(&a, RATE / g, sr as usize / g);
         }
         let mut a = audio::dehum(a, RATE);
+        // Trim ONLY pure leading dead air when >0.4s (e.g. male_news.wav's 1.32s leading silence).
+        // Never splice internal pauses or boost room noise in the reference audio — Mimi's causal encoder
+        // needs natural continuous speech to avoid conditioning drift or digital artifacts.
+        if a.len() > 2 * RATE {
+            let (s0, _e0) = self.speech_bounds(&a);
+            if s0 > (0.4 * RATE as f64) as usize && a.len().saturating_sub(s0) >= 2 * RATE {
+                a = a[s0..].to_vec();
+            }
+        }
         a.truncate(5 * RATE);
         let a = trim_hot_onset(a);
         let n = a.len();
@@ -408,21 +457,32 @@ impl Engine {
         }
         let mut cache = Tensor::from_array(([self.l, 2, self.cap, self.h, self.d], vec![0f32; self.kv_len()])).unwrap().into_dyn();
         let (_, _, off) = self.flow_step(&[], 0, &text_emb, t + 1, 0, &vec![0f32; self.ldim], &mut cache)?;
-        let data = cache.try_extract_raw_tensor::<f32>().map_err(|e| e.to_string())?.1.to_vec();
-        let v = Arc::new((data, off));
+        // Store only the active voice prefix (0..off) instead of the full 384-slot KV buffer (~3 MB vs ~18 MB),
+        // so all built-in voices + "صدای من" stay hot in RAM and switching voices is instant.
+        let row = self.h * self.d;
+        let full = cache.try_extract_raw_tensor::<f32>().map_err(|e| e.to_string())?.1;
+        let mut compact = Vec::with_capacity(self.l * 2 * off * row);
+        for a in 0..self.l * 2 {
+            let src = a * self.cap * row;
+            compact.extend_from_slice(&full[src..src + off * row]);
+        }
+        let v = Arc::new((compact, off));
         let mut memo = self.voice_memo.lock().unwrap();
         memo.push((key, v.clone()));
-        while memo.len() > 4 {
+        while memo.len() > 12 {
             memo.remove(0);
         }
         Ok(v)
     }
 
-    fn decode_all(&self, latents: &[Vec<f32>]) -> Result<Vec<f32>, String> {
+    fn decode_all(&self, latents: &[Vec<f32>], cancel: &(dyn Fn() -> bool + Sync)) -> Result<Vec<f32>, String> {
         let mut st: Vec<ort::DynValue> = self.dec_init.iter().map(value_of).collect();
-        let mut out = Vec::new();
+        let mut out = Vec::with_capacity(latents.len() * 1920);
         let mut off = 0;
-        for lt in latents {
+        for (idx, lt) in latents.iter().enumerate() {
+            if idx % 2 == 1 && cancel() {
+                return Err("cancelled".to_string());
+            }
             let un: Vec<f32> = (0..self.ldim).map(|k| lt[k] * self.emb_std[k] + self.emb_mean[k]).collect();
             let mut feeds: Vec<(String, ort::SessionInputValue)> = vec![("latent".into(), Tensor::from_array(([1, 1, self.ldim], un)).unwrap().into_dyn().into())];
             for (i, s) in st.iter().enumerate() {
@@ -463,31 +523,46 @@ impl Engine {
         Ok(out)
     }
 
-    fn generate_chunk(&self, voice: &Voice, chunk: &str, rng: &mut rand::rngs::StdRng, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Vec<Vec<f32>>, String> {
+    fn generate_chunk(&self, voice: &Voice, chunk: &str, temp_scale: f64, rng: &mut rand::rngs::StdRng, cancel: &(dyn Fn() -> bool + Sync)) -> Result<(Vec<Vec<f32>>, bool), String> {
         let tokens = self.sp.encode(chunk);
         let mut text_emb = Vec::with_capacity(tokens.len() * self.dim);
         for &t in &tokens {
             let t = t as usize;
             text_emb.extend_from_slice(&self.lut[t * self.dim..(t + 1) * self.dim]);
         }
-        let sd = self.temp.sqrt();
+        let sd = (self.temp * temp_scale).max(0.14).sqrt();
         let mut noise = || -> Vec<f32> { (0..self.ldim).map(|_| (rng.sample::<f64, _>(rand_distr::StandardNormal) * sd) as f32).collect() };
-        let mut cache = Tensor::from_array(([self.l, 2, self.cap, self.h, self.d], voice.cache.to_vec())).unwrap().into_dyn();
+        let row = self.h * self.d;
+        let mut buf = vec![0f32; self.kv_len()];
+        for a in 0..self.l * 2 {
+            let src = a * voice.off * row;
+            let dst = a * self.cap * row;
+            buf[dst..dst + voice.off * row].copy_from_slice(&voice.cache[src..src + voice.off * row]);
+        }
+        let mut cache = Tensor::from_array(([self.l, 2, self.cap, self.h, self.d], buf)).unwrap().into_dyn();
         let nan = vec![f32::NAN; self.ldim];
         let (lat, _, mut off) = self.flow_step(&nan, 1, &text_emb, tokens.len(), voice.off, &noise(), &mut cache)?;
         let mut latents = vec![lat];
         let words = split_ws(chunk).len();
-        let frames_after_eos = (if words <= 4 { 3 } else { 1 }) + 2;
-        let max_gen_len = ((tokens.len() as f64 / self.tps_est + self.gen_pad) * self.frame_rate).ceil() as usize;
+        // Generous post-EOS frames + minimum step floor prevent premature EOS spikes (especially in
+        // 8-bit quantized mobile FlowLM) from cutting off the final word or syllable of a chunk.
+        let frames_after_eos = if words <= 4 { 6 } else { 5 };
+        let min_eos_step = if tokens.len() >= 5 {
+            ((tokens.len() as f64 / (self.tps_est * 1.75)) * self.frame_rate).floor() as usize
+        } else {
+            2
+        };
+        let max_gen_len = (((tokens.len() as f64 / (self.tps_est * 0.72).max(1.8) + self.gen_pad + 1.2) * self.frame_rate).ceil() as usize)
+            .min(self.cap.saturating_sub(off + 1));
         let mut eos_step: Option<usize> = None;
         for step in 0..max_gen_len {
-            if step % 8 == 7 && cancel() {
+            if step % 2 == 1 && cancel() {
                 return Err("cancelled".to_string());
             }
             let last = latents.last().unwrap().clone();
             let (lat, eos, o) = self.flow_step(&last, 1, &[], 0, off, &noise(), &mut cache)?;
             off = o;
-            if eos && eos_step.is_none() {
+            if eos && step >= min_eos_step && eos_step.is_none() {
                 eos_step = Some(step);
             }
             if let Some(e) = eos_step {
@@ -497,7 +572,7 @@ impl Engine {
             }
             latents.push(lat);
         }
-        Ok(latents)
+        Ok((latents, eos_step.is_some()))
     }
 
 
@@ -561,15 +636,16 @@ impl Engine {
         if !(r >= 1e-6) {
             return (0, p.len());
         }
-        let loud: Vec<f32> = p.iter().map(|x| if x.abs() as f64 >= 0.03 * r { 1.0 } else { 0.0 }).collect();
-        let w = ((0.03 * RATE as f64) as usize).max(1);
+        // Gentle boundary threshold + generous padding preserves soft Persian fricatives/plosives at chunk edges
+        let loud: Vec<f32> = p.iter().map(|x| if x.abs() as f64 >= 0.018 * r { 1.0 } else { 0.0 }).collect();
+        let w = ((0.025 * RATE as f64) as usize).max(1);
         let dens = window_mean(&loud, 2 * w);
-        let idx: Vec<usize> = dens.iter().enumerate().filter(|(_, d)| **d >= 0.6).map(|(i, _)| i).collect();
+        let idx: Vec<usize> = dens.iter().enumerate().filter(|(_, d)| **d >= 0.30).map(|(i, _)| i).collect();
         if idx.is_empty() {
             return (0, p.len());
         }
-        let start = idx[0].saturating_sub((0.02 * RATE as f64) as usize);
-        let end = (idx[idx.len() - 1] + (0.06 * RATE as f64) as usize).min(p.len());
+        let start = idx[0].saturating_sub((0.060 * RATE as f64) as usize);
+        let end = (idx[idx.len() - 1] + (0.120 * RATE as f64) as usize).min(p.len());
         (start, end)
     }
 
@@ -628,12 +704,12 @@ impl Engine {
                 }
             }
             if p.len() > 2 * f {
-                let up = audio::linspace(0.0, 1.0, f);
-                let down = audio::linspace(1.0, 0.0, f);
                 let n = p.len();
+                let denom = f as f32;
                 for i in 0..f {
-                    p[i] *= up[i];
-                    p[n - f + i] *= down[i];
+                    let w = 0.5 * (1.0 - (std::f32::consts::PI * i as f32 / denom).cos());
+                    p[i] *= w;
+                    p[n - f + i] *= 1.0 - w;
                 }
             }
             if gap > 0.0 {
@@ -648,7 +724,7 @@ impl Engine {
                 *x *= g;
             }
         }
-        self.compress_pauses(&out, 0.38, 0.28)
+        self.compress_pauses(&out, 0.32, 0.22)
     }
 
 
@@ -664,12 +740,43 @@ impl Engine {
         };
         let expected_loose = tokens as f64 / self.tps_est;
         let mut best: Option<Vec<f32>> = None;
-        let mut best_key: Option<[f64; 9]> = None;
+        let mut best_key: Option<[f64; 12]> = None;
+        let mut best_voiced = false;
+        let mut best_no_stutter = false;
         let mut best_heard: Option<(Option<f64>, Vec<String>)> = None;
+        let allow_repeat = chunk_has_reduplication(chunk);
         let mut cut_short = 0;
         let mut last_wrong: Option<(Vec<String>, bool, bool, bool)> = None;
-        let tries = MAX_TRIES.load(std::sync::atomic::Ordering::Relaxed);
-        for take in 0..if voice.quick { tries.min(2) } else { tries } {
+        let rtf = read_rtf();
+        let base_tries = MAX_TRIES.load(std::sync::atomic::Ordering::Relaxed);
+        let adaptive_tries = if voice.quick {
+            1
+        } else if cfg!(shell) {
+            if rtf < 1.30 {
+                1
+            } else if rtf < 1.85 {
+                base_tries.min(2)
+            } else {
+                base_tries.min(3)
+            }
+        } else if rtf < 1.15 {
+            1
+        } else if rtf < 1.55 {
+            base_tries.min(2)
+        } else {
+            base_tries
+        };
+        // Cap live/mobile retries at 2 so a single sentence never stalls playback for 20+ seconds;
+        // clean takes still return immediately on take 0!
+        let hard_cap = if voice.quick || cfg!(shell) {
+            2
+        } else {
+            adaptive_tries.clamp(2, 3)
+        };
+        for take in 0..hard_cap {
+            if take >= adaptive_tries && best_voiced && best_no_stutter {
+                break;
+            }
             PROFILE[5].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             if take == 0 {
                 PROFILE[4].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -677,45 +784,86 @@ impl Engine {
             if cancel() {
                 return Err("cancelled".to_string());
             }
+            let temp_scale = match take {
+                0 => 1.0,
+                1 => 0.72,
+                _ => 0.55,
+            };
             let t = std::time::Instant::now();
-            cool_down();
-            let latents = self.generate_chunk(voice, chunk, rng, cancel)?;
+            // Never sleep to cool down while starting up or refilling a low playback buffer
+            if !voice.quick {
+                cool_down();
+            }
+            let (latents, hit_eos) = self.generate_chunk(voice, chunk, temp_scale, rng, cancel)?;
             lap(0, t);
+            // Fast pre-decode health check (<0.05ms): catches exploded/frozen digital-noise latents AND
+            // autoregressive word/syllable loops BEFORE spending CPU on Mimi decoding!
+            let bad_latents = has_bad_latents(&latents);
+            let stuttered = !allow_repeat && has_latent_stutter(&latents);
+            if (bad_latents || stuttered || (!hit_eos && words_count_of(chunk) <= 18)) && take + 1 < hard_cap {
+                continue;
+            }
+            if bad_latents {
+                continue;
+            }
             let t = std::time::Instant::now();
-            let a = self.decode_all(&latents)?;
+            let a = self.decode_all(&latents, cancel)?;
             lap(1, t);
             let t_check = std::time::Instant::now();
-            let (s0, e0) = self.speech_bounds(&a);
-            let speech = audio::settle_tail(self.compress_pauses(&a[s0..e0], 0.30, 0.12), RATE);
+            let finite_ok = !a.is_empty() && a.iter().all(|x| x.is_finite() && x.abs() < 4.0);
+            let (s0, e0) = if finite_ok { self.speech_bounds(&a) } else { (0, 0) };
+            let speech = if finite_ok && e0 > s0 {
+                audio::settle_tail(self.compress_pauses(&a[s0..e0], 0.26, 0.11), RATE)
+            } else {
+                Vec::new()
+            };
             let dur = speech.len() as f64 / RATE as f64;
             let r = if speech.is_empty() { 0.0 } else { rms(&speech) };
             let frac = if speech.is_empty() { 0.0 } else { self.solid_fraction(&speech) };
             let solid = frac * dur;
             let regions = if speech.is_empty() { Vec::new() } else { self.dead_air_regions(&speech, 0.03, 0.25, 0.90) };
             let dead = regions.iter().map(|(i, j)| j - i).max().map(|m| m as f64 / RATE as f64).unwrap_or(0.0);
-            let loud_ok = r >= 0.02;
+            let loud_ok = finite_ok && r >= 0.02;
             let mut dur_ok = 0.30 * expected_loose <= solid && solid <= 1.6 * expected_loose;
             let ratio = match rate {
                 Some(rt) if tokens >= 6 => solid / (tokens as f64 / rt),
                 _ => 1.0,
             };
             let pace_ok = (PACE_LOW..=PACE_HIGH).contains(&ratio);
-            let pitch = if loud_ok { audio::voice_pitch(&speech, RATE) } else { None };
+            let (pitch, voiced_frac) = if loud_ok { audio::voice_quality(&speech, RATE) } else { (None, 0.0) };
+            let digital_noise = !loud_ok || audio::is_digital_noise(&speech, RATE);
+            // Hard anti-noise gate: reject digital screech/buzz/clipping AND require real vocal harmonics.
+            // Short 1-2 word phrases (<0.65s) pass once loud_ok && !digital_noise && !bad_latents hold.
+            let voiced_ok = loud_ok && !digital_noise && (dur < 0.65 || (pitch.is_some() && voiced_frac >= 0.14));
             let same_voice = match (pitch, usual) {
                 (Some(p), Some(u)) => (p / u).log2().abs() < 0.5,
-                _ => true,
+                (None, Some(_)) if dur >= 0.42 => false,
+                _ => voiced_ok,
             };
             lap(2, t_check);
+            let no_stutter = !stuttered;
+            // In quick/low-buffer or mobile live mode, accept immediately once voice is clean, non-noisy,
+            // non-stuttering, finished cleanly (hit_eos), not skipped (too short), AND not bloated (repeated words!),
+            // skipping the expensive Vosk ASR resample + Kaldi decode pass whose result would be unused here.
+            let min_solid_frac = if tokens >= 6 { 0.48 } else { 0.36 };
+            let min_pace_ratio = if tokens >= 6 { 0.66 } else { 0.58 };
+            let not_skipped = solid >= min_solid_frac * expected_loose && (rate.is_none() || ratio >= min_pace_ratio);
+            let not_bloated = solid <= 1.85 * expected_loose && (rate.is_none() || ratio <= 1.78);
+            if (voice.quick || cfg!(shell)) && voiced_ok && no_stutter && loud_ok && (hit_eos || words_count_of(chunk) > 16) && frac >= 0.55 && not_skipped && not_bloated {
+                return Ok(speech);
+            }
             let t = std::time::Instant::now();
-            let (heard, missing) = if loud_ok && !voice.quick && LISTEN.load(std::sync::atomic::Ordering::Relaxed) { asr::heard_score(chunk, &speech, RATE) } else { (None, Vec::new()) };
+            let (heard, missing) = if voiced_ok && !voice.quick && adaptive_tries > 1 && LISTEN.load(std::sync::atomic::Ordering::Relaxed) { asr::heard_score(chunk, &speech, RATE) } else { (None, Vec::new()) };
             lap(3, t);
-            let words_ok = if LISTEN_LIGHT.load(std::sync::atomic::Ordering::Relaxed) { !asr::heard_clear_fault(heard, &missing) } else { asr::heard_ok(heard, &missing) };
+            let words_ok = if LISTEN_LIGHT.load(std::sync::atomic::Ordering::Relaxed) || cfg!(shell) { !asr::heard_clear_fault(heard, &missing) } else { asr::heard_ok(heard, &missing) };
             let b = |x: bool| if x { 1.0 } else { 0.0 };
-            let key = [b(loud_ok), b(same_voice), b(words_ok), b(dur_ok), b(pace_ok), -(missing.len() as f64), heard.unwrap_or(1.0),
+            let key = [b(voiced_ok), b(no_stutter), b(loud_ok), b(same_voice), b(hit_eos), b(words_ok), b(dur_ok), b(pace_ok), -(missing.len() as f64), heard.unwrap_or(1.0),
                        -(1.0 - ratio).abs(), if dead <= 0.35 { 0.0 } else { -dead }];
             if best_key.map_or(true, |bk| key.partial_cmp(&bk) == Some(std::cmp::Ordering::Greater)) {
                 best = Some(speech.clone());
                 best_key = Some(key);
+                best_voiced = voiced_ok;
+                best_no_stutter = no_stutter;
                 best_heard = Some((heard, missing.clone()));
             }
             let heard_clean = heard.is_some() && words_ok && missing.is_empty() && heard.unwrap() >= 0.9;
@@ -723,7 +871,10 @@ impl Engine {
                 dur_ok = solid <= 1.6 * expected_loose;
             }
             let solid_ok = frac >= 0.55 || heard_clean && frac >= 0.40;
-            if loud_ok && same_voice && words_ok && dur_ok && (pace_ok || heard_clean) && solid_ok && dead <= 0.35 {
+            if (voice.quick || cfg!(shell)) && voiced_ok && no_stutter && loud_ok && (hit_eos || words_count_of(chunk) > 16) && solid_ok && not_skipped && not_bloated {
+                return Ok(best.unwrap());
+            }
+            if voiced_ok && no_stutter && loud_ok && same_voice && hit_eos && words_ok && dur_ok && (pace_ok || heard_clean) && solid_ok && dead <= 0.35 {
                 if pace_ok && tokens >= 6 && solid > 0.2 {
                     let mut p = self.pace.lock().unwrap();
                     let v = p.entry(voice.id.to_string()).or_default();
@@ -749,15 +900,15 @@ impl Engine {
             if missing.len() == 1 && missing[0].ends_with('$') && heard.map_or(false, |h| h >= 0.85) {
                 cut_short += 1;
             }
-            if cut_short >= 2 {
+            if cut_short >= 2 && best_voiced {
                 break;
             }
             let mut miss_sorted = missing.clone();
             miss_sorted.sort();
             let wrong_now = (miss_sorted, words_ok, dur_ok, pace_ok);
-            let repeats = last_wrong.as_ref() == Some(&wrong_now) && loud_ok && same_voice;
+            let repeats = last_wrong.as_ref() == Some(&wrong_now) && voiced_ok && loud_ok && same_voice;
             last_wrong = Some(wrong_now);
-            if repeats && take >= 1 {
+            if repeats && take >= 1 && best_voiced {
                 if let Some((h, m)) = &best_heard {
                     if !asr::heard_bad(*h, m) {
                         return Ok(best.unwrap());
@@ -765,7 +916,7 @@ impl Engine {
                 }
                 break;
             }
-            if take >= 2 && best_key.unwrap()[1] == 1.0 {
+            if take >= 2 && best_voiced && best_no_stutter && best_key.unwrap()[3] == 1.0 {
                 if let Some((h, m)) = &best_heard {
                     if !asr::heard_bad(*h, m) {
                         return Ok(best.unwrap());
@@ -774,19 +925,29 @@ impl Engine {
             }
         }
         let words = split_ws(chunk);
-        if let Some((h, m)) = &best_heard {
-            if h.is_some() && asr::heard_bad(*h, m) && words.len() >= 2 && depth == 0 {
-                let half = words.len() / 2;
-                let a = self.generate_checked(voice, &words[..half].join(" "), rng, 1, cancel)?;
-                let b = self.generate_checked(voice, &words[half..].join(" "), rng, 1, cancel)?;
-                let mut joined = a;
-                joined.extend(std::iter::repeat(0f32).take((RATE as f64 * 0.06) as usize));
-                joined.extend(b);
-                let (heard, missing) = asr::heard_score(chunk, &joined, RATE);
-                if heard.is_some() && missing.len() <= m.len() {
-                    return Ok(joined);
+        let split_headroom = if cfg!(shell) { 2.40 } else { 1.25 };
+        if !best_voiced || (!voice.quick && !cfg!(shell) && rtf >= split_headroom) {
+            if let Some((h, m)) = &best_heard {
+                if (!best_voiced || (h.is_some() && asr::heard_bad(*h, m))) && words.len() >= 2 && depth == 0 {
+                    let half = words.len() / 2;
+                    let a = self.generate_checked(voice, &words[..half].join(" "), rng, 1, cancel)?;
+                    let b = self.generate_checked(voice, &words[half..].join(" "), rng, 1, cancel)?;
+                    let mut joined = a;
+                    joined.extend(std::iter::repeat(0f32).take((RATE as f64 * 0.06) as usize));
+                    joined.extend(b);
+                    if !best_voiced {
+                        return Ok(joined);
+                    }
+                    let (heard, missing) = asr::heard_score(chunk, &joined, RATE);
+                    if heard.is_some() && missing.len() <= m.len() {
+                        return Ok(joined);
+                    }
                 }
             }
+        }
+        // Never blast unvoiced static/noise into the speaker if every attempt collapsed
+        if !best_voiced {
+            return Ok(Vec::new());
         }
         Ok(best.unwrap_or_default())
     }
@@ -836,15 +997,21 @@ impl Engine {
         if sentences.is_empty() {
             return Ok(Vec::new());
         }
+        if cancel() {
+            return Err("cancelled".to_string());
+        }
         let vc = self.voice_cache(wav)?;
+        if cancel() {
+            return Err("cancelled".to_string());
+        }
         let voice = Voice { id: voice_id, cache: &vc.0, off: vc.1, quick };
         let chunker = Chunker { tok: &self.sp };
-        let mut jobs: Vec<(usize, String, f64)> = Vec::new();
+        let mut jobs: Vec<(usize, usize, String, f64)> = Vec::new();
         for (si, (_, plan, _)) in sentences.iter().enumerate() {
             for (pi, (phrase, pgap)) in plan.iter().enumerate() {
                 for (ci, chunk) in chunker.chunk_phonemes(strip(phrase)).into_iter().enumerate() {
                     let gap = if pi == 0 && ci == 0 { 0.0 } else if ci == 0 { *pgap * comma_pause() } else { CHUNK_GAP * comma_pause() };
-                    jobs.push((si, chunk, gap));
+                    jobs.push((si, pi, chunk, gap));
                 }
             }
         }
@@ -862,12 +1029,16 @@ impl Engine {
                     if i >= jobs.len() {
                         break;
                     }
-                    let _slot = if cancel() { None } else { Some(Slot::take(ticket)) };
-                    let r = if cancel() {
-                        Err("cancelled".to_string())
-                    } else {
-                        let mut rng = rand::rngs::StdRng::seed_from_u64(seeds[i]);
-                        self.generate_checked(&voice, &jobs[i].1, &mut rng, 0, cancel)
+                    let r = match Slot::take(ticket, cancel) {
+                        Err(e) => Err(e),
+                        Ok(_slot) => {
+                            if cancel() {
+                                Err("cancelled".to_string())
+                            } else {
+                                let mut rng = rand::rngs::StdRng::seed_from_u64(seeds[i]);
+                                self.generate_checked(&voice, &jobs[i].2, &mut rng, 0, cancel)
+                            }
+                        }
                     };
                     *results[i].lock().unwrap() = Some(r);
                 });
@@ -880,10 +1051,31 @@ impl Engine {
         let mut parts: Vec<f32> = Vec::new();
         let mut first = true;
         let natural = self.natural.load(std::sync::atomic::Ordering::Relaxed);
-        for (si, (gap, _, kind)) in sentences.iter().enumerate() {
-            let segs: Vec<(Vec<f32>, f64)> = jobs.iter().zip(audios.iter()).filter(|(j, _)| j.0 == si).map(|(j, a)| (a.clone(), j.2)).collect();
-            if segs.is_empty() {
+        for (si, (gap, plan, kind)) in sentences.iter().enumerate() {
+            let n_phrases = plan.len();
+            let mut segs: Vec<(Vec<f32>, f64)> = Vec::new();
+            let mut phrase_chunks: Vec<(usize, Vec<f32>, f64)> = jobs
+                .iter()
+                .zip(audios.iter())
+                .filter(|(j, _)| j.0 == si)
+                .map(|(j, a)| (j.1, a.clone(), j.3))
+                .collect();
+            if phrase_chunks.is_empty() {
                 continue;
+            }
+            if natural && n_phrases > 1 {
+                // Apply subtle continuation lift to the last chunk of every non-final comma/colon phrase
+                for k in 0..phrase_chunks.len() {
+                    let pi = phrase_chunks[k].0;
+                    let is_phrase_end = k + 1 < phrase_chunks.len() && phrase_chunks[k + 1].0 != pi;
+                    if is_phrase_end && pi + 1 < n_phrases {
+                        let audio_chunk = std::mem::take(&mut phrase_chunks[k].1);
+                        phrase_chunks[k].1 = prosody::shape_clause(audio_chunk, RATE);
+                    }
+                }
+            }
+            for (_, a, g) in phrase_chunks {
+                segs.push((a, g));
             }
             if !first {
                 parts.extend(std::iter::repeat(0f32).take((gap * RATE as f64) as usize));
@@ -908,6 +1100,122 @@ impl Engine {
 
 fn gcd(a: usize, b: usize) -> usize {
     if b == 0 { a } else { gcd(b, a % b) }
+}
+
+fn words_count_of(chunk: &str) -> usize {
+    split_ws(chunk).len()
+}
+
+/// Fast pre-decode check (<0.02 ms) catching diverged/exploded FlowLM latents or frozen
+/// robotic-buzz oscillation loops before Mimi decodes them into digital noise.
+fn has_bad_latents(latents: &[Vec<f32>]) -> bool {
+    if latents.is_empty() {
+        return true;
+    }
+    let mut frozen_run = 0usize;
+    let mut prev_norm = 0.0f32;
+    for (idx, v) in latents.iter().enumerate() {
+        let mut sq = 0.0f32;
+        for &x in v {
+            if !x.is_finite() || x.abs() > 12.0 {
+                return true;
+            }
+            sq += x * x;
+        }
+        let norm = sq.sqrt();
+        if norm > 18.0 {
+            return true;
+        }
+        if idx > 0 && norm > 1.5 && prev_norm > 1.5 {
+            let dot: f32 = v.iter().zip(&latents[idx - 1]).map(|(a, b)| a * b).sum();
+            let cos = dot / (norm * prev_norm);
+            if cos > 0.992 {
+                frozen_run += 1;
+                if frozen_run >= 6 {
+                    return true;
+                }
+            } else {
+                frozen_run = 0;
+            }
+        } else {
+            frozen_run = 0;
+        }
+        prev_norm = norm;
+    }
+    false
+}
+
+/// Returns true if the phoneme chunk itself contains an intentional adjacent repetition
+/// (e.g. Persian reduplications like "کم‌کم" -> "kamkam" or "دور دور" -> "dur dur").
+fn chunk_has_reduplication(chunk: &str) -> bool {
+    let words = split_ws(chunk);
+    for w in words.windows(2) {
+        if w[0].len() >= 2 && w[0] == w[1] {
+            return true;
+        }
+    }
+    for w in words {
+        let b = w.as_bytes();
+        if b.len() >= 6 && b.len() % 2 == 0 && b[..b.len() / 2] == b[b.len() / 2..] {
+            return true;
+        }
+    }
+    false
+}
+
+/// Detects autoregressive syllable/word repetition loops (e.g. "شکل‌گیری‌گیری") directly in the
+/// 12.5 Hz latent trajectory before decoding (~0.05 ms).
+fn has_latent_stutter(latents: &[Vec<f32>]) -> bool {
+    let n = latents.len();
+    if n < 10 {
+        return false;
+    }
+    let norms: Vec<f32> = latents.iter().map(|v| v.iter().map(|x| x * x).sum::<f32>().sqrt()).collect();
+    let mut sorted_norms: Vec<f64> = norms.iter().map(|&x| x as f64).collect();
+    let med_norm = median(&mut sorted_norms) as f32;
+    if !(med_norm > 1e-4) {
+        return false;
+    }
+    let cos = |a: usize, b: usize| -> f32 {
+        let d = norms[a] * norms[b];
+        if d < 1e-6 {
+            return 0.0;
+        }
+        let dot: f32 = latents[a].iter().zip(&latents[b]).map(|(x, y)| x * y).sum();
+        dot / d
+    };
+    for k in 4..=14usize {
+        let w = k.clamp(5, 8);
+        if n < k + w {
+            break;
+        }
+        for t in 0..=(n - k - w) {
+            let active = (0..w).all(|j| norms[t + j] >= 0.50 * med_norm && norms[t + k + j] >= 0.50 * med_norm);
+            if !active {
+                continue;
+            }
+            let mut internal_sim = 0.0f32;
+            for j in 0..(w - 1) {
+                internal_sim += cos(t + j, t + j + 1);
+            }
+            if internal_sim / (w - 1) as f32 > 0.86 {
+                continue;
+            }
+            let mut min_c = 1.0f32;
+            let mut sum_c = 0.0f32;
+            for j in 0..w {
+                let c = cos(t + j, t + k + j);
+                if c < min_c {
+                    min_c = c;
+                }
+                sum_c += c;
+            }
+            if sum_c / w as f32 >= 0.955 && min_c >= 0.90 {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn window_mean(x: &[f32], w: usize) -> Vec<f32> {
@@ -978,11 +1286,15 @@ pub fn speech_clean(text: &str) -> String {
     let t = sub(r"(?<=[\x{0621}-\x{06D3}])/(?=[\x{0621}-\x{06D3}])", "، ", &t);
     let t = sub(r"_+", " ", &t);
     let t = sub(r"‌+(?=\s)|(?<=\s)‌+", "", &t);
-    let t = sub_fn(r"\s*\(([^()]*)\)", &t, |c| {
-        let inner = sub(r"صص?\.?\s*[\d۰-۹]+(?:\s*[-–]\s*[\d۰-۹]+)?|یادداشت|[\d۰-۹]+", " ", g(c, 1).unwrap_or(""));
-        let latin = findall(r"[A-Za-zÀ-ž]{2,}", &inner).len();
-        if latin >= 2 && !search(r"[\x{0621}-\x{064A}\x{0671}-\x{06D3}]", &inner) { String::new() } else { g(c, 0).unwrap_or("").to_string() }
-    });
+    let t = if crate::vocab::is_finglish() {
+        t
+    } else {
+        sub_fn(r"\s*\(([^()]*)\)", &t, |c| {
+            let inner = sub(r"صص?\.?\s*[\d۰-۹]+(?:\s*[-–]\s*[\d۰-۹]+)?|یادداشت|[\d۰-۹]+", " ", g(c, 1).unwrap_or(""));
+            let latin = findall(r"[A-Za-zÀ-ž]{2,}", &inner).len();
+            if latin >= 2 && !search(r"[\x{0621}-\x{064A}\x{0671}-\x{06D3}]", &inner) { String::new() } else { g(c, 0).unwrap_or("").to_string() }
+        })
+    };
     let t = sub(r"(?<![\w\x{200c}])ص(?:\.\s*|\s+)(?=[\d۰-۹])", "صفحه\u{200c}ی ", &t);
     sub(r"(?<!\S)[^\w\s«»()]+(?!\S)", " ", &t)
 }
