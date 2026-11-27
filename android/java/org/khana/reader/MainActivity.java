@@ -139,6 +139,8 @@ public final class MainActivity extends Activity implements Exporter.Asker {
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         current = this;
+        // Hardware accelerated window for smooth WebView rendering and 60/120Hz scrolling
+        getWindow().setFlags(android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED, android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
         // (secure from the first moment; applyScreenGuard lifts it only if the reader chose so)
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         outer = new LinearLayout(this);
@@ -319,6 +321,9 @@ public final class MainActivity extends Activity implements Exporter.Asker {
         }
         web.setWebViewClient(new Client());
         web.setWebChromeClient(new Chrome());
+        web.setOverScrollMode(android.view.View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        web.setVerticalScrollBarEnabled(false);
+        web.setHorizontalScrollBarEnabled(false);
         web.setDownloadListener((url, ua, cd, mime, len) -> { }); // (nothing is downloaded)
         root.removeAllViews();
         root.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));

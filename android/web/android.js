@@ -193,10 +193,15 @@ if (window.KHANA_NO_MIC) {
       current.classList.add('now');
       if (S.view === 'text' && !reader.paused && !getSelection().toString().trim()) {
         const rect = current.getBoundingClientRect();
-        const top = document.querySelector('.bar').getBoundingClientRect().bottom + 12;
-        const bottom = $('docTools').getBoundingClientRect().top - 12;
+        const bar = document.querySelector('.bar');
+        const tools = $('docTools');
+        const top = (bar ? bar.getBoundingClientRect().bottom : 0) + 12;
+        const bottom = (tools ? tools.getBoundingClientRect().top : window.innerHeight) - 12;
         if (bottom > top && (rect.top < top || rect.bottom > bottom)) {
-          window.scrollBy(0, rect.top - (top + Math.max(0, bottom - top - rect.height) * 0.35));
+          const delta = rect.top - (top + Math.max(0, bottom - top - rect.height) * 0.35);
+          if (Math.abs(delta) > 4) {
+            window.scrollBy({ top: delta, behavior: 'smooth' });
+          }
         }
       }
     }
@@ -210,9 +215,9 @@ if (window.KHANA_NO_MIC) {
     try {
       const pos = await jget('/api/read_status');
       if (reader.run !== run) return;
-      if (!pos.active) {
-        if (waiting < 15 && !lastPosition && !pos.error && !pos.stopReason) { timer = setTimeout(() => poll(run, waiting + 1), 200); return; }
-        const error = pos.error, stopReason = pos.stopReason;
+      if (!pos || !pos.active) {
+        if (waiting < 15 && !lastPosition && (!pos || (!pos.error && !pos.stopReason))) { timer = setTimeout(() => poll(run, waiting + 1), 200); return; }
+        const error = pos && pos.error, stopReason = pos && pos.stopReason;
         stopReading(false);
         if (error) toast(error);
         else if (stopReason) {

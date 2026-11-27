@@ -50,7 +50,15 @@ public final class ReadService extends Service {
         try {
             out.put("active", r != null && !r.cancelled).put("error", lastError).put("stopReason", lastStopReason);
             if (r != null && !r.cancelled) {
-                long head = r.track == null ? r.baseFrame : Integer.toUnsignedLong(r.track.getPlaybackHeadPosition());
+                AudioTrack t = r.track;
+                long head = r.baseFrame;
+                if (t != null) {
+                    try {
+                        head = Integer.toUnsignedLong(t.getPlaybackHeadPosition());
+                    } catch (RuntimeException ignored) {
+                        head = r.baseFrame;
+                    }
+                }
                 while (r.spans.size() > 1) {
                     Span first = r.spans.peekFirst();
                     if (first == null || head < first.endFrame) break;
@@ -292,6 +300,7 @@ public final class ReadService extends Service {
     }
 
     private void feed(Run r) {
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
         try {
             JSONObject q = r.request;
             String doc = java.net.URLEncoder.encode(q.getString("doc"), StandardCharsets.UTF_8);
@@ -374,6 +383,7 @@ public final class ReadService extends Service {
         } catch (InterruptedException ignored) { } catch (Exception e) { android.util.Log.w("KhanaRead", "feed error: " + e.getClass().getSimpleName() + ": " + e.getMessage()); fail(r); }
     }
     private void play(Run r) {
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO);
         long frames = 0;
         try {
             // (the reading before this one is finishing its sentence: this one's voice starts when it ends)
@@ -381,9 +391,11 @@ public final class ReadService extends Service {
             if (before != null && before.player != null) before.player.join(20000);
             r.previous = null;
             int min = AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
-            // 0.5s hardware ring buffer with low start threshold so short typed phrases (<2s) and first clauses play immediately!
+            // 3.0s hardware ring buffer with low start threshold so first clauses and short phrases play immediately
+            // while providing 3s cushion to eliminate any underrun / audio glitch during continuous reading.
+            int bufferBytes = Math.max(min * 4, RATE * 2 * 3);
             r.track = new AudioTrack.Builder().setAudioAttributes(attributes()).setAudioFormat(new AudioFormat.Builder().setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
-                .setBufferSizeInBytes(Math.max(min * 2, RATE)).setTransferMode(AudioTrack.MODE_STREAM).build();
+                .setBufferSizeInBytes(bufferBytes).setTransferMode(AudioTrack.MODE_STREAM).build();
             if (Build.VERSION.SDK_INT >= 31) {
                 try { r.track.setStartThresholdInFrames(Math.max(256, min / 4)); } catch (RuntimeException ignored) { }
             }
@@ -426,9 +438,15 @@ public final class ReadService extends Service {
                                 r.waitReason = "در حال ساختن صدای جمله‌ی بعدی… (پردازش آفلاین روی دستگاه)";
                             }
                         }
-                    } catch (CancellationException | ExecutionException ce) {
+                    } catch (ExecutionException ee) {
                         if (r.cancelled) break;
-                        throw ce;
+                        android.util.Log.w("KhanaRead", "clause synthesis error, skipping: " + ee.getMessage());
+                        gotResult = true;
+                        sound = null;
+                    } catch (CancellationException ce) {
+                        if (r.cancelled) break;
+                        gotResult = true;
+                        sound = null;
                     }
                 }
                 r.pending.remove(next);
@@ -514,9 +532,9 @@ public final class ReadService extends Service {
                     for (int at = 0; at < sound.pcm.length && !(r.cancelled && !r.finishing);) {
                         if (r.paused) { Thread.sleep(50); continue; }
                         if (!trackStarted) { r.track.play(); trackStarted = true; }
-                        int wrote = r.track.write(sound.pcm, at, Math.min(4096, sound.pcm.length - at), AudioTrack.WRITE_NON_BLOCKING);
+                        int wrote = r.track.write(sound.pcm, at, Math.min(8192, sound.pcm.length - at), AudioTrack.WRITE_NON_BLOCKING);
                         if (wrote < 0) throw new Exception("Audio output stopped");
-                        if (wrote == 0) Thread.sleep(8); else { at += wrote; frames += wrote / 2; r.writtenFrames = frames; }
+                        if (wrote == 0) Thread.sleep(10); else { at += wrote; frames += wrote / 2; r.writtenFrames = frames; }
                     }
                     if (r.finishing) break;
                     // Otherwise DO NOT drain AudioTrack — immediately queue the next sentence for 100% gapless playback!
@@ -545,7 +563,12 @@ public final class ReadService extends Service {
         r.workers.shutdownNow();
         synchronized (r.pending) {
             for (Future<Sound> f : r.pending) {
-                if (f.isDone() && !f.isCancelled()) try { f.get().wipe(); } catch (Exception ignored) { }
+                if (f.isDone() && !f.isCancelled()) {
+                    try {
+                        Sound s = f.get();
+                        if (s != null) s.wipe();
+                    } catch (Exception ignored) { }
+                }
                 f.cancel(true);
             }
             r.pending.clear();
@@ -595,7 +618,10 @@ public final class ReadService extends Service {
     @Override public void onDestroy() {
         cancel(); if (live == this) live = null;
         ui.removeCallbacksAndMessages(null);
-        if (noisy != null) unregisterReceiver(noisy);
+        if (noisy != null) {
+            try { unregisterReceiver(noisy); } catch (Exception ignored) { }
+            noisy = null;
+        }
         if (media != null) media.release();
         stopForeground(STOP_FOREGROUND_REMOVE);
         super.onDestroy();

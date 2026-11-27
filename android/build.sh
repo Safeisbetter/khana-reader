@@ -30,7 +30,7 @@ if [ ! -r "$K/khana.jks" ] || [ ! -r "$K/password.txt" ]; then
 fi
 if [ -n "${KHANA_PUBLIC:-}" ]; then
   expected=$(cat "$HERE/RELEASE_CERT_SHA256")
-  actual=$("$JAVA_HOME/bin/keytool" -list -v -keystore "$K/khana.jks" -storepass:file "$K/password.txt" -alias khana | awk '$1 == "SHA256:" { print $2 }')
+  actual=$("$JAVA_HOME/bin/keytool" -list -v -keystore "$K/khana.jks" -storepass:file "$K/password.txt" -alias khana | awk '$1 == "SHA256:" { print $2 }' || true)
   if [ "$actual" != "$expected" ]; then
     echo "The Android signing key does not match the published release certificate." >&2
     exit 1
@@ -53,7 +53,7 @@ VENDOR_ARGS=()
 if [ -d "$ROOT/vendor/crates" ]; then
   VENDOR_ARGS=(--offline --config "source.crates-io.replace-with='vendored-sources'" --config "source.vendored-sources.directory='$ROOT/vendor/crates'")
 fi
-(cd "$ROOT" && cargo rustc --locked --release --lib --target aarch64-linux-android --crate-type cdylib "${VENDOR_ARGS[@]}")
+(cd "$ROOT" && cargo rustc --locked --release --lib --target aarch64-linux-android --crate-type cdylib "${VENDOR_ARGS[@]+"${VENDOR_ARGS[@]}"}")
 "$NDKB/llvm-strip" --strip-unneeded -o "$OUT/jniLibs/arm64-v8a/libkhana.so" "$ROOT/target/aarch64-linux-android/release/libkhana.so"
 
 # 3. the Java shell
@@ -76,7 +76,7 @@ if [ -n "${KHANA_PUBLIC:-}" ]; then
   sed -i '' 's/static final boolean DEV_TOOLS = true;/static final boolean DEV_TOOLS = false;/' "$JAVA_SRC/MainActivity.java"
   grep -q 'DEV_TOOLS = false;' "$JAVA_SRC/MainActivity.java" || { echo "DEV_TOOLS switch not found"; exit 1; }
 fi
-javac -source 11 -target 11 -Xlint:-options -encoding UTF-8 -classpath "$JAR" -d "$OUT/classes" "$JAVA_SRC"/*.java
+javac --release 11 -Xlint:-options -encoding UTF-8 -classpath "$JAR" -d "$OUT/classes" "$JAVA_SRC"/*.java
 jar cf "$OUT/classes.jar" -C "$OUT/classes" .
 
 # 4. the assets: the reader page (as on the Mac, plus android.js), the models, the PDF font
@@ -128,8 +128,8 @@ PG_PUBLIC=()
 if [ -z "${KHANA_DEV:-}" ] || [ -n "${KHANA_PUBLIC:-}" ]; then
   PG_PUBLIC=(--pg-conf "$HERE/proguard-public.pro")
 fi
-java -cp "$BT/lib/d8.jar" com.android.tools.r8.R8 --release --min-api $API --lib "$JAR" \
-  --pg-conf "$OUT/aapt-rules.pro" --pg-conf "$HERE/proguard-rules.pro" ${PG_PUBLIC[@]+"${PG_PUBLIC[@]}"} --pg-map-output "$OUT/mapping.txt" \
+java -cp "$BT/lib/d8.jar" com.android.tools.r8.R8 --release --min-api "$API" --lib "$JAR" \
+  --pg-conf "$OUT/aapt-rules.pro" --pg-conf "$HERE/proguard-rules.pro" "${PG_PUBLIC[@]+"${PG_PUBLIC[@]}"}" --pg-map-output "$OUT/mapping.txt" \
   --output "$OUT/dex" "$OUT/classes.jar"
 if [ -z "${KHANA_DEV:-}" ] || [ -n "${KHANA_PUBLIC:-}" ]; then
   # (checked, not hoped: no reference to Android's log, nor to the developer's tests, is left in non-dev code)

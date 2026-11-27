@@ -560,7 +560,7 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
     let res = (|| -> Result<(), String> {
         let cancel = || job.cancelled.load(Ordering::SeqCst);
         *job.total_chars.lock().unwrap() = (r.last - r.first + 1).saturating_mul(1000).max(1);
-        let mut out = std::fs::File::create(&path).map_err(|e| e.to_string())?;
+        let mut out = std::io::BufWriter::new(std::fs::File::create(&path).map_err(|e| e.to_string())?);
         use std::io::{Seek, SeekFrom, Write};
         let mut enc: Option<crate::mp3::Mp3> = None;
         let mut wav_bytes_written: u32 = 0;
@@ -625,7 +625,6 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
                             }
                             *job.seconds.lock().unwrap() += pcm.len() as f64 / rate as f64;
                             *job.done_chars.lock().unwrap() = done_chars;
-                            out.flush().map_err(|e| e.to_string())?;
                             Ok(())
                         })();
                         if let Err(e) = step_res {
@@ -667,6 +666,7 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
             let Some(mut e) = enc else { return Err("در این صفحه\u{200c}ها متنی برای خواندن نیست.".into()) };
             out.write_all(&e.flush()).map_err(|e| e.to_string())?;
         }
+        out.flush().map_err(|e| e.to_string())?;
         drop(out);
         let _publication = job.publication.lock().unwrap();
         if cancel() && (!job.keep_partial.load(Ordering::SeqCst) || job.discard_partial.load(Ordering::SeqCst)) { return Err("cancelled".into()); }
