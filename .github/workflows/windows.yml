@@ -1,5 +1,5 @@
 # The Windows app (experimental, not tried on a real PC). Built on GitHub's own Windows computers, in two editions:
-#   light: no translator (about 0.5 GB); full: with the translator (CTranslate2, built here, and the 600M translation model; about 1.1 GB).
+#   lite: no translator (about 0.2 GB); full: with the translator (CTranslate2, built here, and the 600M translation model; about 0.75 GB).
 # Both hold the program, ONNX Runtime 1.19.2 (Microsoft's published build) beside it, the page (web/) and the models (taken from the Android
 # downloads of the release, which hold the same files). A check of the core and of the window runs before a package is made.
 # Run by hand (Actions -> Windows -> Run workflow) or on a push to the branch windows-full.
@@ -27,7 +27,7 @@ permissions:
 env:
   ORT_VERSION: "1.19.2"
   CT2_VERSION: "4.5.0"
-  MODELS_RELEASE: v1.36
+  MODELS_RELEASE: v1.37
 
 jobs:
   build:
@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [light, full]
+        edition: [lite, full]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -60,7 +60,7 @@ jobs:
           $apk = if ("${{ matrix.edition }}" -eq "full") { "KhanaReader-Android-next.apk" } else { "KhanaReader-Android-next-lite.apk" }
           gh release download $env:MODELS_RELEASE --repo $env:GITHUB_REPOSITORY -p $apk -D apk
           if ($LASTEXITCODE -ne 0) { throw "Model package download failed" }
-          $expected = if ("${{ matrix.edition }}" -eq "full") { "2f1f3f292ada50ace6fd29ba3690fcc76637a5c984eee44e2d50402f586d4aaa" } else { "e464b805b84538e8ed24a761e2efbfb9fa02d126112ef4e626874a1c74387269" }
+          $expected = if ("${{ matrix.edition }}" -eq "full") { "181807de6a8d09671ad0ce8a5b18db0756cd1fbdde3faf6506832953e1ed5a28" } else { "bb371a489109382735e2bee7d893d432905cbe40278defefc2b229529a75a477" }
           if ((Get-FileHash "apk/$apk" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Model package checksum mismatch" }
           Move-Item "apk/$apk" apk/models.zip
           Expand-Archive apk/models.zip -DestinationPath apk/x
@@ -117,6 +117,7 @@ jobs:
           $zip = "KhanaReader-Windows-${{ matrix.edition }}-experimental.zip"
           Compress-Archive -Path $out -DestinationPath $zip -CompressionLevel Optimal
           Get-Item $zip | Select-Object Name, Length
+          Get-FileHash $zip -Algorithm SHA256
 
       - name: Window smoke test (does the window open and load the page?)
         shell: pwsh
