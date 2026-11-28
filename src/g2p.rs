@@ -4,12 +4,15 @@ use crate::normfa::normalize_for_model;
 use crate::onnx;
 use crate::pyre::*;
 use ort::Session;
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Mutex;
 
 pub struct OnnxG2P {
     enc: Session,
     dec: Session,
     max_len: usize,
+    memo: Mutex<HashMap<String, String>>,
 }
 
 fn lookup<'a>(m: &'a [(&str, &str)], k: &str) -> Option<&'a str> {
@@ -91,13 +94,19 @@ fn without_final_marks(w: &str) -> Option<&str> {
 
 impl OnnxG2P {
     pub fn new(dir: &Path) -> ort::Result<Self> {
-        // Tiny ByT5 G2P runs ~100 autoregressive steps/sentence; capping threads prevents waking all 8 cores per step
-        let threads = if cfg!(shell) { Some(2) } else { Some(4) };
+        // Tiny ByT5 G2P runs ~100 autoregressive steps/sentence; 1 intra-op thread on mobile avoids
+        // cross-core barrier synchronization and contention with concurrent FlowLM/Mimi workers.
+        let threads = if cfg!(shell) { Some(1) } else { Some(4) };
         Ok(OnnxG2P {
             enc: onnx::session(&dir.join("g2p_encoder.onnx"), threads)?,
             dec: onnx::session(&dir.join("g2p_decoder.onnx"), threads)?,
             max_len: 512,
+            memo: Mutex::new(HashMap::new()),
         })
+    }
+
+    pub fn clear_memo(&self) {
+        self.memo.lock().unwrap().clear();
     }
 
     fn decode_greedy(&self, text: &str) -> String {
@@ -109,15 +118,17 @@ impl OnnxG2P {
         let enc_out = self.enc.run(ort::inputs!["input_ids" => ort::Tensor::from_array(([1usize, n], ids)).unwrap()].unwrap()).unwrap();
         let (eshape, edata) = enc_out[0].try_extract_raw_tensor::<f32>().unwrap();
         let eshape: Vec<usize> = eshape.iter().map(|x| *x as usize).collect();
-        let edata = edata.to_vec();
+        let enc_hidden: ort::DynValue = ort::Tensor::from_array((eshape, edata.to_vec())).unwrap().into_dyn();
+        drop(enc_out);
         let mut dec: Vec<i64> = vec![0];
         for _ in 0..self.max_len {
+            let dec_in: ort::DynValue = ort::Tensor::from_array(([1usize, dec.len()], dec.clone())).unwrap().into_dyn();
             let out = self
                 .dec
-                .run(ort::inputs![
-                    "decoder_input_ids" => ort::Tensor::from_array(([1usize, dec.len()], dec.clone())).unwrap(),
-                    "encoder_hidden" => ort::Tensor::from_array((eshape.clone(), edata.clone())).unwrap(),
-                ].unwrap())
+                .run(vec![
+                    ("decoder_input_ids", ort::SessionInputValue::from(dec_in)),
+                    ("encoder_hidden", ort::SessionInputValue::from(enc_hidden.view())),
+                ])
                 .unwrap();
             let (shape, logits) = out[0].try_extract_raw_tensor::<f32>().unwrap();
             let v = *shape.last().unwrap() as usize;
@@ -154,9 +165,19 @@ impl OnnxG2P {
         let t = transliterate_text(text);
         let t = normalize_for_model(&t)?;
         let t = t.replace('؟', "").replace('?', "").replace(':', "");
+        if let Some(cached) = self.memo.lock().unwrap().get(&t).cloned() {
+            return Ok(if keep_ezafe { cached } else { cached.replace('1', "") });
+        }
         let raw = g2p_windows(&t).iter().map(|w| self.decode_window(w)).collect::<Vec<_>>().join(" ");
         let out = translate_map(&raw, TO_PHONEMES);
         let out = split_ws(&out).iter().map(|w| lookup(G2P_PRON_FIX, w).unwrap_or(w).to_string()).collect::<Vec<_>>().join(" ");
+        {
+            let mut m = self.memo.lock().unwrap();
+            if m.len() > 24000 {
+                m.clear();
+            }
+            m.insert(t, out.clone());
+        }
         Ok(if keep_ezafe { out } else { out.replace('1', "") })
     }
 }

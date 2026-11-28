@@ -37,7 +37,7 @@ public final class Exporter {
         }
 
         String mime() {
-            return "mp3".equals(kind) ? "audio/mpeg" : "wav".equals(kind) ? "audio/wav" : "application/pdf";
+            return "mp3".equals(kind) ? "audio/mpeg" : "wav".equals(kind) ? "audio/wav" : "json".equals(kind) ? "application/json" : "application/pdf";
         }
     }
 
@@ -64,6 +64,9 @@ public final class Exporter {
             // (a sound file stays in the app, in «فایل‌های من»: only a PDF, which is made at the moment it is saved, is offered again)
             if (n.endsWith(".mp3") || n.endsWith(".wav")) byPath.put(f.getPath(), new Saved(f, n.endsWith(".mp3") ? "mp3" : "wav"));
             else if (n.endsWith(".pdf")) add(new Saved(f, "pdf"));
+            else if (n.equals("khana-lexicon.json")) { //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            }
         }
     }
 
@@ -87,8 +90,9 @@ public final class Exporter {
                 add(new Saved(f, kind));
             } else if ("reveal".equals(kind)) {
                 Saved s = byPath.get(f.getPath());
-                if (s == null && f.isFile() && (f.getName().endsWith(".mp3") || f.getName().endsWith(".wav"))) {
-                    s = new Saved(f, f.getName().endsWith(".mp3") ? "mp3" : "wav");
+                if (s == null && f.isFile() && (f.getName().endsWith(".mp3") || f.getName().endsWith(".wav") || f.getName().endsWith(".json"))) {
+                    String k = f.getName().endsWith(".mp3") ? "mp3" : f.getName().endsWith(".wav") ? "wav" : "json";
+                    s = new Saved(f, k);
                     byPath.put(f.getPath(), s);
                 }
                 if (s == null) continue;
@@ -149,7 +153,10 @@ public final class Exporter {
             asking = false;
         }
         if (u == null) {
-            Toast.makeText(ctx, "pdf".equals(s.kind) ? "فایل ذخیره نشد. با «ذخیره / باز کردن» دوباره امتحان کنید." : "رونوشت ذخیره نشد. فایل در «فایل‌های من» می‌ماند.", Toast.LENGTH_LONG).show();
+            if ("json".equals(s.kind)) { //noinspection ResultOfMethodCallIgnored
+                s.file.delete();
+            }
+            Toast.makeText(ctx, "pdf".equals(s.kind) || "json".equals(s.kind) ? "فایل ذخیره نشد. با «ذخیره / باز کردن» دوباره امتحان کنید." : "رونوشت ذخیره نشد. فایل در «فایل‌های من» می‌ماند.", Toast.LENGTH_LONG).show();
             return;
         }
         Context app = ctx.getApplicationContext();
@@ -158,7 +165,7 @@ public final class Exporter {
             WRITING.incrementAndGet();
             try {
                 write(app, s, u);
-                if (s.kind.equals("pdf")) {
+                if (s.kind.equals("pdf") || s.kind.equals("json")) {
                     synchronized (Exporter.class) {
                         s.uri = u;
                     }
@@ -188,7 +195,7 @@ public final class Exporter {
         if (Server.isLocked()) throw new IllegalStateException("App Lock is active");
         try (OutputStream out = ctx.getContentResolver().openOutputStream(u, "wt")) {
             if (out == null) throw new IllegalStateException("the place cannot be written");
-            if (s.kind.equals("mp3") || s.kind.equals("wav")) {
+            if (s.kind.equals("mp3") || s.kind.equals("wav") || s.kind.equals("json")) {
                 try (InputStream in = Files.newInputStream(s.file.toPath())) {
                     byte[] buf = new byte[1 << 16];
                     int n;

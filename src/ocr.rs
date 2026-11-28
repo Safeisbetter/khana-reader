@@ -66,7 +66,7 @@ pub fn find_lines(gray: &[u8], w: usize, h: usize) -> Vec<Line> {
         hs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         hs[hs.len() * 3 / 5].max(4.0)
     };
-    let gutter = (sw as f64 * 0.02).max(0.8 * lh).ceil() as usize;
+    let gutter = (sw as f64 * 0.012).max(0.65 * lh).ceil() as usize;
     let mut boxes = Vec::new();
     page.cut(Rect { x0: 0, x1: sw, y0: 0, y1: sh }, gutter, &mut boxes, 0);
     let boxes = mend_lines(&page, boxes, lh);
@@ -144,6 +144,21 @@ impl Ink<'_> {
                 self.cut(Rect { y0: r.y0 + a, y1: r.y0 + b, ..r }, gutter, out, depth + 1);
             }
             return;
+        }
+        // Tolerate light background-picture speckle inside column gaps on wide single-line strips.
+        let h = r.y1 - r.y0;
+        if r.x1 - r.x0 > 4 * h && h >= 8 {
+            let tol = (h / 10).max(1);
+            let soft_gaps: Vec<(usize, usize)> = runs(&cols, |c| c <= tol).into_iter().filter(|(a, b)| b - a >= gutter).collect();
+            if !soft_gaps.is_empty() {
+                let mut x = r.x0;
+                for (a, b) in soft_gaps {
+                    self.cut(Rect { x0: x, x1: r.x0 + a, ..r }, gutter, out, depth + 1);
+                    x = r.x0 + b;
+                }
+                self.cut(Rect { x0: x, ..r }, gutter, out, depth + 1);
+                return;
+            }
         }
         out.push(r);
     }
@@ -563,6 +578,17 @@ fn ocr_paragraphs_one(mut lines: Vec<Line>) -> Vec<String> {
     let mut hs: Vec<f64> = lines.iter().map(|l| l.bot - l.top).collect();
     hs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let height = hs[lines.len() / 2];
+    lines.sort_by(|a, b| {
+        if (a.top - b.top).abs() <= 0.5 * height {
+            if is_rtl {
+                b.x1.partial_cmp(&a.x1).unwrap_or(std::cmp::Ordering::Equal)
+            } else {
+                a.x0.partial_cmp(&b.x0).unwrap_or(std::cmp::Ordering::Equal)
+            }
+        } else {
+            a.top.partial_cmp(&b.top).unwrap_or(std::cmp::Ordering::Equal)
+        }
+    });
     let mut gaps: Vec<f64> = lines.windows(2).map(|p| p[1].top - p[0].bot).collect();
     gaps.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     if gaps.is_empty() {
@@ -576,8 +602,13 @@ fn ocr_paragraphs_one(mut lines: Vec<Line>) -> Vec<String> {
         if !cur.is_empty() {
             let prev = &lines[i - 1];
             let gap = l.top - prev.bot;
+            let x_overlap = prev.x1.min(l.x1) - prev.x0.max(l.x0);
+            let same_col = x_overlap > 0.15 * (prev.x1 - prev.x0).min(l.x1 - l.x0).max(1e-6);
             let short = (if is_rtl { prev.x0 - left } else { right - prev.x1 }) > 0.15 * width;
-            if gap > f64::max(0.8 * height, usual_gap + 0.5 * height) || short {
+            let start_shift = if is_rtl { (prev.x1 - l.x1).abs() } else { (prev.x0 - l.x0).abs() };
+            let end_shift = if is_rtl { (prev.x0 - l.x0).abs() } else { (prev.x1 - l.x1).abs() };
+            let centered_pair = start_shift > 0.04 && end_shift > 0.04 && (prev.x1 - prev.x0) < 0.65;
+            if !same_col || gap > f64::max(0.8 * height, usual_gap + 0.5 * height) || short || centered_pair {
                 paras.push(std::mem::take(&mut cur));
             }
         }
@@ -1212,4 +1243,31 @@ pub fn ready() -> bool {
 }
 
 pub static OCR_LOCK: Mutex<()> = Mutex::new(());
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ocr_splits_columns_with_background_speckle_and_keeps_names_separate() {
+        let (w, h) = (320usize, 120usize);
+        let mut gray = vec![255u8; w * h];
+        // Two text-like blocks on the same row separated by a 40px gap containing 1px dark speckle
+        for y in 40..64 {
+            for x in 30..120 { gray[y * w + x] = 20; }
+            for x in 180..270 { gray[y * w + x] = 20; }
+        }
+        for x in 120..180 { gray[50 * w + x] = 40; } // 1px horizontal background noise across gap
+        let boxes = find_lines(&gray, w, h);
+        assert!(boxes.len() >= 2, "expected column split despite background speckle, got {}", boxes.len());
+
+        let lines = vec![
+            Line { t: "علی رضایی".into(), x0: 0.65, x1: 0.90, top: 0.30, bot: 0.36 },
+            Line { t: "مریم احمدی".into(), x0: 0.15, x1: 0.40, top: 0.30, bot: 0.36 },
+            Line { t: "سارا محمدی".into(), x0: 0.65, x1: 0.90, top: 0.38, bot: 0.44 },
+        ];
+        let paras = ocr_paragraphs(&lines);
+        assert_eq!(paras, vec!["علی رضایی", "مریم احمدی", "سارا محمدی"]);
+    }
+}
 

@@ -120,8 +120,6 @@ pub const PHONEME_FIX: &[(&str, &str)] = &[
     ("bannA", "banA"),
     ("bannAye1", "banAye1"),
     ("bah", "be"),
-    ("mobtani", "mabtani"),
-    ("mobtani1", "mabtani1"),
     ("mian", "miyAn"),
     ("oftan", "goftan"),
     ("mioftad", "miyoftad"),

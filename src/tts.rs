@@ -41,7 +41,10 @@ fn lap(slot: usize, t: std::time::Instant) {
 static HEAT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
 pub fn set_heat(level: u8) {
-    HEAT.store(level.min(3), std::sync::atomic::Ordering::Relaxed);
+    let prev = HEAT.swap(level.min(3), std::sync::atomic::Ordering::Relaxed);
+    if level < prev {
+        SLOTS.turn.notify_all();
+    }
 }
 
 pub fn heat() -> u8 {
@@ -112,17 +115,29 @@ struct Slots {
 }
 static SLOTS: Slots = Slots { state: Mutex::new((0, Vec::new())), turn: std::sync::Condvar::new() };
 static TICKETS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1 << 62);
-fn slot_count() -> usize {
-    static SLOTS_MAX: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-    *SLOTS_MAX.get_or_init(|| {
-        if cfg!(shell) {
-            // Mobile SoCs (e.g. Tensor G2) throttle past 80C when 6 ONNX models thrash all 8 cores;
-            // 2 concurrent slots x 2 intra-op threads keeps big/mid cores fast and cool.
-            2
-        } else {
-            (std::thread::available_parallelism().map_or(4, |n| n.get()).saturating_sub(2)).clamp(2, 12)
+pub fn mobile_low_ram() -> bool {
+    static LOW_RAM: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *LOW_RAM.get_or_init(|| {
+        if !cfg!(shell) {
+            return false;
         }
+        std::fs::read_to_string("/proc/meminfo")
+            .ok()
+            .and_then(|s| s.lines().find(|l| l.starts_with("MemTotal:")).and_then(|l| l.split_whitespace().nth(1)).and_then(|v| v.parse::<u64>().ok()))
+            .is_some_and(|kb| kb < 5_200_000)
     })
+}
+
+fn slot_count() -> usize {
+    static CORES: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    let cores = *CORES.get_or_init(|| std::thread::available_parallelism().map_or(4, |n| n.get()));
+    if cfg!(shell) {
+        // Mobile SoCs (e.g. Tensor G2) are memory-bandwidth bound and have slow little cores (A55):
+        // 2 concurrent slots stay on the fast big/mid cores without thrashing L3/LPDDR5.
+        2
+    } else {
+        cores.saturating_sub(2).clamp(2, 12)
+    }
 }
 pub fn wake_waiters() {
     SLOTS.turn.notify_all();
@@ -304,11 +319,13 @@ impl Engine {
         let w = load_npz(&dir.join("weights.npz"))?;
         let get = |k: &str| f32s(&w.iter().find(|x| x.0 == k).unwrap().1).to_vec();
         let threads = std::env::var("KHANA_TTS_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(2usize);
-        // On mobile, Mimi runs 1 tiny latent frame at a time (50+ calls/sentence): 1 intra-op thread
-        // eliminates ~1,500 thread-pool synchronization barriers per sentence across 2 concurrent workers!
-        let dec_threads = if cfg!(shell) { 1usize } else { threads };
+        // On mobile, both FlowLM and Mimi run 1 single frame/token step at a time (50+ calls/sentence)
+        // across 2 concurrent worker threads sharing each Session: 1 intra-op thread eliminates ~4,500
+        // cross-core thread-pool barriers per sentence and avoids stalling fast big cores on throttled mid cores!
+        let step_threads = if cfg!(shell) { 1usize } else { threads };
         let opts = |p: &Path| onnx::session(p, Some(threads)).map_err(|e| e.to_string());
-        let s_dec = onnx::session(&dir.join("mimi_decoder_step_kv.onnx"), Some(dec_threads)).map_err(|e| e.to_string())?;
+        let s_flow = onnx::session(&dir.join("flow_lm_step.onnx"), Some(step_threads)).map_err(|e| e.to_string())?;
+        let s_dec = onnx::session(&dir.join("mimi_decoder_step_kv.onnx"), Some(step_threads)).map_err(|e| e.to_string())?;
         let dec_in: Vec<String> = s_dec.inputs.iter().map(|i| i.name.clone()).collect();
         let dec_out: Vec<String> = s_dec.outputs.iter().map(|o| o.name.clone()).collect();
         let init = load_npz(&dir.join("decode_state_init.npz"))?;
@@ -336,7 +353,7 @@ impl Engine {
             tps_est: f("tokens_per_second_estimate"),
             gen_pad: f("gen_seconds_padding"),
             frame_rate: f("frame_rate"),
-            s_flow: opts(&dir.join("flow_lm_step.onnx"))?,
+            s_flow,
             s_enc: opts(&dir.join("mimi_encoder.onnx"))?,
             s_dec,
             dec_in,
@@ -365,25 +382,23 @@ impl Engine {
         if offset + s > self.cap {
             return Err(format!("flow cache overflow: offset {offset} + {s} new tokens exceeds capacity {}", self.cap));
         }
-        let (lat, eos, kv, kvs) = {
-            let out = self
-                .s_flow
-                .run(vec![
-                    ("sequence", ort::SessionInputValue::from(tensor_f32(vec![1, seq_len, self.ldim], seq.to_vec()))),
-                    ("text_emb", tensor_f32(vec![1, text_len, self.dim], text_emb.to_vec()).into()),
-                    ("offset", Tensor::from_array((Vec::<usize>::new(), vec![offset as i64])).unwrap().into_dyn().into()),
-                    ("noise", Tensor::from_array(([1, self.ldim], noise.to_vec())).unwrap().into_dyn().into()),
-                    ("cache", input(cache)),
-                ])
-                .map_err(|e| e.to_string())?;
-            let lat = out[0].try_extract_raw_tensor::<f32>().map_err(|e| e.to_string())?.1.to_vec();
-            let eos = match out[1].try_extract_raw_tensor::<f32>() {
-                Ok((_, v)) => v.first().copied().unwrap_or(0.0) != 0.0,
-                Err(_) => out[1].try_extract_raw_tensor::<bool>().map_err(|e| e.to_string())?.1.first().copied().unwrap_or(false),
-            };
-            let (shape, kv) = out[2].try_extract_raw_tensor::<f32>().map_err(|e| e.to_string())?;
-            (lat, eos, kv.to_vec(), shape[2] as usize)
+        let out = self
+            .s_flow
+            .run(vec![
+                ("sequence", ort::SessionInputValue::from(tensor_f32(vec![1, seq_len, self.ldim], seq.to_vec()))),
+                ("text_emb", tensor_f32(vec![1, text_len, self.dim], text_emb.to_vec()).into()),
+                ("offset", Tensor::from_array((Vec::<usize>::new(), vec![offset as i64])).unwrap().into_dyn().into()),
+                ("noise", Tensor::from_array(([1, self.ldim], noise.to_vec())).unwrap().into_dyn().into()),
+                ("cache", input(cache)),
+            ])
+            .map_err(|e| e.to_string())?;
+        let lat = out[0].try_extract_raw_tensor::<f32>().map_err(|e| e.to_string())?.1.to_vec();
+        let eos = match out[1].try_extract_raw_tensor::<f32>() {
+            Ok((_, v)) => v.first().copied().unwrap_or(0.0) != 0.0,
+            Err(_) => out[1].try_extract_raw_tensor::<bool>().map_err(|e| e.to_string())?.1.first().copied().unwrap_or(false),
         };
+        let (shape, kv) = out[2].try_extract_raw_tensor::<f32>().map_err(|e| e.to_string())?;
+        let kvs = shape[2] as usize;
         let (_, c) = cache.try_extract_raw_tensor_mut::<f32>().map_err(|e| e.to_string())?;
         let row = self.h * self.d;
         for a in 0..self.l * 2 {
@@ -394,6 +409,10 @@ impl Engine {
             }
         }
         Ok((lat, eos, offset + kvs))
+    }
+
+    pub fn warm_voice(&self, wav: &Path) {
+        let _ = self.voice_cache(wav);
     }
 
     fn voice_cache(&self, wav: &Path) -> Result<Arc<(Vec<f32>, usize)>, String> {
@@ -484,25 +503,35 @@ impl Engine {
                 return Err("cancelled".to_string());
             }
             let un: Vec<f32> = (0..self.ldim).map(|k| lt[k] * self.emb_std[k] + self.emb_mean[k]).collect();
-            let mut feeds: Vec<(String, ort::SessionInputValue)> = vec![("latent".into(), Tensor::from_array(([1, 1, self.ldim], un)).unwrap().into_dyn().into())];
+            let mut feeds: Vec<(&str, ort::SessionInputValue)> = Vec::with_capacity(1 + st.len());
+            feeds.push(("latent", Tensor::from_array(([1, 1, self.ldim], un)).unwrap().into_dyn().into()));
             for (i, s) in st.iter().enumerate() {
-                feeds.push((self.dec_in[1 + i].clone(), input(s)));
+                feeds.push((self.dec_in[1 + i].as_str(), input(s)));
             }
             let res = self.s_dec.run(feeds).map_err(|e| e.to_string())?;
             out.extend_from_slice(res[0].try_extract_raw_tensor::<f32>().map_err(|e| e.to_string())?.1);
-            let mut small: Vec<(usize, ort::DynValue)> = Vec::new();
             for (j, &o) in self.dec_out_small.iter().enumerate() {
-                small.push((self.small_slots[j], copy_value(&res[o])?));
+                let slot = self.small_slots[j];
+                let copied_in_place = if let (Ok((src_sh, src_s)), Ok((dst_sh, dst_s))) = (
+                    res[o].try_extract_raw_tensor::<f32>(),
+                    st[slot].try_extract_raw_tensor_mut::<f32>(),
+                ) {
+                    if src_sh == dst_sh && src_s.len() == dst_s.len() {
+                        dst_s.copy_from_slice(src_s);
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+                if !copied_in_place {
+                    st[slot] = copy_value(&res[o])?;
+                }
             }
-            let mut kvs: Vec<(usize, Vec<f32>)> = Vec::new();
             for (j, &o) in self.dec_out_kv.iter().enumerate() {
-                kvs.push((self.cache_slots[j], res[o].try_extract_raw_tensor::<f32>().map_err(|e| e.to_string())?.1.to_vec()));
-            }
-            drop(res);
-            for (slot, v) in small {
-                st[slot] = v;
-            }
-            for (slot, kv) in kvs {
+                let slot = self.cache_slots[j];
+                let kv = res[o].try_extract_raw_tensor::<f32>().map_err(|e| e.to_string())?.1;
                 let (shape, c) = st[slot].try_extract_raw_tensor_mut::<f32>().map_err(|e| e.to_string())?;
                 let tcap = shape[2] as usize;
                 let row = (shape[3] * shape[4]) as usize;
@@ -796,14 +825,17 @@ impl Engine {
             }
             let (latents, hit_eos) = self.generate_chunk(voice, chunk, temp_scale, rng, cancel)?;
             lap(0, t);
-            // Fast pre-decode health check (<0.05ms): catches exploded/frozen digital-noise latents AND
-            // autoregressive word/syllable loops BEFORE spending CPU on Mimi decoding!
-            let bad_latents = has_bad_latents(&latents);
+            // Fast pre-decode health check (<0.05ms): catches exploded/NaN FlowLM latents AND
+            // sustained frozen/stutter trajectories BEFORE spending CPU on Mimi decoding.
+            // Ignore post-EOS trailing silence frames when checking for frozen runs, and only skip
+            // decoding completely when latents are numerically exploded (frozen runs still decode on final try).
+            let exploded = has_exploded_latents(&latents);
+            let frozen = !exploded && has_frozen_latents(&latents, hit_eos);
             let stuttered = !allow_repeat && has_latent_stutter(&latents);
-            if (bad_latents || stuttered || (!hit_eos && words_count_of(chunk) <= 18)) && take + 1 < hard_cap {
+            if (exploded || frozen || stuttered || (!voice.quick && !hit_eos && words_count_of(chunk) <= 18)) && take + 1 < hard_cap {
                 continue;
             }
-            if bad_latents {
+            if exploded {
                 continue;
             }
             let t = std::time::Instant::now();
@@ -849,7 +881,7 @@ impl Engine {
             let min_pace_ratio = if tokens >= 6 { 0.66 } else { 0.58 };
             let not_skipped = solid >= min_solid_frac * expected_loose && (rate.is_none() || ratio >= min_pace_ratio);
             let not_bloated = solid <= 1.85 * expected_loose && (rate.is_none() || ratio <= 1.78);
-            if (voice.quick || cfg!(shell)) && voiced_ok && no_stutter && loud_ok && (hit_eos || words_count_of(chunk) > 16) && frac >= 0.55 && not_skipped && not_bloated {
+            if (voice.quick || cfg!(shell)) && voiced_ok && no_stutter && loud_ok && (hit_eos || words_count_of(chunk) > 16) && frac >= 0.45 && not_skipped && not_bloated {
                 return Ok(speech);
             }
             let t = std::time::Instant::now();
@@ -958,30 +990,56 @@ impl Engine {
     }
 
     pub fn plan_text_kinds(&self, text: &str) -> Vec<(f64, Vec<(String, f64)>, prosody::Kind)> {
-        let mut sentences = Vec::new();
-        let mut last: Option<prosody::Kind> = None;
-        for para in split(r"\n\s*\n", text) {
-            let mut gap = last.map_or(PARAGRAPH_GAP, |k| prosody::gap_after(k, PARAGRAPH_GAP));
+        let mut raw_sents: Vec<(usize, String)> = Vec::new();
+        for (pi, para) in split(r"\n\s*\n", text).into_iter().enumerate() {
             for sent in planner::split_sentences(&para) {
-                let plan = match planner::plan_phrases(&sent, &self.g2p, &self.sp) {
-                    Ok(p) => p,
-                    Err(_) => {
-                        let clean = sub(r"[^؀-ۿ‌A-Za-z0-9\s.,،؛:!?؟«»()\-]", " ", &sent);
-                        if strip(&clean).is_empty() {
-                            continue;
-                        }
-                        match planner::plan_phrases(&clean, &self.g2p, &self.sp) {
-                            Ok(p) => p,
-                            Err(_) => continue,
-                        }
+                raw_sents.push((pi, sent));
+            }
+        }
+        if raw_sents.is_empty() {
+            return Vec::new();
+        }
+        let planned: Vec<Mutex<Option<Vec<(String, f64)>>>> = (0..raw_sents.len()).map(|_| Mutex::new(None)).collect();
+        let next = std::sync::atomic::AtomicUsize::new(0);
+        let plan_workers = if cfg!(shell) { 2usize } else { 4usize };
+        std::thread::scope(|s| {
+            for _ in 0..plan_workers.min(raw_sents.len()) {
+                s.spawn(|| loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    if i >= raw_sents.len() {
+                        break;
                     }
-                };
-                if !plan.is_empty() {
-                    let kind = prosody::kind_of(&sent);
-                    sentences.push((gap, plan, kind));
-                    gap = prosody::gap_after(kind, SENTENCE_GAP);
-                    last = Some(kind);
-                }
+                    let sent = &raw_sents[i].1;
+                    let plan = match planner::plan_phrases(sent, &self.g2p, &self.sp) {
+                        Ok(p) => Some(p),
+                        Err(_) => {
+                            let clean = sub(r"[^؀-ۿ‌A-Za-z0-9\s.,،؛:!?؟«»()\-]", " ", sent);
+                            if strip(&clean).is_empty() {
+                                None
+                            } else {
+                                planner::plan_phrases(&clean, &self.g2p, &self.sp).ok()
+                            }
+                        }
+                    };
+                    *planned[i].lock().unwrap() = plan;
+                });
+            }
+        });
+        let mut sentences = Vec::with_capacity(raw_sents.len());
+        let mut last: Option<prosody::Kind> = None;
+        let mut cur_para: Option<usize> = None;
+        let mut gap = PARAGRAPH_GAP;
+        for (i, (pi, sent)) in raw_sents.into_iter().enumerate() {
+            if cur_para != Some(pi) {
+                gap = last.map_or(PARAGRAPH_GAP, |k| prosody::gap_after(k, PARAGRAPH_GAP));
+                cur_para = Some(pi);
+            }
+            let Some(plan) = planned[i].lock().unwrap().take() else { continue };
+            if !plan.is_empty() {
+                let kind = prosody::kind_of(&sent);
+                sentences.push((gap, plan, kind));
+                gap = prosody::gap_after(kind, SENTENCE_GAP);
+                last = Some(kind);
             }
         }
         sentences
@@ -993,10 +1051,32 @@ impl Engine {
 
     #[allow(clippy::too_many_arguments)]
     pub fn synthesize_text_in_order(&self, text: &str, voice_id: &str, wav: &Path, workers: usize, quick: bool, order: Option<u64>, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Vec<f32>, String> {
+        self.synthesize_text_with_speed(text, voice_id, wav, 1.0, workers, quick, false, order, cancel)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn synthesize_text_with_speed(&self, text: &str, voice_id: &str, wav: &Path, speed: f64, workers: usize, quick: bool, skip_prosody: bool, order: Option<u64>, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Vec<f32>, String> {
         let sentences = if strip(text).is_empty() { Vec::new() } else { self.plan_text_kinds(text) };
+        self.synthesize_planned_in_order(&sentences, voice_id, wav, speed, workers, quick, skip_prosody, order, cancel)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn synthesize_planned_in_order(
+        &self,
+        sentences: &[(f64, Vec<(String, f64)>, prosody::Kind)],
+        voice_id: &str,
+        wav: &Path,
+        speed: f64,
+        workers: usize,
+        quick: bool,
+        skip_prosody: bool,
+        order: Option<u64>,
+        cancel: &(dyn Fn() -> bool + Sync),
+    ) -> Result<Vec<f32>, String> {
         if sentences.is_empty() {
             return Ok(Vec::new());
         }
+        let speed = speed.clamp(0.5, 2.0);
         if cancel() {
             return Err("cancelled".to_string());
         }
@@ -1022,8 +1102,9 @@ impl Engine {
         let results: Vec<Mutex<Option<Result<Vec<f32>, String>>>> = (0..jobs.len()).map(|_| Mutex::new(None)).collect();
         let next = std::sync::atomic::AtomicUsize::new(0);
         let ticket = order.unwrap_or_else(|| TICKETS.fetch_add(1, std::sync::atomic::Ordering::SeqCst));
+        let n_workers = workers.max(slot_count()).max(1);
         std::thread::scope(|s| {
-            for _ in 0..workers.max(slot_count()).max(1).min(jobs.len().max(1)) {
+            for _ in 0..n_workers.min(jobs.len().max(1)) {
                 s.spawn(|| loop {
                     let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     if i >= jobs.len() {
@@ -1044,51 +1125,63 @@ impl Engine {
                 });
             }
         });
-        let mut audios = Vec::with_capacity(jobs.len());
-        for r in results {
-            audios.push(r.into_inner().unwrap().unwrap_or_else(|| Err("no result".into()))?);
+        let mut by_sent: Vec<Vec<(usize, Vec<f32>, f64)>> = vec![Vec::new(); sentences.len()];
+        for (j, r) in jobs.into_iter().zip(results) {
+            let a = r.into_inner().unwrap().unwrap_or_else(|| Err("no result".into()))?;
+            by_sent[j.0].push((j.1, a, j.3));
+        }
+        let natural = !skip_prosody && self.natural.load(std::sync::atomic::Ordering::Relaxed);
+        let sent_inputs: Vec<Mutex<Option<Vec<(usize, Vec<f32>, f64)>>>> = by_sent.into_iter().map(|v| Mutex::new(Some(v))).collect();
+        let sent_outputs: Vec<Mutex<Option<Vec<f32>>>> = (0..sentences.len()).map(|_| Mutex::new(None)).collect();
+        let next_sent = std::sync::atomic::AtomicUsize::new(0);
+        std::thread::scope(|s| {
+            for _ in 0..n_workers.min(sentences.len().max(1)) {
+                s.spawn(|| loop {
+                    let si = next_sent.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    if si >= sentences.len() || cancel() {
+                        break;
+                    }
+                    let mut phrase_chunks = sent_inputs[si].lock().unwrap().take().unwrap_or_default();
+                    if phrase_chunks.is_empty() {
+                        continue;
+                    }
+                    let (_, plan, kind) = &sentences[si];
+                    let n_phrases = plan.len();
+                    if natural && n_phrases > 1 {
+                        for k in 0..phrase_chunks.len() {
+                            let pi = phrase_chunks[k].0;
+                            let is_phrase_end = k + 1 < phrase_chunks.len() && phrase_chunks[k + 1].0 != pi;
+                            if is_phrase_end && pi + 1 < n_phrases {
+                                let audio_chunk = std::mem::take(&mut phrase_chunks[k].1);
+                                phrase_chunks[k].1 = prosody::shape_clause(audio_chunk, RATE);
+                            }
+                        }
+                    }
+                    let segs: Vec<(Vec<f32>, f64)> = phrase_chunks.into_iter().map(|(_, a, g)| (a, g)).collect();
+                    let said = self.stitch(segs);
+                    let shaped = if natural {
+                        prosody::shape_with_speed(said, RATE, *kind, speed)
+                    } else if (speed - 1.0).abs() >= 0.008 && !said.is_empty() {
+                        crate::stretch::stretch(&said, speed, RATE)
+                    } else {
+                        said
+                    };
+                    *sent_outputs[si].lock().unwrap() = Some(shaped);
+                });
+            }
+        });
+        if cancel() {
+            return Err("cancelled".to_string());
         }
         let mut parts: Vec<f32> = Vec::new();
         let mut first = true;
-        let natural = self.natural.load(std::sync::atomic::Ordering::Relaxed);
-        for (si, (gap, plan, kind)) in sentences.iter().enumerate() {
-            let n_phrases = plan.len();
-            let mut segs: Vec<(Vec<f32>, f64)> = Vec::new();
-            let mut phrase_chunks: Vec<(usize, Vec<f32>, f64)> = jobs
-                .iter()
-                .zip(audios.iter())
-                .filter(|(j, _)| j.0 == si)
-                .map(|(j, a)| (j.1, a.clone(), j.3))
-                .collect();
-            if phrase_chunks.is_empty() {
-                continue;
-            }
-            if natural && n_phrases > 1 {
-                // Apply subtle continuation lift to the last chunk of every non-final comma/colon phrase
-                for k in 0..phrase_chunks.len() {
-                    let pi = phrase_chunks[k].0;
-                    let is_phrase_end = k + 1 < phrase_chunks.len() && phrase_chunks[k + 1].0 != pi;
-                    if is_phrase_end && pi + 1 < n_phrases {
-                        let audio_chunk = std::mem::take(&mut phrase_chunks[k].1);
-                        phrase_chunks[k].1 = prosody::shape_clause(audio_chunk, RATE);
-                    }
-                }
-            }
-            for (_, a, g) in phrase_chunks {
-                segs.push((a, g));
-            }
+        for (si, (gap, _, _)) in sentences.iter().enumerate() {
+            let Some(said) = sent_outputs[si].lock().unwrap().take() else { continue };
             if !first {
-                parts.extend(std::iter::repeat(0f32).take((gap * RATE as f64) as usize));
+                parts.extend(std::iter::repeat_n(0f32, ((*gap / speed) * RATE as f64) as usize));
             }
             first = false;
-            let said = self.stitch(segs);
-            if natural {
-                let said = prosody::shape(said, RATE, *kind);
-                let pace = prosody::pace(*kind);
-                parts.extend(if pace != 1.0 && !said.is_empty() { crate::stretch::stretch(&said, pace, RATE) } else { said });
-            } else {
-                parts.extend(said);
-            }
+            parts.extend(said);
         }
         Ok(parts)
     }
@@ -1106,15 +1199,12 @@ fn words_count_of(chunk: &str) -> usize {
     split_ws(chunk).len()
 }
 
-/// Fast pre-decode check (<0.02 ms) catching diverged/exploded FlowLM latents or frozen
-/// robotic-buzz oscillation loops before Mimi decodes them into digital noise.
-fn has_bad_latents(latents: &[Vec<f32>]) -> bool {
+/// Fast pre-decode check (<0.02 ms) catching diverged/exploded/NaN FlowLM latents before Mimi decoding.
+fn has_exploded_latents(latents: &[Vec<f32>]) -> bool {
     if latents.is_empty() {
         return true;
     }
-    let mut frozen_run = 0usize;
-    let mut prev_norm = 0.0f32;
-    for (idx, v) in latents.iter().enumerate() {
+    for v in latents {
         let mut sq = 0.0f32;
         for &x in v {
             if !x.is_finite() || x.abs() > 12.0 {
@@ -1122,16 +1212,29 @@ fn has_bad_latents(latents: &[Vec<f32>]) -> bool {
             }
             sq += x * x;
         }
-        let norm = sq.sqrt();
-        if norm > 18.0 {
+        if sq.sqrt() > 18.0 {
             return true;
         }
+    }
+    false
+}
+
+/// Catches sustained frozen latent trajectories inside speech (excluding trailing post-EOS silence frames).
+fn has_frozen_latents(latents: &[Vec<f32>], hit_eos: bool) -> bool {
+    let check_len = if hit_eos { latents.len().saturating_sub(6) } else { latents.len() };
+    if check_len < 10 {
+        return false;
+    }
+    let mut frozen_run = 0usize;
+    let mut prev_norm = 0.0f32;
+    for (idx, v) in latents[..check_len].iter().enumerate() {
+        let norm = v.iter().map(|&x| x * x).sum::<f32>().sqrt();
         if idx > 0 && norm > 1.5 && prev_norm > 1.5 {
             let dot: f32 = v.iter().zip(&latents[idx - 1]).map(|(a, b)| a * b).sum();
             let cos = dot / (norm * prev_norm);
-            if cos > 0.992 {
+            if cos > 0.996 {
                 frozen_run += 1;
-                if frozen_run >= 6 {
+                if frozen_run >= 8 {
                     return true;
                 }
             } else {

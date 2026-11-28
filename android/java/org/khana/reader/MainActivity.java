@@ -198,7 +198,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
             showPage();
             return;
         }
-        TextView wait = message("خوانا آماده می‌شود…\nبار اول چند دقیقه طول می‌کشد (صداها و مدل‌ها باز می‌شوند).");
+        TextView wait = message("کتاب‌خوان آماده می‌شود…\nبار اول چند دقیقه طول می‌کشد (صداها و مدل‌ها باز می‌شوند).");
         new Thread(() -> {
             String err;
             try {
@@ -212,7 +212,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
                 // (1.29 deep check: a window closed meanwhile builds nothing; and «save as» is ready at once, not only after the
                 // window was left and opened again)
                 if (isDestroyed()) return;
-                if (fail != null) wait.setText("خوانا باز نشد:\n" + fail);
+                if (fail != null) wait.setText("کتاب‌خوان باز نشد:\n" + fail);
                 else { showPage(); if (!isFinishing()) Exporter.setAsker(this); }
             });
         }, "khana-start").start();
@@ -639,6 +639,7 @@ public final class MainActivity extends Activity implements Exporter.Asker {
             if (body.contains("\"enabled\":true") && body.contains("\"locked\":false") && body.contains("\"timeout\":0")) {
                 Native.handle(Native.utf8("POST"), Native.utf8("/api/lock_now"), Native.utf8(""), Native.utf8(server.token()), null);
                 ReadService.stop(this);
+                AudioFileService.stop(this);
                 Server.clearClipboard(this);
                 applyScreenGuard();
                 runOnUiThread(() -> {

@@ -27,7 +27,7 @@ async function api(path, opts = {}) {
     return res;
   } catch (err) {
     if (err instanceof TypeError) {
-      throw new Error("خطا در ارتباط با بخش داخلی خوانا. برنامه را ببندید و دوباره باز کنید.");
+      throw new Error("خطا در ارتباط با بخش داخلی کتاب‌خوان. برنامه را ببندید و دوباره باز کنید.");
     }
     throw err;
   }
@@ -108,6 +108,7 @@ function applySettings() {
   $("fontDown").disabled = Number(s.fontSize) <= 14;
   $("fontUp").disabled = Number(s.fontSize) >= 72;
   $("voice").value = s.voice;
+  if (typeof syncVoiceUI === "function") syncVoiceUI();
   applyCursor(s.cursor || "large");
   document.querySelectorAll("input[name=cursor]").forEach(r => r.checked = r.value === (s.cursor || "large"));
   $("autoNext").checked = !!s.autoNext;
@@ -126,7 +127,17 @@ function applySettings() {
   $("reversed").checked = !!s.reversed;
   $("bitrate").value = String(s.bitrate);
   const v = S.voices.find(x => x.id === s.voice);
-  if (saveKind !== "pdf") $("mp3Voice").textContent = "صدا: " + (v ? v.name : "-") + " · سرعت " + pct(s.speed) + " · " + fa(s.bitrate) + " کیلوبیت (از تنظیمات)";
+  if (typeof renderMultiVoiceExport === "function") renderMultiVoiceExport();
+  if (saveKind !== "pdf") {
+    const mvOn = !!s.exportMultiVoice && typeof exportVoiceIds === "function";
+    const mvIds = mvOn ? exportVoiceIds() : [];
+    if (mvOn && mvIds.length >= 2) {
+      const names = mvIds.map(id => (S.voices.find(x => x.id === id) || {}).name || id).join(" ← ");
+      $("mp3Voice").textContent = `خواندن نوبتی با ${fa(mvIds.length)} مدل صدا: ${names} · سرعت ${pct(s.speed)} · ${fa(s.bitrate)} کیلوبیت`;
+    } else {
+      $("mp3Voice").textContent = "صدا: " + (v ? v.name : "-") + " · سرعت " + pct(s.speed) + " · " + fa(s.bitrate) + " کیلوبیت (از تنظیمات)";
+    }
+  }
   document.documentElement.classList.remove("boot-dark");
 }
 let saveT;
@@ -193,8 +204,46 @@ async function restartNow(gen, reason = "") {
     if (wasPaused) { actx.suspend(); reader.paused = true; setPlayButton(); }
   }
 }
-$("voice").onchange = e => { setSetting("voice", e.target.value); $("dockVoice").value = e.target.value; ttsCache.clear(); restartReading(true, "در حال تعویض صدا…"); };
-$("dockVoice").onchange = e => { $("voice").value = e.target.value; setSetting("voice", e.target.value); ttsCache.clear(); restartReading(true, "در حال تعویض صدا…"); };
+function syncVoiceUI() {
+  const cur = S.settings.voice;
+  $("voice").value = cur;
+  $("dockVoice").value = cur;
+  const v = (S.voices || []).find(x => x.id === cur);
+  if ($("dockVoiceName")) $("dockVoiceName").textContent = v ? v.name : "مدل صدا";
+  if ($("dockVoiceTag")) $("dockVoiceTag").textContent = "";
+  document.querySelectorAll(".voice-card").forEach(c => {
+    const on = c.dataset.voice === cur;
+    c.classList.toggle("active", on);
+    c.setAttribute("aria-checked", String(on));
+  });
+  const nat = S.settings.naturalTone !== false;
+  if ($("vpNaturalTone")) $("vpNaturalTone").checked = nat;
+  const cp = S.settings.commaPause || "short", sp = S.settings.sentencePause || "normal";
+  const rhythm = (cp === "short" && sp === "short") ? "fast" : (cp === "long" && sp === "long") ? "calm" : "normal";
+  document.querySelectorAll("input[name=vpRhythm]").forEach(r => r.checked = r.value === rhythm);
+}
+function selectVoice(id, restart = true) {
+  if (!id) return;
+  const changed = S.settings.voice !== id;
+  setSetting("voice", id);
+  syncVoiceUI();
+  if (changed) {
+    ttsCache.clear();
+    if (restart) restartReading(true, "در حال تعویض صدا…");
+  }
+}
+$("voice").onchange = e => selectVoice(e.target.value);
+$("dockVoice").onchange = e => selectVoice(e.target.value);
+if ($("dockVoiceBtn")) {
+  $("dockVoiceBtn").onclick = () => {
+    syncVoiceUI();
+    openPanel("voicePanel");
+    $("dockVoiceBtn").setAttribute("aria-expanded", "true");
+  };
+  new MutationObserver(() => {
+    if ($("voicePanel").hidden) $("dockVoiceBtn").setAttribute("aria-expanded", "false");
+  }).observe($("voicePanel"), { attributes: true, attributeFilter: ["hidden"] });
+}
 // reading speed: 0.5× to 2×; the slider, the −/+ buttons, the presets and the Speed menu all come here
 // (shown in percent: ۱۰۰٪ is normal; the −/+ buttons go one percent at a time, the menu's keys five)
 const pct = v => fa(Math.round(Number(v) * 100)) + "٪";
@@ -238,15 +287,25 @@ $("fontSize").oninput = e => setSetting("fontSize", +e.target.value);
 $("lineHeight").oninput = e => setSetting("lineHeight", +e.target.value);
 document.querySelectorAll("input[name=cursor]").forEach(r => r.onchange = () => setSetting("cursor", r.value));
 $("autoNext").onchange = e => { setSetting("autoNext", e.target.checked); restartReading(); };
-$("naturalTone").onchange = e => { setSetting("naturalTone", e.target.checked); ttsCache.clear(); bufCache.clear(); restartReading(); };
+$("naturalTone").onchange = e => { setSetting("naturalTone", e.target.checked); syncVoiceUI(); ttsCache.clear(); bufCache.clear(); restartReading(); };
+if ($("vpNaturalTone")) $("vpNaturalTone").onchange = e => { setSetting("naturalTone", e.target.checked); $("naturalTone").checked = e.target.checked; ttsCache.clear(); bufCache.clear(); restartReading(); };
+document.querySelectorAll("input[name=vpRhythm]").forEach(r => r.onchange = () => {
+  const map = { fast: ["short", "short"], normal: ["short", "normal"], calm: ["long", "long"] };
+  const [cp, sp] = map[r.value] || ["short", "normal"];
+  setSetting("commaPause", cp);
+  setSetting("sentencePause", sp);
+  document.querySelectorAll("input[name=comma]").forEach(x => x.checked = x.value === cp);
+  document.querySelectorAll("input[name=sentence]").forEach(x => x.checked = x.value === sp);
+  ttsCache.clear(); restartReading();
+});
 if ($("showWaitReason")) $("showWaitReason").onchange = e => { setSetting("showWaitReason", e.target.checked); if (!e.target.checked && window.setReadingWait) window.setReadingWait(""); };
 if ($("smoothExtra")) $("smoothExtra").onchange = e => setSetting("smoothBuffer", e.target.checked ? "extra" : "normal");
 document.querySelectorAll("input[name=trQuality]").forEach(r => r.onchange = () => { setSetting("trQuality", r.value); pageCache.clear(); });
 $("autoPlay").onchange = e => setSetting("autoPlay", e.target.checked);
 document.querySelectorAll("input[name=hl]").forEach(r => r.onchange = () => setSetting("highlight", r.value));
 document.querySelectorAll("input[name=fc]").forEach(r => r.onchange = () => setSetting("frameColor", r.value));
-document.querySelectorAll("input[name=comma]").forEach(r => r.onchange = () => { setSetting("commaPause", r.value); ttsCache.clear(); restartReading(); });
-document.querySelectorAll("input[name=sentence]").forEach(r => r.onchange = () => { setSetting("sentencePause", r.value); restartReading(); });
+document.querySelectorAll("input[name=comma]").forEach(r => r.onchange = () => { setSetting("commaPause", r.value); syncVoiceUI(); ttsCache.clear(); restartReading(); });
+document.querySelectorAll("input[name=sentence]").forEach(r => r.onchange = () => { setSetting("sentencePause", r.value); syncVoiceUI(); restartReading(); });
 document.querySelectorAll("input[name=theme]").forEach(r => r.onchange = () => setSetting("theme", r.value));
 document.querySelectorAll("input[name=font]").forEach(r => r.onchange = () => setSetting("font", r.value));
 document.querySelectorAll("input[name=accent]").forEach(r => r.onchange = () => { S.settings.accentFixed = true; setSetting("accent", r.value); });
@@ -333,12 +392,54 @@ new MutationObserver(() => { if ($("settings").hidden && $("setFind").value) { $
 $("persianYeh").onchange = e => setSetting("persianYeh", e.target.checked, true);
 $("reversed").onchange = e => setSetting("reversed", e.target.checked, true);
 $("bitrate").onchange = e => setSetting("bitrate", +e.target.value);
-$("preview").onclick = async () => {
+async function previewVoice(voiceId, btn) {
+  const prev = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "…"; }
   try {
-    const url = await ttsUrl("سلام. من خوانا هستم و متن فارسی را برای شما می‌خوانم.");
-    stopReading(); const a = $("audio"); a.src = url; a.play();
-  } catch (e) { toast(e.message); }
-};
+    const url = await ttsUrl("سلام. من کتاب‌خوان هستم و متن فارسی را برای شما می‌خوانم.", voiceId);
+    stopReading(); const a = $("audio"); a.src = url; await a.play();
+  } catch (e) { toast(e.message); } finally { if (btn) { btn.disabled = false; btn.textContent = prev; } }
+}
+$("preview").onclick = () => previewVoice(S.settings.voice, $("preview"));
+
+function renderVoiceCards(container, closeOnPick) {
+  if (!container) return;
+  container.textContent = "";
+  const groups = [["mine", "صدای من"], ["natural", "صدای طبیعی"]];
+  for (const [g, label] of groups) {
+    const list = (S.voices || []).filter(v => v.group === g);
+    if (!list.length) continue;
+    const head = document.createElement("div");
+    head.className = "voice-group-title";
+    head.textContent = label;
+    container.append(head);
+    const grid = document.createElement("div");
+    grid.className = "voice-grid";
+    for (const v of list) {
+      const card = document.createElement("div");
+      card.className = "voice-card" + (v.id === S.settings.voice ? " active" : "");
+      card.dataset.voice = v.id;
+      card.setAttribute("role", "radio");
+      card.setAttribute("tabindex", "0");
+      card.setAttribute("aria-checked", String(v.id === S.settings.voice));
+      const badgeClass = v.group === "mine" ? "vc-ic-mine" : "vc-ic-m";
+      const sub = v.group === "mine" ? "صدای ضبط‌شده‌ی شما" : "صدای طبیعی";
+      card.innerHTML = `<span class="vc-ic ${badgeClass}" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4z" fill="#fff"/><path d="M15.5 9a4 4 0 0 1 0 6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span><span class="vc-meta"><span class="vc-name">${esc(v.name)}</span><span class="vc-sub">${esc(sub)}</span></span><button type="button" class="vc-play" aria-label="شنیدن ${esc(v.name)}">▶</button>`;
+      card.querySelector(".vc-play").onclick = ev => {
+        ev.stopPropagation();
+        previewVoice(v.id, ev.currentTarget);
+      };
+      const pick = () => {
+        selectVoice(v.id, true);
+        if (closeOnPick) $("voicePanel").hidden = true;
+      };
+      card.onclick = pick;
+      card.onkeydown = ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } };
+      grid.append(card);
+    }
+    container.append(grid);
+  }
+}
 
 function fillVoices(voices) {
   S.voices = voices;
@@ -350,9 +451,60 @@ function fillVoices(voices) {
   if (!voices.some(v => v.id === S.settings.voice) && voices[0]) S.settings.voice = voices[0].id;
   // the same list on the reading bar, so the voice can be changed without opening Settings
   $("dockVoice").innerHTML = $("voice").innerHTML;
-  $("dockVoice").value = S.settings.voice;
+  renderVoiceCards($("voiceCards"), false);
+  renderVoiceCards($("voicePanelCards"), true);
+  if (typeof renderMultiVoiceExport === "function") renderMultiVoiceExport();
+  syncVoiceUI();
   $("myDel").hidden = !voices.some(v => v.id === "mine");
 }
+
+const DEFAULT_EXPORT_VOICES = ["seda1", "seda2", "seda4", "seda7", "seda10"];
+function exportVoiceIds() {
+  const avail = new Set((S.voices || []).map(v => v.id));
+  const saved = Array.isArray(S.settings.exportVoices) ? S.settings.exportVoices : DEFAULT_EXPORT_VOICES;
+  let picked = [...new Set(saved.filter(id => avail.has(id)))];
+  if (picked.length < 2) {
+    const fallback = DEFAULT_EXPORT_VOICES.filter(id => avail.has(id));
+    picked = fallback.length >= 2 ? fallback : (S.voices || []).slice(0, 5).map(v => v.id);
+  }
+  return picked;
+}
+function renderMultiVoiceExport() {
+  const cb = $("multiVoiceExport"), box = $("multiVoiceBox"), grid = $("multiVoiceGrid");
+  if (!cb || !box || !grid) return;
+  const on = !!S.settings.exportMultiVoice;
+  cb.checked = on;
+  box.hidden = !on || saveKind === "pdf";
+  const picked = new Set(exportVoiceIds());
+  grid.textContent = "";
+  for (const v of (S.voices || [])) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    const active = picked.has(v.id);
+    btn.className = "mv-chip" + (active ? " on" : "");
+    btn.textContent = (active ? "✓ " : "") + v.name;
+    btn.setAttribute("aria-pressed", String(active));
+    btn.onclick = () => {
+      const cur = exportVoiceIds();
+      const idx = cur.indexOf(v.id);
+      if (idx >= 0) {
+        if (cur.length <= 2) return toast("برای خواندن نوبتی دست‌کم ۲ مدل صدا لازم است.");
+        cur.splice(idx, 1);
+      } else {
+        cur.push(v.id);
+      }
+      setSetting("exportVoices", cur);
+    };
+    grid.append(btn);
+  }
+}
+if ($("multiVoiceExport")) $("multiVoiceExport").onchange = e => setSetting("exportMultiVoice", e.target.checked);
+if ($("multiVoiceDefault")) $("multiVoiceDefault").onclick = () => {
+  const avail = new Set((S.voices || []).map(v => v.id));
+  const dflt = DEFAULT_EXPORT_VOICES.filter(id => avail.has(id));
+  setSetting("exportVoices", dflt.length >= 2 ? dflt : (S.voices || []).slice(0, 5).map(v => v.id));
+  toast("۵ مدل صدای متنوع انتخاب شد.");
+};
 
 /* ---------------- my voice ----------------
    Recorded as plain PCM through Web Audio and sent as a WAV file, so it works the same in
@@ -408,7 +560,7 @@ $("recBtn").onclick = async () => {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, autoGainControl: true, noiseSuppression: true } });
   } catch (e) {
     recAsking = false;
-    $("myStatus").textContent = "خوانا به میکروفون دسترسی ندارد. در تنظیمات دستگاه اجازه‌ی میکروفون را بدهید، یا یک فایل صوتی ضبط‌شده را با «انتخاب فایل صدا» وارد کنید.";
+    $("myStatus").textContent = "کتاب‌خوان به میکروفون دسترسی ندارد. در تنظیمات دستگاه اجازه‌ی میکروفون را بدهید، یا یک فایل صوتی ضبط‌شده را با «انتخاب فایل صدا» وارد کنید.";
     return;
   }
   recAsking = false;
@@ -452,6 +604,7 @@ function renderLexicon() {
   // (the list is shut until opened, and not there when empty: a long list made the settings busy to look at)
   const n = Object.keys(lex).length;
   $("lexDetails").hidden = !n;
+  if ($("lexExport")) $("lexExport").hidden = !n;
   $("lexSummary").textContent = "فهرست اصلاح‌ها (" + fa(n) + ")";
   $("lexList").innerHTML = Object.entries(lex).map(([w, p]) =>
     `<div class="lexrow"><span class="w">${esc(w)} ← <b>${esc(p)}</b></span>` +
@@ -509,6 +662,49 @@ $("lexList").addEventListener("click", async e => {
   if (say) sayWord(say.dataset.say, (S.settings.lexicon || {})[say.dataset.say] || "", say);
   if (del) { const lex = { ...(S.settings.lexicon || {}) }; delete lex[del.dataset.del]; await saveLexicon(lex); }
 });
+if ($("lexExport")) $("lexExport").onclick = async () => {
+  const lex = S.settings.lexicon || {};
+  if (!Object.keys(lex).length) return toast("فهرست تلفظ‌ها خالی است.");
+  if (isAndroidShell()) {
+    try { await jpost("/api/lexicon_export", {}); } catch (e) { toast(e.message); }
+    return;
+  }
+  const blob = new Blob([JSON.stringify({ lexicon: lex }, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "khana-lexicon.json"; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+if ($("lexImport") && $("lexImportFile")) {
+  $("lexImport").onclick = () => $("lexImportFile").click();
+  $("lexImportFile").onchange = async () => {
+    const file = $("lexImportFile").files[0];
+    $("lexImportFile").value = "";
+    if (!file) return;
+    if (file.size > 512 * 1024) return toast("فایل فهرست خیلی بزرگ است.");
+    try {
+      const parsed = JSON.parse(await file.text());
+      const raw = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed.lexicon && typeof parsed.lexicon === "object" && !Array.isArray(parsed.lexicon) ? parsed.lexicon : parsed)
+        : null;
+      if (!raw) throw new Error("قالب فایل درست نیست.");
+      const merged = { ...(S.settings.lexicon || {}) };
+      let added = 0;
+      for (const [k, v] of Object.entries(raw)) {
+        if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
+        if (typeof k !== "string" || typeof v !== "string") continue;
+        const wk = stripWordPunct(k), pv = v.trim();
+        if (!wk || !pv || wk.length > 80 || pv.length > 80) continue;
+        if (Object.keys(merged).length >= 5000 && !(wk in merged)) break;
+        merged[wk] = pv;
+        added++;
+      }
+      if (!added) return toast("کلمه‌ی معتبری در فایل پیدا نشد.");
+      await saveLexicon(merged);
+      toast(`${fa(added)} اصلاح تلفظ اضافه شد.`);
+    } catch (_) { toast("این فایل خوانده نشد. یک فایل JSON درست انتخاب کنید."); }
+  };
+}
 // select a word in the text -> a button offers to fix how it is read
 document.addEventListener("selectionchange", () => {
   const t = stripWordPunct(getSelection().toString());
@@ -540,9 +736,9 @@ function markedLetters(word) {
   return letters;
 }
 function markLetter(letter, mark) {
-  if (!mark) return letter.replace(/[\u064b-\u0652]/g, "");
+  if (!mark) return letter.replace(/[\u064b-\u0655\u0670]/g, "");
   if (mark === "ّ") return letter.includes(mark) ? letter.replace(/ّ/g, "") : letter.replace(/ْ/g, "") + mark;
-  return letter.replace(mark === "ْ" ? /[\u064b-\u0652]/g : /[\u064b-\u0650\u0652]/g, "") + mark;
+  return letter.replace(mark === "ْ" ? /[\u064b-\u0655\u0670]/g : /[\u064b-\u0650\u0652-\u0655\u0670]/g, "") + mark;
 }
 function currentPronSpelling() {
   const typed = $("pronText") ? $("pronText").value.trim() : "";
@@ -726,7 +922,7 @@ addEventListener("keydown", e => {
 });
 $("settingsBtn").onclick = () => openPanel("settings");
 $("visionBtn").onclick = () => toggleLowVision();
-$("aboutBtn").onclick = () => openPanel("aboutPanel");  // (1.29: Khana's logo opens «درباره‌ی خوانا»)
+$("aboutBtn").onclick = () => openPanel("aboutPanel");  // (1.29: Khana's logo opens «درباره‌ی کتاب‌خوان»)
 $("lowVisionTop").onclick = () => toggleLowVision();
 $("lowVisionSwitch").onchange = e => { if (e.target.checked !== !!S.settings.lowVision) toggleLowVision(); };
 // (1.29) «نمایش درشت و پررنگ», the low-vision mode: one touch makes everything large and strong (yellow on black, large text and buttons, a large
@@ -1915,11 +2111,11 @@ $("copy").onclick = async () => {
    scheduled to start exactly when the previous one ends (plus a natural pause), and the next
    sentences and the next page are prepared ahead, so there is no wait between paragraphs. */
 const ttsCache = new Map();  // text -> Promise<blob URL> (voice test / dictionary)
-async function ttsUrl(text) {
-  const key = S.settings.voice + "|" + S.settings.speed + "|" + text;
+async function ttsUrl(text, voiceId = S.settings.voice) {
+  const key = voiceId + "|" + S.settings.speed + "|" + text;
   if (!ttsCache.has(key)) {
     const p = api("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voice: S.settings.voice, speed: S.settings.speed }) })
+      body: JSON.stringify({ text, voice: voiceId, speed: S.settings.speed }) })
       .then(r => r.blob()).then(b => URL.createObjectURL(b));
     p.catch(() => ttsCache.delete(key));
     ttsCache.set(key, p);
@@ -2520,6 +2716,7 @@ function openSave(kind) {
   $("mp3Cancel").disabled = false;
   $("mp3Title").textContent = pdf ? "ذخیره‌ی ترجمه‌ی فارسی به صورت PDF" : "ذخیره به صورت فایل صدا";
   $("fmtField").hidden = pdf; $("fastField").hidden = pdf; $("endWordField").hidden = pdf;
+  if ($("multiVoiceField")) $("multiVoiceField").hidden = pdf;
   syncBitrate();
   $("mp3Start").textContent = pdf ? "ساختن PDF" : "ساختن فایل صدا";
   applySettings();
@@ -2557,7 +2754,9 @@ $("mp3Start").onclick = async () => {
       }
     }
     job = saveKind === "pdf" ? await jpost("/api/pdf", { doc: S.doc.id, first, last })
-      : await jpost("/api/mp3", { doc: S.doc.id, first, last, voice: S.settings.voice, speed: S.settings.speed,
+      : await jpost("/api/mp3", { doc: S.doc.id, first, last, voice: S.settings.voice,
+      voices: ($("multiVoiceExport") && $("multiVoiceExport").checked) ? exportVoiceIds() : [],
+      speed: S.settings.speed,
       format: document.querySelector("input[name=afmt]:checked").value, fast: $("fastExport").checked, endWord: $("endWordExport").checked,
       bitrate: S.settings.bitrate, reversed: S.settings.reversed, persianYeh: S.settings.persianYeh, translate: translating() });
     $("mp3Status").hidden = false; $("mp3Reveal").hidden = true;
@@ -2616,16 +2815,68 @@ async function poll() {
 }
 
 /* ---------------- «فایل‌های من»: the sound files kept inside the app (a phone), played here ---------------- */
-let libUrl = null;
-function libStop() {
+let libUrl = null, libT = 0, libSeekBusy = false, libDurationMs = 0, libPaused = false;
+const isAndroidShell = () => document.documentElement.classList.contains("android-reader");
+function libClock(ms) {
+  const s = Math.max(0, Math.floor((ms || 0) / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const mm = String(m).padStart(2, "0"), ss = String(sec).padStart(2, "0");
+  return (h > 0 ? String(h).padStart(2, "0") + ":" : "") + mm + ":" + ss;
+}
+function libStop(keepNative = false) {
+  clearTimeout(libT); libT = 0;
   const au = $("libAudio");
   au.pause(); au.removeAttribute("src"); au.load();
   if (libUrl) { URL.revokeObjectURL(libUrl); libUrl = null; }
-  $("libPlayer").hidden = true;
+  if (!keepNative && isAndroidShell()) {
+    jpost("/api/lib_play_stop", {}).catch(() => {});
+  }
+  if (!keepNative) $("libPlayer").hidden = true;
+}
+async function libPoll() {
+  clearTimeout(libT);
+  if ($("libPanel").hidden || !isAndroidShell()) return;
+  try {
+    const st = await jget("/api/lib_play_status");
+    if (!st.active) {
+      $("libPlayer").hidden = true;
+      if (st.error) toast(st.error);
+      return;
+    }
+    libPaused = !!st.paused;
+    libDurationMs = st.durationMs || 0;
+    $("libNow").textContent = st.name || "";
+    $("libAudio").hidden = true;
+    $("libNative").hidden = false;
+    $("libPlayer").hidden = false;
+    $("libPlayPause").textContent = libPaused ? "ادامه" : "مکث";
+    if (!libSeekBusy) {
+      $("libSeek").value = libDurationMs > 0 ? Math.round((st.positionMs * 1000) / libDurationMs) : 0;
+    }
+    $("libTime").textContent = `${libClock(st.positionMs)} / ${libClock(libDurationMs)}`;
+    libT = setTimeout(libPoll, 500);
+  } catch (e) { }
+}
+if ($("libPlayPause")) $("libPlayPause").onclick = () => {
+  jpost("/api/lib_play_pause", { paused: !libPaused }).then(libPoll).catch(e => toast(e.message));
+};
+if ($("libStopBtn")) $("libStopBtn").onclick = () => libStop(false);
+if ($("libSeek")) {
+  $("libSeek").oninput = () => {
+    libSeekBusy = true;
+    const ms = libDurationMs > 0 ? Math.round((Number($("libSeek").value) / 1000) * libDurationMs) : 0;
+    $("libTime").textContent = `${libClock(ms)} / ${libClock(libDurationMs)}`;
+  };
+  $("libSeek").onchange = () => {
+    const ms = libDurationMs > 0 ? Math.round((Number($("libSeek").value) / 1000) * libDurationMs) : 0;
+    libSeekBusy = false;
+    jpost("/api/lib_play_seek", { positionMs: ms }).then(libPoll).catch(e => toast(e.message));
+  };
 }
 async function libShow() {
   let r;
   try { r = await jget("/api/library"); } catch (e) { return toast(e.message); }
+  if (isAndroidShell()) libPoll();
   const list = $("libList");
   list.textContent = "";
   $("libEmpty").hidden = r.files.length > 0;
@@ -2647,14 +2898,25 @@ async function libShow() {
     const play = document.createElement("button"); play.type = "button"; play.className = "primary"; play.textContent = "▶ پخش";
     play.onclick = async () => {
       try {
-        stopReading(); libStop();
+        stopReading(); libStop(true);
         play.disabled = true;
-        const blob = await (await api("/api/library_file?" + q)).blob();
-        libUrl = URL.createObjectURL(blob);
-        $("libNow").textContent = f.name;
-        $("libPlayer").hidden = false;
-        $("libAudio").src = libUrl;
-        await $("libAudio").play();
+        if (isAndroidShell()) {
+          await jpost("/api/lib_play_start", { name: f.name });
+          $("libNow").textContent = f.name;
+          $("libAudio").hidden = true;
+          $("libNative").hidden = false;
+          $("libPlayer").hidden = false;
+          libPoll();
+        } else {
+          $("libNative").hidden = true;
+          $("libAudio").hidden = false;
+          const blob = await (await api("/api/library_file?" + q)).blob();
+          libUrl = URL.createObjectURL(blob);
+          $("libNow").textContent = f.name;
+          $("libPlayer").hidden = false;
+          $("libAudio").src = libUrl;
+          await $("libAudio").play();
+        }
       } catch (e) { toast(e.message); } finally { play.disabled = false; }
     };
     const out = document.createElement("button"); out.type = "button"; out.textContent = "ذخیره در دستگاه";
@@ -2664,7 +2926,7 @@ async function libShow() {
     del.onclick = async () => {
       // (asked by a second tap, not by a question window)
       if (!sure) { sure = true; del.textContent = "تأیید حذف"; setTimeout(() => { sure = false; del.textContent = "حذف"; }, 4000); return; }
-      try { if ($("libNow").textContent === f.name) libStop(); await jpost("/api/library_delete?" + q, {}); toast("حذف شد."); libShow(); } catch (e) { toast(e.message); }
+      try { if ($("libNow").textContent === f.name) libStop(false); await jpost("/api/library_delete?" + q, {}); toast("حذف شد."); libShow(); } catch (e) { toast(e.message); }
     };
     acts.append(play, out, del);
     row.append(info, acts);
@@ -2672,7 +2934,12 @@ async function libShow() {
   }
 }
 $("libBtn").onclick = () => { openPanel("libPanel"); libShow(); };
-new MutationObserver(() => { if ($("libPanel").hidden) libStop(); }).observe($("libPanel"), { attributes: true, attributeFilter: ["hidden"] });
+new MutationObserver(() => {
+  if ($("libPanel").hidden) {
+    if (isAndroidShell()) clearTimeout(libT);
+    else libStop(false);
+  }
+}).observe($("libPanel"), { attributes: true, attributeFilter: ["hidden"] });
 
 /* ---------------- misc ---------------- */
 let toastT;
@@ -2871,7 +3138,7 @@ $("fastExport").onchange = () => {
   const fast = $("fastExport").checked;
   jpost("/api/mp3fast", { fast }).then(() => toast(fast ? "از این لحظه سریع‌تر ساخته می‌شود." : "از این لحظه با بررسی کامل ساخته می‌شود.")).catch(e => toast(e.message));
 };
-$("fastExport").checked = /Android|iPhone|iPad/i.test(navigator.userAgent);   // (on by default on the phones, which are slower)
+$("fastExport").checked = false;   // Full quality checks by default; the faster unchecked mode is an explicit choice.
 $("m4aLabel").hidden = /Android|iPhone|iPad/i.test(navigator.userAgent);   // (the phones have no M4A maker)
 // (Windows: no MP3 and no M4A maker yet: WAV)
 if (/Windows/i.test(navigator.userAgent)) {

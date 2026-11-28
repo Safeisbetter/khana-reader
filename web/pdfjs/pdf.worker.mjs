@@ -36095,11 +36095,13 @@ class PartialEvaluator {
       const currentTransform = getCurrentTextTransform();
       let posX = currentTransform[4];
       let posY = currentTransform[5];
+      const box = textState.clipBox || viewBox;
+      const pad = textState.clipBox ? 1.5 : 0;
       if (textState.font?.vertical) {
-        if (posX < viewBox[0] || posX > viewBox[2] || posY + glyphWidth < viewBox[1] || posY > viewBox[3]) {
+        if (posX < box[0] - pad || posX > box[2] + pad || posY + glyphWidth < box[1] - pad || posY > box[3] + pad) {
           return false;
         }
-      } else if (posX + glyphWidth < viewBox[0] || posX > viewBox[2] || posY < viewBox[1] || posY > viewBox[3]) {
+      } else if (posX + glyphWidth < box[0] - pad || posX > box[2] + pad || posY < box[1] - pad || posY > box[3] + pad) {
         return false;
       }
       if (!textState.font || !textContentItem.prevTransform) {
@@ -36399,6 +36401,26 @@ class PartialEvaluator {
       textContent.items = [];
       textContent.styles = Object.create(null);
     }
+    let pathMinX = Infinity, pathMinY = Infinity, pathMaxX = -Infinity, pathMaxY = -Infinity;
+    function resetPathBBox() {
+      pathMinX = pathMinY = Infinity;
+      pathMaxX = pathMaxY = -Infinity;
+    }
+    function addPathPoint(ctm, x, y) {
+      const px = ctm[0] * x + ctm[2] * y + ctm[4];
+      const py = ctm[1] * x + ctm[3] * y + ctm[5];
+      if (px < pathMinX) pathMinX = px;
+      if (px > pathMaxX) pathMaxX = px;
+      if (py < pathMinY) pathMinY = py;
+      if (py > pathMaxY) pathMaxY = py;
+    }
+    function intersectClipBox(state, b0, b1, b2, b3) {
+      if (!(b2 - b0 >= 2 && b3 - b1 >= 2)) {
+        return;
+      }
+      const cur = state.clipBox || viewBox;
+      state.clipBox = [Math.max(cur[0], b0), Math.max(cur[1], b1), Math.min(cur[2], b2), Math.min(cur[3], b3)];
+    }
     const timeSlotManager = new TimeSlotManager();
     return new Promise(function promiseBody(resolve, reject) {
       const next = function (promise) {
@@ -36429,6 +36451,49 @@ class PartialEvaluator {
         const fn = operation.fn;
         args = operation.args;
         switch (fn | 0) {
+          case OPS.moveTo:
+          case OPS.lineTo:
+            addPathPoint(textState.ctm, args[0], args[1]);
+            break;
+          case OPS.curveTo:
+            addPathPoint(textState.ctm, args[0], args[1]);
+            addPathPoint(textState.ctm, args[2], args[3]);
+            addPathPoint(textState.ctm, args[4], args[5]);
+            break;
+          case OPS.curveTo2:
+          case OPS.curveTo3:
+            addPathPoint(textState.ctm, args[0], args[1]);
+            addPathPoint(textState.ctm, args[2], args[3]);
+            break;
+          case OPS.rectangle: {
+            const rx = args[0], ry = args[1], rw = args[2], rh = args[3];
+            addPathPoint(textState.ctm, rx, ry);
+            addPathPoint(textState.ctm, rx + rw, ry);
+            addPathPoint(textState.ctm, rx, ry + rh);
+            addPathPoint(textState.ctm, rx + rw, ry + rh);
+            break;
+          }
+          case OPS.clip:
+          case OPS.eoClip:
+            if (pathMinX <= pathMaxX && pathMinY <= pathMaxY) {
+              intersectClipBox(textState, pathMinX, pathMinY, pathMaxX, pathMaxY);
+            }
+            break;
+          case OPS.stroke:
+          case OPS.closeStroke:
+          case OPS.fill:
+          case OPS.eoFill:
+          case OPS.fillStroke:
+          case OPS.eoFillStroke:
+          case OPS.closeFillStroke:
+          case OPS.closeEOFillStroke:
+          case OPS.endPath:
+            resetPathBBox();
+            break;
+          case OPS.save:
+          case OPS.restore:
+            resetPathBBox();
+            break;
           case OPS.setFont:
             const fontNameArg = args[0].name,
               fontSizeArg = args[1];
@@ -36589,6 +36654,12 @@ class PartialEvaluator {
               if (matrix) {
                 xObjStateManager.transform(matrix);
               }
+              const formBBox = lookupNormalRect(dict.getArray("BBox"), null);
+              if (formBBox) {
+                const fb = F32_BBOX_INIT.slice();
+                Util.axialAlignedBoundingBox(formBBox, xObjStateManager.state.ctm, fb);
+                intersectClipBox(xObjStateManager.state, fb[0], fb[1], fb[2], fb[3]);
+              }
               const localResources = dict.get("Resources");
               enqueueChunk();
               const sinkWrapper = textSinkWrapper(sink);
@@ -36606,7 +36677,7 @@ class PartialEvaluator {
                 keepWhiteSpace,
                 prevRefs: seenRefs
               }).then(function () {
-                if (!sinkWrapper.enqueueInvoked) {
+                if (!sinkWrapper.enqueueInvoked && !currentState.clipBox) {
                   emptyXObjectCache.set(name, dict.objId, true);
                 }
                 resolveXObject();
@@ -37807,6 +37878,7 @@ class TextState {
   leading = 0;
   textHScale = 1;
   textRise = 0;
+  clipBox = null;
   setTextMatrix(a, b, c, d, e, f) {
     const m = this.textMatrix;
     m[0] = a;
@@ -37844,6 +37916,7 @@ class TextState {
     clone.textMatrix = this.textMatrix.slice();
     clone.textLineMatrix = this.textLineMatrix.slice();
     clone.fontMatrix = this.fontMatrix.slice();
+    clone.clipBox = this.clipBox ? this.clipBox.slice() : null;
     return clone;
   }
 }

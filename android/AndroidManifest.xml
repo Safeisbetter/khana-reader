@@ -8,8 +8,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.khana.reader.next"
     android:targetSandboxVersion="2"
-    android:versionCode="21"
-    android:versionName="1.37">
+    android:versionCode="22"
+    android:versionName="1.38">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="37" />
 
@@ -21,7 +21,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <application
-        android:label="خوانا جدید"
+        android:label="کتاب‌خوان"
         android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:fullBackupContent="false"
@@ -53,6 +53,11 @@
 
         <service
             android:name="org.khana.reader.ReadService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <service
+            android:name="org.khana.reader.AudioFileService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 

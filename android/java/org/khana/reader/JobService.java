@@ -42,8 +42,8 @@ public final class JobService extends Service {
                 PendingIntent.FLAG_IMMUTABLE);
         Notification n = new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_sys_download)
-                .setContentTitle("خوانا")
-                .setContentText("در حال ساختن فایل… برای سرعت، خوانا را روی صفحه نگه دارید.")
+                .setContentTitle("کتاب‌خوان")
+                .setContentText("در حال ساختن فایل… برای سرعت، کتاب‌خوان را روی صفحه نگه دارید.")
                 .setContentIntent(open)
                 .setVisibility(Notification.VISIBILITY_PRIVATE)
                 .setOngoing(true)

@@ -150,10 +150,16 @@ async function textOf(page) {
         }
         if (typeof it.str === "string" && items.length >= MAX_ITEMS_PER_PAGE) throw new Error("PDF page has too many text items");
         if (typeof it.str !== "string") continue;
-        const [, , c, d, e, f] = pdfjsLib.Util.transform(vp.transform, it.transform);
+        const [a, b, c, d, e, f] = pdfjsLib.Util.transform(vp.transform, it.transform);
         const size = Math.hypot(c, d) || 1;
         if (!it.str.trim() && !it.hasEOL) continue;
-        items.push([it.str, e, f - size * 0.8, e + it.width, f + size * 0.2, size, it.dir === "rtl" ? 1 : 0, it.hasEOL ? 1 : 0]);
+        // Skip vertical/sideways margin or photo-credit runs so they never merge into horizontal body lines
+        if (Math.abs(b) > Math.abs(a) * 1.5) continue;
+        const x0 = Math.min(e, e + it.width), x1 = Math.max(e, e + it.width);
+        const top = f - size * 0.8, bot = f + size * 0.2;
+        // Skip off-page items outside the visible CropBox/viewport (e.g. facing page of a cropped spread)
+        if (x1 <= 0.5 || x0 >= vp.width - 0.5 || bot <= 0.5 || top >= vp.height - 0.5) continue;
+        items.push([it.str, x0, top, x1, bot, size, it.dir === "rtl" ? 1 : 0, it.hasEOL ? 1 : 0]);
       }
     }
   } finally {
@@ -163,9 +169,8 @@ async function textOf(page) {
   let images = false;
   try {
     const ops = await page.getOperatorList();
-    if (!items.some(i => i[0].trim())) {
-      images = ops.fnArray.some(f => IMAGE_OPS.has(f));
-    } else if (ops.fnArray.length <= MAX_OPS_FOR_RULES) {
+    images = ops.fnArray.some(f => IMAGE_OPS.has(f));
+    if (items.some(i => i[0].trim()) && ops.fnArray.length <= MAX_OPS_FOR_RULES) {
       for (const r of findFootnoteRules(ops, vp)) {
         const above = items.filter(i => i[0].trim() && i[4] < r.y - 1).length;
         const below = items.filter(i => i[0].trim() && i[2] > r.y + 1).length;
@@ -296,20 +301,23 @@ async function send(m, transfer) {
   } else { kind = "json"; body = JSON.stringify(m.data); }
   fetch(`${VIEW}reply?id=${encodeURIComponent(String(m.id ?? ""))}&kind=${encodeURIComponent(kind)}${extra}`, { method: "POST", body }).catch(() => {});
 }
-async function handle(m) {
+let work = Promise.resolve();
+function handle(m) {
   if (m.op === "password") { if (passwordWaiter) passwordWaiter(m.cancel ? null : String(m.value ?? "")); return; }
-  const reply = (data, transfer) => send({ id: m.id, ok: true, data }, transfer);
-  try {
-    if (m.op === "open") reply(await open(m.data, m.id));
-    else if (!doc) throw new Error("no document");
-    else if (m.op === "text") reply(await text(m.n));
-    else if (m.op === "render") reply(await render(m.n, m.width));
-    else if (m.op === "gray") { const g = await gray(m.n, m.dpi); reply(g, [g.px.buffer]); }
-    else if (m.op === "outline") reply(await outline());
-    else throw new Error("unknown request");
-  } catch (err) {
-    send({ id: m.id, ok: false, error: String((err && err.message) || err) });
-  }
+  work = work.catch(() => {}).then(async () => {
+    const reply = (data, transfer) => send({ id: m.id, ok: true, data }, transfer);
+    try {
+      if (m.op === "open") reply(await open(m.data, m.id));
+      else if (!doc) throw new Error("no document");
+      else if (m.op === "text") reply(await text(m.n));
+      else if (m.op === "render") reply(await render(m.n, m.width));
+      else if (m.op === "gray") { const g = await gray(m.n, m.dpi); reply(g, [g.px.buffer]); }
+      else if (m.op === "outline") reply(await outline());
+      else throw new Error("unknown request");
+    } catch (err) {
+      send({ id: m.id, ok: false, error: String((err && err.message) || err) });
+    }
+  });
 }
 if (BRIDGE) {
   const session = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");

@@ -177,6 +177,37 @@ fn lookup<'a>(m: &'a [(&str, &str)], k: &str) -> Option<&'a str> {
 
 const GENERAL_LEXICON: &[(&str, &str)] = &[
 
+    // Common word pronounced as a consonant cluster in Persian, not "saghaf".
+    ("سقف", "saqf"),
+    ("سقفِ", "saqfe"),
+    ("طرفدار", "tarafdAr"),
+    ("طرف‌دار", "tarafdAr"),
+    ("طرفداران", "tarafdArAn"),
+    ("طرف‌داران", "tarafdArAn"),
+    ("مشتی", "maSti"),
+    ("بده‌بستان", "bedehbestAn"),
+    ("بدهبستان", "bedehbestAn"),
+    ("بده‌بستان‌ها", "bedehbestAnhA"),
+    ("بدهبستانها", "bedehbestAnhA"),
+    ("مشیت", "maSiyat"),
+    ("مشیتِ", "maSiyate"),
+    ("معاش", "ma?AS"),
+    ("معاشِ", "ma?ASe"),
+    ("خلق", "xalq"),
+    ("خلق‌ها", "xalqhA"),
+    ("خلقها", "xalqhA"),
+    ("اجتماعی", "?ejtemA?i"),
+    ("اجتماعیِ", "?ejtemA?iye"),
+    ("روند", "ravand"),
+    ("تأمل", "ta?ammol"),
+    ("تأملی", "ta?ammoli"),
+    ("روایی", "ravAyi"),
+    ("نوار", "navAr"),
+    ("کاست", "kAset"),
+    ("پستی", "pasti"),
+    ("شفق", "Safaq"),
+    ("برش", "boreS"),
+
     ("فرداست", "fardAst"),
     ("پیش‌رو", "piSru"),
     ("پیشرو", "piSru"),
@@ -287,7 +318,7 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("پایه", "pAye"),
     ("پایه‌ی", "pAyeye"),
     ("متانظریه‌ای", "metAnazariye?i"),
-    ("متانظریهای", "metAnazariyehA"),
+    ("متانظریهای", "metAnazariyehAye"),
     ("متانظریه‌های", "metAnazariyehAye"),
     ("متانظریه‌ها", "metAnazariyehA"),
     ("متانظری", "metAnazari"),
@@ -322,8 +353,8 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("بسطِ", "baste"),
     ("وضع", "vaz?"),
     ("وضعِ", "vaz?e"),
-    ("موضعی", "mowze?i"),
-    ("موضعیِ", "mowze?iye"),
+    ("موضعی", "moze?i"),
+    ("موضعیِ", "moze?iye"),
     ("رویکرد", "ruykard"),
     ("رویکردِ", "ruykarde"),
     ("رویکردی", "ruykardi"),
@@ -418,24 +449,24 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("مولف", "mo?allef"), ("مؤلف", "mo?allef"), ("بسم", "besm"), ("هیدروژن", "hidro;en"), ("مستر", "mester"), ("یوونتوس", "yuventus"),
     ("بطن", "batn"), ("صحیحی", "sahihi"), ("اهلبیت", "?ahlebeyt"), ("اهل‌بیت", "?ahlebeyt"), ("سیدالشهدا", "seyyedoSSohadA"),
     ("ارس", "?aras"), ("فول", "ful"), ("محول", "mohavval"), ("حکام", "hokkAm"),
-    ("اسپم", "?espam"), ("بیع", "bey?"), ("ضایعه", "zAye?e"), ("گود", "gowd"), ("خلیج‌فارس", "xalije fArs"), ("خلیجفارس", "xalije fArs"),
+    ("اسپم", "?espam"), ("بیع", "bey?"), ("ضایعه", "zAye?e"), ("گود", "god"), ("خلیج‌فارس", "xalije fArs"), ("خلیجفارس", "xalije fArs"),
     ("خلیج فارس", "xalije fArs"), ("سهیل", "sohayl"), ("طیبه", "tayyebe"), ("نامجو", "nAmju"), ("معراج", "me?rAj"),
     ("عبدالعزیز", "?abdol?aziz"), ("کوانتومی", "kuAntomi"), ("زیپ", "zip"), ("مسطح", "mosattah"), ("شمش", "SemS"), ("پُر", "por"),
     ("احد", "?ahad"), ("تاسوعا", "tAsu?A"), ("السّلام", "?assalAm"), ("سپه", "sepah"), ("گجت", "gajet"), ("چشمم", "CeSmam"),
     ("موید", "mo?ayyed"), ("مؤید", "mo?ayyed"), ("سه‌گانه", "segAne"), ("سهگانه", "segAne"), ("رؤیت", "ro?yat"), ("رویت", "ro?yat"),
     ("ولوو", "volvo"), ("راکد", "rAked"), ("متعاقبا", "mote?Aqeban"), ("متعاقباً", "mote?Aqeban"), ("معاند", "mo?Aned"),
     ("کرملین", "kremlin"),
-    ("بایت", "bAyt"), ("کمیل", "komeyl"), ("بهسوی", "besuye"), ("به‌سوی", "besuye"), ("مبرم", "mobram"), ("هلال‌احمر", "helAle ahmar"),
-    ("هلالاحمر", "helAle ahmar"), ("هلال احمر", "helAle ahmar"), ("هفدهمین", "hefdahomin"), ("ستار", "sattAr"), ("ستارخان", "sattArxAn"),
+    ("بایت", "bAyt"), ("کمیل", "komeyl"), ("بهسوی", "besuye"), ("به‌سوی", "besuye"), ("مبرم", "mobram"), ("هلال‌احمر", "helAle ?ahmar"),
+    ("هلالاحمر", "helAle ?ahmar"), ("هلال احمر", "helAle ?ahmar"), ("هفدهمین", "hefdahomin"), ("ستار", "sattAr"), ("ستارخان", "sattArxAn"),
     ("لود", "lod"), ("ماکرون", "mAkron"), ("ملقب", "molaqqab"), ("تأویل", "ta?vil"), ("اوستا", "?avestA"), ("مصلای", "mosallAye"),
     ("مصلی", "mosallA"), ("مرودشت", "marvdaSt"), ("شهرری", "Sahre rey"), ("شهر ری", "Sahre rey"), ("والامقام", "vAlAmaqAm"),
     ("دیون", "doyun"), ("هامبورگ", "hAmburg"), ("زیمنس", "zimens"), ("وبر", "veber"), ("لیبل", "leybel"), ("تیمم", "tayammom"),
-    ("ازن", "?ozon"), ("بهموقع", "bemowqe?"), ("به‌موقع", "bemowqe?"), ("عبارتاند", "?ebAratand"), ("عبارت‌اند", "?ebAratand"),
+    ("ازن", "?ozon"), ("بهموقع", "bemoqe?"), ("به‌موقع", "bemoqe?"), ("عبارتاند", "?ebAratand"), ("عبارت‌اند", "?ebAratand"),
     ("مردد", "moradded"), ("سهیلی", "sohayli"), ("سهیلا", "soheylA"), ("امثالهم", "?amsAlehem"), ("نهجالبلاغه", "nahjolbalAqe"),
     ("نهج‌البلاغه", "nahjolbalAqe"), ("اینشتین", "?inSteyn"),
     ("مبداء", "mabda?"), ("میلر", "miler"), ("مشاع", "moSA?"), ("تیمملی", "time melli"), ("پلیر", "pleyer"), ("مفتح", "mofatteh"),
     ("مفسد", "mofsed"), ("لوپز", "lopez"), ("کوانتوم", "kuAntom"), ("بیوقفه", "biveqfe"), ("بی‌وقفه", "biveqfe"), ("مجد", "majd"),
-    ("المنت", "?elemAnt"), ("برگزیت", "bregzit"), ("هاوکینگ", "hAking"), ("میایستد", "miistad"), ("می‌ایستد", "miistad"),
+    ("المنت", "?elemAnt"), ("برگزیت", "bregzit"), ("هاوکینگ", "hAking"), ("میایستد", "mi?istad"), ("می‌ایستد", "mi?istad"),
     ("کارن", "kAren"), ("جوید", "juyid"), ("کمنظیر", "kamnazir"), ("کم‌نظیر", "kamnazir"), ("فوتون", "foton"), ("مشرک", "moSrek"),
     ("پرشیا", "parSiyA"),
     ("اخص", "?axass"), ("درایران", "dar ?irAn"), ("بهسمت", "besamte"), ("به‌سمت", "besamte"), ("دبلیو", "dabelyu"), ("پتنت", "patent"),
@@ -449,9 +480,9 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("یک و نیم", "yeko nim"),
     ("دو و نیم", "do?o nim"),
     ("سه و نیم", "se?o nim"),
-    ("چهار و نیم", "cAhAro nim"),
+    ("چهار و نیم", "CahAro nim"),
     ("پنج و نیم", "panjo nim"),
-    ("شش و نیم", "SiSo nim"),
+    ("شش و نیم", "SeSo nim"),
     ("هفت و نیم", "hafto nim"),
     ("هشت و نیم", "haSto nim"),
     ("نه و نیم", "noho nim"),
@@ -500,7 +531,8 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("اشکال سازماندهی", "?aSkAle sAzmAndehi"),
     ("اشکال خاصی", "?aSkAle xAssi"),
     ("اشکال خاص", "?aSkAle xAss"),
-    ("انواع و اشکال", "?anvA? o ?aSkAle"),
+    ("انواع و اشکال", "?anvA? ?o ?aSkAl"),
+    ("انواع و اشکالِ", "?anvA? ?o ?aSkAle"),
     ("به اشکال", "be ?aSkAle"),
     ("در اشکال", "dar ?aSkAle"),
     ("از اشکال", "?az ?aSkAle"),
@@ -523,8 +555,8 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("هفته نامه", "haftenAme"),
     ("ویژه نامه", "vi;enAme"),
     ("گام جلوتر", "gAm jelotar"),
-    ("دار و دسته", "dAr o daste"),
-    ("هرج و مرج", "harj o marj"),
+    ("دار و دسته", "dAr ?o daste"),
+    ("هرج و مرج", "harj ?o marj"),
     ("با فرض اینکه", "bA farze ?inke"),
     ("فرض اینکه", "farze ?inke"),
     ("گو اینکه", "gu ?inke"),
@@ -828,7 +860,8 @@ const GENERAL_LEXICON: &[(&str, &str)] = &[
     ("شش", "SeS"),
     ("پرتره", "portre"),
     ("شیء", "Sey?"),
-    ("منافع", "manAfe?e"),
+    ("منافع", "manAfe?"),
+    ("منافعِ", "manAfe?e"),
     ("درباره", "darbAreye"),
     ("نکنند", "nakonand"),
     ("رای", "ra?y"),
@@ -934,13 +967,50 @@ fn ends_any(s: &str, e: &[&str]) -> bool {
 pub struct LexiconG2P {
     pub base: OnnxG2P,
     lexicon: Mutex<(Vec<(String, String)>, Option<&'static fancy_regex::Regex>)>,
+    last_user: Mutex<Option<Vec<(String, String)>>>,
     plain: Mutex<HashMap<String, String>>,
     memo: Mutex<HashMap<(String, bool), String>>,
+    marked_memo: Mutex<HashMap<String, String>>,
+}
+
+fn builtin_lexicon_entries() -> &'static Vec<(String, String)> {
+    static BUILTIN: std::sync::OnceLock<Vec<(String, String)>> = std::sync::OnceLock::new();
+    BUILTIN.get_or_init(|| {
+        let mut out: Vec<(String, String)> = Vec::new();
+        let mut idx_by_word: HashMap<String, usize> = HashMap::new();
+        for (a, b) in BUILTIN_LEXICON.iter().chain(GENERAL_LEXICON).chain(RUST_LEXICON) {
+            let word = repair_default(a);
+            let ph = pronounce(b);
+            if !word.is_empty() && !ph.is_empty() {
+                if let Some(&idx) = idx_by_word.get(&word) {
+                    out[idx].1 = ph;
+                } else {
+                    idx_by_word.insert(word.clone(), out.len());
+                    out.push((word, ph));
+                }
+            }
+        }
+        out
+    })
 }
 
 impl LexiconG2P {
     pub fn new(base: OnnxG2P) -> Self {
-        LexiconG2P { base, lexicon: Mutex::new((Vec::new(), None)), plain: Mutex::new(HashMap::new()), memo: Mutex::new(HashMap::new()) }
+        LexiconG2P {
+            base,
+            lexicon: Mutex::new((Vec::new(), None)),
+            last_user: Mutex::new(None),
+            plain: Mutex::new(HashMap::new()),
+            memo: Mutex::new(HashMap::new()),
+            marked_memo: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn clear_caches(&self) {
+        self.memo.lock().unwrap().clear();
+        self.marked_memo.lock().unwrap().clear();
+        self.plain.lock().unwrap().clear();
+        self.base.clear_memo();
     }
 
     pub fn spelling_phonemes(&self, spelling: &str) -> R {
@@ -956,12 +1026,12 @@ impl LexiconG2P {
         if search(PHONEME_WORD, &spelling.replace(' ', "")) {
             return Ok(pronounce(spelling));
         }
-        // 3) Persian spelling WITH vowel marks (َ ِ ُ ْ ّ): merge user's explicit marks onto base G2P
+        // 3) Persian spelling WITH vowel marks (َ ِ ُ ْ ّ ً ٌ ٍ ٓ ٔ ٰ): merge user's explicit marks onto base G2P
         //    so marking even 1 letter (e.g. "بُرش" or "مُبتنی" or "اَشکال") keeps all other vowels natural!
-        if search(r"[ً-ْ]", spelling) {
+        if search(r"[ً-ٕ\u{0670}]", spelling) {
             let mut out_words = Vec::new();
             for w in split_ws(spelling) {
-                let plain: String = w.chars().filter(|c| !('\u{064b}'..='\u{0652}').contains(c) && *c != '\u{0670}').collect();
+                let plain: String = w.chars().filter(|c| !('\u{064b}'..='\u{0655}').contains(c) && *c != '\u{0670}').collect();
                 let base_ph = if !plain.is_empty() {
                     self.base.phonemise(&repair_default(&plain), true).unwrap_or_default()
                 } else {
@@ -991,30 +1061,52 @@ impl LexiconG2P {
     }
 
     pub fn set_lexicon(&self, user: &[(String, String)]) {
-        let mut all: Vec<(String, String, bool)> =
-            BUILTIN_LEXICON.iter().chain(GENERAL_LEXICON).chain(RUST_LEXICON).map(|(a, b)| (a.to_string(), b.to_string(), true)).collect();
-        for (w, s) in user {
+        let mut sorted_user: Vec<(String, String)> = user.to_vec();
+        sorted_user.sort();
+        {
+            let last = self.last_user.lock().unwrap();
+            if last.as_deref() == Some(sorted_user.as_slice()) {
+                return;
+            }
+        }
+        let mut lex: Vec<(String, String)> = builtin_lexicon_entries().clone();
+        let mut idx_by_word: HashMap<String, usize> = lex.iter().enumerate().map(|(i, (w, _))| (w.clone(), i)).collect();
+        for (w, s) in &sorted_user {
             let clean_w = repair_default(w.trim().trim_matches(|c: char| "«»()[]{}،؛:.!?؟\"'-–—".contains(c)));
             if clean_w.is_empty() {
                 continue;
             }
-            match all.iter_mut().find(|x| repair_default(&x.0) == clean_w) {
-                Some(x) => {
-                    x.0 = clean_w;
-                    x.1 = s.clone();
-                    x.2 = false;
-                }
-                None => all.push((clean_w, s.clone(), false)),
+            let ph = self.spelling_phonemes(s).unwrap_or_default();
+            if ph.is_empty() {
+                continue;
             }
-        }
-        let mut lex: Vec<(String, String)> = Vec::new();
-        for (word, spelling, builtin) in all {
-            let word = repair_default(&word);
-            let ph = if builtin { pronounce(&spelling) } else { self.spelling_phonemes(&spelling).unwrap_or_default() };
-            if !word.is_empty() && !ph.is_empty() {
-                match lex.iter_mut().find(|x| x.0 == word) {
-                    Some(x) => x.1 = ph,
-                    None => lex.push((word, ph)),
+            if let Some(&idx) = idx_by_word.get(&clean_w) {
+                lex[idx].1 = ph.clone();
+            } else {
+                idx_by_word.insert(clean_w.clone(), lex.len());
+                lex.push((clean_w.clone(), ph.clone()));
+            }
+            // Auto-cover ezafe forms for user-taught single Persian words (unless user provided an explicit ezafe entry).
+            let plain_single = !clean_w.contains(' ')
+                && !clean_w.ends_with(['\u{0650}', '\u{0654}', 'ی'])
+                && !clean_w.ends_with("\u{200c}ی")
+                && clean_w.chars().last().is_some_and(|c| ('\u{0621}'..='\u{06cc}').contains(&c));
+            if plain_single && !ph.ends_with('1') {
+                let mut variants: Vec<(String, String)> = Vec::new();
+                if clean_w.ends_with('ه') {
+                    let eph = if ph.ends_with('e') { format!("{ph}ye") } else { format!("{ph}e") };
+                    variants.push((format!("{clean_w}\u{200c}ی"), eph.clone()));
+                    variants.push((format!("{clean_w}\u{0654}"), eph));
+                } else if clean_w.ends_with(['ا', 'و']) {
+                    variants.push((format!("{clean_w}ی"), format!("{ph}ye")));
+                } else if !ph.ends_with('e') {
+                    variants.push((format!("{clean_w}\u{0650}"), format!("{ph}e")));
+                }
+                for (ew, eph) in variants {
+                    if !idx_by_word.contains_key(&ew) {
+                        idx_by_word.insert(ew.clone(), lex.len());
+                        lex.push((ew, eph));
+                    }
                 }
             }
         }
@@ -1030,7 +1122,9 @@ impl LexiconG2P {
             };
             *cur = (lex, re);
             self.memo.lock().unwrap().clear();
+            self.marked_memo.lock().unwrap().clear();
         }
+        *self.last_user.lock().unwrap() = Some(sorted_user);
     }
 
     pub fn phonemise(&self, text: &str, keep_ezafe: bool) -> R {
@@ -1050,7 +1144,7 @@ impl LexiconG2P {
 
     fn phonemise_uncached(&self, text: &str, keep_ezafe: bool) -> R {
         let mut text = sub(r"ق\.\s?م\.?", "قبل از میلاد", text);
-        text = sub(r"([\u0600-\u06FF]{2,})ه[ \u200c](گی|گان|گانی)(?![\u0600-\u06FF])", "\\1\\2", &text);
+        text = sub(r"([\u0600-\u06FF]{2,})ه\u200c(گی|گان|گانی)(?![\u0600-\u06FF])", "\\1\\2", &text);
         text = sub(r"(?<=[\u0600-\u06FF]ه) +(ی|ای)(?![\u0600-\u06FF\u200c])", "\u{200c}\\1", &text);
         // Fix floating kasra (ezafe) preceded by space (e.g. "سلسه‌مراتب ِ" -> "سلسه‌مراتبِ", "حسانی ِ" -> "حسانیِ", "بسط‌وشرح ِ" -> "بسط‌وشرحِ")
         text = sub(r"(?<=[ء-غف-يپچژکگی])\s+ِ", "ِ", &text);
@@ -1062,17 +1156,34 @@ impl LexiconG2P {
         text = sub(r"(?<![ء-غف-يپچژکگی\u200c])تعی\s+(?=(?:نمی‌|نمی\s+|می‌|می\s+)?بخش)", "تعین ", &text);
         text = sub(r"(?<![ء-غف-يپچژکگی\u200c])اخذکردن", "اخذ کردن", &text);
         text = sub(r"(?<![ء-غف-يپچژکگی\u200c])پایهای(?![ء-غف-يپچژکگی\u200c])", "پایه\u{200c}ای", &text);
-        text = sub(r"(?<=[\u0600-\u06FF][^اآو]ه)ی(?![ء-غف-يپچژکگی\u200c])", "\u{200c}ی", &text);
+        // Only split OCR-fused silent-heh ezafe ("طبقهی" -> "طبقه‌ی") when vocabulary confirms `...ه\u{200c}ی`;
+        // never corrupt consonant-heh words like "بدیهی", "فرماندهی", "سازماندهی", "زرهی", "آگهی", "فقهی", "وجهی", "توجیهی"!
+        text = sub_fn(r"(?<![ء-غف-يپچژکگی\u200c])([ء-غف-يپچژکگی]{2,}ه)ی(?![ء-غف-يپچژکگی\u200c])", &text, |m| {
+            let whole = &m[0];
+            let stem = &m[1];
+            let costs = crate::vocab::word_costs();
+            let norm = |s: &str| translate_map(&translate_map(&nfkc(s), HEH), YEH_KAF).replace(['\u{200c}', '\u{0640}'], "");
+            let kw = norm(whole);
+            let ks = norm(stem);
+            let split_ezafe = match costs.get(kw.as_str()) {
+                Some(e) => e.spelling.as_deref().is_some_and(|s| s.ends_with("ه\u{200c}ی")),
+                None => costs.contains_key(ks.as_str())
+                    && !ks.ends_with("ده")
+                    && !ks.ends_with(['ا', 'آ', 'و', 'ی'])
+                    && !matches!(ks.as_str(), "فقه" | "وجه" | "زره" | "آگه" | "ابله" | "شبه" | "تبه"),
+            };
+            if split_ezafe { format!("{stem}\u{200c}ی") } else { whole.to_string() }
+        });
         text = sub(r"(?<![ء-غف-يپچژکگی\u200c])پیکریافته", "پیکر\u{200c}یافته", &text);
         text = sub(r"(?<![ء-غف-يپچژکگی\u200c])متانظری", "متا\u{200c}نظری", &text);
-        // General Persian compound ZWNJ boundary rules (teaches G2P thousands of Persian compounds cleanly)
+        // General Persian compound ZWNJ boundary rules on glued forms only (never eat real spaces before verbs like "بگیر"/"بردار" or "خود دست"!)
         text = sub(
-            r"([\u0600-\u06FF]{2,})[\s\u200c]?(سالار(?:ی|ان|انه)?|ستیز(?:ی|ان|انه)?|بگیر(?:ان|ها|‌ها|ی)?|بردار(?:ی|ان|ها|‌ها)?|تشخیصی)(?![\u0600-\u06FF\u200c])",
+            r"([\u0600-\u06FF]{2,})\u200c?(سالار(?:ی|ان|انه)?|ستیز(?:ی|ان|انه)?)(?![\u0600-\u06FF\u200c])",
             "\\1\u{200c}\\2",
             &text,
         );
         text = sub(
-            r"(?<![\u0600-\u06FF\u200c])(بی|خود|پیش|تهی|تنگ)[\s\u200c]?(تأمل(?:ی)?|تامل(?:ی)?|واسطه|رمق|دست(?:ان|ی)?|گیری|برد)(?![\u0600-\u06FF\u200c])",
+            r"(?<![\u0600-\u06FF\u200c])(بی|تهی|تنگ)\u200c?(تأمل(?:ی)?|تامل(?:ی)?|واسطه|رمق|دست(?:ان|ی)?)(?![\u0600-\u06FF\u200c])",
             "\\1\u{200c}\\2",
             &text,
         );
@@ -1167,6 +1278,9 @@ impl LexiconG2P {
         if !search(&format!("[{FA_LETTER}]"), span) || last.ends_with('1') {
             return Ok(ph);
         }
+        if last.ends_with('e') && !span.trim_end().ends_with(['ه', 'ۀ', 'ة']) {
+            return Ok(ph);
+        }
         let rest = &text[end..];
         if !search(&format!(r"^[ \t]+[{FA_LETTER}]"), rest) {
             return Ok(ph);
@@ -1181,9 +1295,6 @@ impl LexiconG2P {
         let alone = split_ws(&self.phonemise_marked(span, true)?).last().map(|s| s.trim_end_matches('1').to_string()).unwrap_or_default();
         let w = with.trim_end_matches('1');
         let grew = !alone.is_empty() && (w == format!("{alone}e") || w == format!("{alone}ye"));
-        if last.ends_with('e') && !span.trim_end().ends_with(['ه', 'ۀ', 'ة']) {
-            return Ok(ph);
-        }
         if !(with.ends_with('1') && !alone.ends_with('e')) && !grew {
             return Ok(ph);
         }
@@ -1222,6 +1333,11 @@ impl LexiconG2P {
     }
 
     fn phonemise_marked(&self, text: &str, keep_ezafe: bool) -> R {
+        let mode = if crate::vocab::is_finglish() { "fg|" } else if source_is_dutch() { "nl|" } else { "" };
+        let mkey = if mode.is_empty() { text.to_string() } else { format!("{mode}{text}") };
+        if let Some(cached) = self.marked_memo.lock().unwrap().get(&mkey).cloned() {
+            return Ok(if keep_ezafe { cached } else { cached.replace('1', "") });
+        }
         let mut ph = no_ezafe_before_verb(&self.base_checked(text)?);
         let words: Vec<String> = split_ws(text).into_iter().filter(|w| search(&format!("[{FA_LETTER}]"), w)).map(|s| s.to_string()).collect();
         let mut phw: Vec<String> = split_ws(&ph).iter().map(|s| s.to_string()).collect();
@@ -1347,7 +1463,57 @@ impl LexiconG2P {
         if !search("[زذضظ]ه", &text.replace('\u{200c}', "")) {
             ph = ph.replace("zh", ";");
         }
+        {
+            let mut m = self.marked_memo.lock().unwrap();
+            if m.len() > 24000 {
+                m.clear();
+            }
+            m.insert(mkey, ph.clone());
+        }
         Ok(if keep_ezafe { ph } else { ph.replace('1', "") })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn g2p_preserves_consonant_heh_words_and_separate_verbs() {
+        let dir = std::path::Path::new("models/parsigo/model/onnx");
+        if !dir.exists() {
+            return;
+        }
+        let g2p = LexiconG2P::new(crate::g2p::OnnxG2P::new(dir).unwrap());
+        g2p.set_lexicon(&[]);
+        let bad_eye = g2p.phonemise("بدیهی است", false).unwrap();
+        assert!(bad_eye.starts_with("badihi "), "got: {bad_eye}");
+
+        let cmd = g2p.phonemise("فرماندهی کرد", false).unwrap();
+        assert!(cmd.starts_with("farmAndehi "), "got: {cmd}");
+
+        let armor = g2p.phonemise("تیپ زرهی", false).unwrap();
+        assert!(armor.ends_with("zerehi"), "got: {armor}");
+
+        let sep = g2p.phonemise("خود دست به کار شد", false).unwrap();
+        assert!(sep.starts_with("xod dast "), "got: {sep}");
+
+        let imp = g2p.phonemise("آن را بگیر", false).unwrap();
+        assert!(imp.ends_with(" rA begir"), "got: {imp}");
+
+        let manafe = g2p.phonemise("منافع را", false).unwrap();
+        assert_eq!(manafe, "manAfe? rA");
+
+        let chahar = g2p.phonemise("چهار و نیم", false).unwrap();
+        assert_eq!(chahar, "CahAro nim");
+
+        let tabaqe = g2p.phonemise("طبقهی کارگر", false).unwrap();
+        assert!(tabaqe.starts_with("tabaqeye "), "got: {tabaqe}");
+
+        g2p.set_lexicon(&[("برش".into(), "boresh".into()), ("مبنا".into(), "mabnA".into())]);
+        assert_eq!(g2p.phonemise("برشِ", false).unwrap(), "boreSe");
+        assert_eq!(g2p.phonemise("مبنای", false).unwrap(), "mabnAye");
+    }
+}
+
 

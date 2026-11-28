@@ -24,7 +24,7 @@ pub struct VoiceInfo {
 }
 
 pub const VOICES: &[VoiceInfo] = &[
-    VoiceInfo { id: "khabari", wav: "male_news.wav", name: "مدل صدا ۱", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
+    VoiceInfo { id: "seda1", wav: "donated_rahul.wav", name: "مدل صدا ۱", gender: "مرد", group: "natural", extra: false, tempo: 1.05 },
     VoiceInfo { id: "seda2", wav: "donated_andrea.wav", name: "مدل صدا ۲", gender: "زن", group: "natural", extra: false, tempo: 1.1 },
     VoiceInfo { id: "seda3", wav: "donated_aryobe.wav", name: "مدل صدا ۳", gender: "مرد", group: "natural", extra: false, tempo: 1.1 },
     VoiceInfo { id: "seda4", wav: "donated_imran.wav", name: "مدل صدا ۴", gender: "مرد", group: "natural", extra: false, tempo: 1.12 },
@@ -32,7 +32,9 @@ pub const VOICES: &[VoiceInfo] = &[
     VoiceInfo { id: "seda6", wav: "donated_roscoe.wav", name: "مدل صدا ۶", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
     VoiceInfo { id: "seda7", wav: "donated_hkl.wav", name: "مدل صدا ۷", gender: "زن", group: "natural", extra: false, tempo: 1.0 },
     VoiceInfo { id: "seda8", wav: "donated_erihppas.wav", name: "مدل صدا ۸", gender: "زن", group: "natural", extra: false, tempo: 1.0 },
-    VoiceInfo { id: "seda9", wav: "donated_aon.wav", name: "مدل صدا ۹", gender: "زن", group: "natural", extra: false, tempo: 1.12 },
+    VoiceInfo { id: "seda9", wav: "donated_hannah.wav", name: "مدل صدا ۹", gender: "زن", group: "natural", extra: false, tempo: 1.0 },
+    VoiceInfo { id: "seda10", wav: "donated_robert.wav", name: "مدل صدا ۱۰", gender: "مرد", group: "natural", extra: false, tempo: 1.0 },
+    VoiceInfo { id: "seda11", wav: "donated_aadi.wav", name: "مدل صدا ۱۱", gender: "مرد", group: "natural", extra: false, tempo: 1.08 },
 ];
 
 pub fn data_dir() -> PathBuf {
@@ -97,7 +99,10 @@ fn default_settings() -> Map<String, Value> {
     let first = voices().first().map(|v| v.id).unwrap_or("");
     let v = json!({"voice": first, "speed": 1.0, "fontSize": 21, "lineHeight": 2.2, "reversed": false, "persianYeh": true, "autoNext": true, "focusMode": false, "lowVisionColor": "yellow",
                    "bitrate": 64, "lexicon": {}, "autoPlay": true, "highlight": "yellow", "frameColor": "text", "translate": true, "trQuality": "fast", "naturalTone": true, "showWaitReason": true, "smoothBuffer": "normal", "theme": "auto", "font": "vazir", "allowScreenshots": false, "pageWidth": 46, "pageMargin": 100, "clickSound": false, "sentenceLines": true, "commaPause": "short", "sentencePause": "normal", "cursor": "large", "accent": "khana", "accentFixed": true, "iconStyle": "glossy", "corners": "round", "startSound": true, "uiScale": 1, "lowVision": false, "lowVisionPrev": {}, "text3d": false, "wordSpacing": "normal"});
-    v.as_object().unwrap().clone()
+    let mut m = v.as_object().unwrap().clone();
+    m.insert("exportMultiVoice".into(), json!(false));
+    m.insert("exportVoices".into(), json!(["seda1", "seda2", "seda4", "seda7", "seda10"]));
+    m
 }
 
 pub fn load_settings() -> Map<String, Value> {
@@ -171,12 +176,26 @@ static TTS_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 pub struct Speech {
     engine: Mutex<Option<Arc<Engine>>>,
     busy: (Mutex<usize>, std::sync::Condvar),
+    reading: std::sync::atomic::AtomicUsize,
     last_play: Mutex<Option<Instant>>,
 }
 
 pub fn speech() -> &'static Speech {
     static S: OnceLock<Speech> = OnceLock::new();
-    S.get_or_init(|| Speech { engine: Mutex::new(None), busy: (Mutex::new(0), std::sync::Condvar::new()), last_play: Mutex::new(None) })
+    S.get_or_init(|| Speech {
+        engine: Mutex::new(None),
+        busy: (Mutex::new(0), std::sync::Condvar::new()),
+        reading: std::sync::atomic::AtomicUsize::new(0),
+        last_play: Mutex::new(None),
+    })
+}
+
+struct LiveRead<'a>(&'a Speech);
+impl Drop for LiveRead<'_> {
+    fn drop(&mut self) {
+        self.0.reading.fetch_sub(1, Ordering::SeqCst);
+        self.0.busy.1.notify_all();
+    }
 }
 
 impl Speech {
@@ -218,7 +237,11 @@ impl Speech {
         let speed = (speed.clamp(0.5, 2.0) * tempo).clamp(0.5, 2.0);
         let eng = self.engine()?;
         let text = tts::speech_clean(text);
-        let _turn = Turn::take(&self.busy, cancel)?;
+        self.reading.fetch_add(1, Ordering::SeqCst);
+        let _live = LiveRead(self);
+        self.busy.1.notify_all();
+        // Live reading takes priority over background exports and never waits 20s behind export batches.
+        let _turn = Turn::take(&self.busy, Turn::room() + 2, None, cancel)?;
         let started = Instant::now();
         let settings = load_settings();
         let mut pairs = lexicon_pairs(&settings);
@@ -233,16 +256,53 @@ impl Speech {
         let recent = self.last_play.lock().unwrap().map_or(false, |t| t.elapsed() < Duration::from_secs(30));
         let workers = if cfg!(shell) { 2 } else if recent { 3 } else { 5 };
         let workers = std::env::var("KHANA_WORKERS").ok().and_then(|v| v.parse::<usize>().ok()).filter(|n| (1..=8).contains(n)).unwrap_or(workers);
-        let mut a = eng.synthesize_text_in_order(&text, &id, &wav, workers, quick, order, cancel)?;
+        let mut a = eng.synthesize_text_with_speed(&text, &id, &wav, speed, workers, quick, false, order, cancel)?;
         if cancel() {
             return Err("cancelled".to_string());
-        }
-        if (speed - 1.0).abs() >= 0.008 && !a.is_empty() {
-            a = crate::stretch::stretch(&a, speed, tts::RATE);
         }
         // Equalize loudness across all built-in voice models and "صدای من" (~-16.8 dBFS active speech RMS)
         a = audio::normalize_loudness(a, tts::RATE, 0.145);
         note_reading_speed(a.len() as f64 * speed / tts::RATE as f64, started.elapsed().as_secs_f64());
+        Ok((audio::fade_edges(a, tts::RATE, 8), tts::RATE))
+    }
+
+    fn resolve_voice_and_speed(&self, voice_id: &str, speed: f64) -> Result<(String, PathBuf, f64), String> {
+        let all = voices();
+        let (id, wav, tempo) = if voice_id == "mine" && my_voice().is_file() {
+            ("mine".to_string(), my_voice(), 1.0)
+        } else {
+            let v = all.iter().find(|v| v.id == voice_id).or(all.first()).ok_or("no voices")?;
+            (v.id.to_string(), voice_path(v), v.tempo)
+        };
+        let eff_speed = (speed.clamp(0.5, 2.0) * tempo).clamp(0.5, 2.0);
+        Ok((id, wav, eff_speed))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn synthesize_export_planned(
+        &self,
+        eng: &Engine,
+        sentences: &[(f64, Vec<(String, f64)>, crate::prosody::Kind)],
+        id: &str,
+        wav: &Path,
+        eff_speed: f64,
+        fast: bool,
+        cancel: &(dyn Fn() -> bool + Sync),
+    ) -> Result<(Vec<f32>, usize), String> {
+        if sentences.is_empty() {
+            return Ok((Vec::new(), tts::RATE));
+        }
+        let _turn = Turn::take(&self.busy, Turn::room(), Some(&self.reading), cancel)?;
+        let started = Instant::now();
+        let recent = self.last_play.lock().unwrap().map_or(false, |t| t.elapsed() < Duration::from_secs(30));
+        let workers = if cfg!(shell) { 2 } else if recent { 3 } else { 5 };
+        let workers = std::env::var("KHANA_WORKERS").ok().and_then(|v| v.parse::<usize>().ok()).filter(|n| (1..=8).contains(n)).unwrap_or(workers);
+        let mut a = eng.synthesize_planned_in_order(sentences, id, wav, eff_speed, workers, fast, fast, None, cancel)?;
+        if cancel() {
+            return Err("cancelled".to_string());
+        }
+        a = audio::normalize_loudness(a, tts::RATE, 0.145);
+        note_reading_speed(a.len() as f64 * eff_speed / tts::RATE as f64, started.elapsed().as_secs_f64());
         Ok((audio::fade_edges(a, tts::RATE, 8), tts::RATE))
     }
 }
@@ -261,13 +321,13 @@ impl<'a> Turn<'a> {
         })
     }
 
-    fn take(gate: &'a (Mutex<usize>, std::sync::Condvar), cancel: &(dyn Fn() -> bool + Sync)) -> Result<Turn<'a>, String> {
+    fn take(gate: &'a (Mutex<usize>, std::sync::Condvar), limit: usize, yield_to: Option<&std::sync::atomic::AtomicUsize>, cancel: &(dyn Fn() -> bool + Sync)) -> Result<Turn<'a>, String> {
         let mut n = gate.0.lock().unwrap_or_else(|e| e.into_inner());
         loop {
             if cancel() {
                 return Err("cancelled".to_string());
             }
-            if *n < Turn::room() {
+            if *n < limit && yield_to.map_or(true, |r| r.load(Ordering::SeqCst) == 0) {
                 break;
             }
             let (guard, _) = gate.1.wait_timeout(n, Duration::from_millis(60)).unwrap_or_else(|e| e.into_inner());
@@ -380,6 +440,7 @@ pub struct Job {
     done_chars: Mutex<usize>,
     total_chars: Mutex<usize>,
     seconds: Mutex<f64>,
+    fast: AtomicBool,
     cancelled: AtomicBool,
     keep_partial: AtomicBool,
     discard_partial: AtomicBool,
@@ -398,6 +459,7 @@ impl Job {
             done_chars: Mutex::new(0),
             total_chars: Mutex::new(1),
             seconds: Mutex::new(0.0),
+            fast: AtomicBool::new(false),
             cancelled: AtomicBool::new(false),
             keep_partial: AtomicBool::new(false),
             discard_partial: AtomicBool::new(false),
@@ -460,6 +522,7 @@ struct Mp3Req {
     first: usize,
     last: usize,
     voice: String,
+    voices: Vec<String>,
     speed: f64,
     bitrate: u32,
     opts: Opts,
@@ -524,16 +587,18 @@ impl Drop for ListenAgain {
 }
 
 fn export_groups(paras: &[String]) -> Vec<String> {
-    const BATCH_CHARS: usize = 1100;
+    // ~1500-char batches (~10-14 sentences) keep 4-5 export workers saturated on 6+ GB devices;
+    // low-RAM old phones (<5 GB) use smaller 900-char batches to keep peak PCM memory low.
+    let batch_chars: usize = if tts::mobile_low_ram() { 900 } else { 1500 };
     let mut groups = Vec::new();
     let mut group = String::new();
     for paragraph in paras {
         let mut rest = paragraph.trim();
         while !rest.is_empty() {
-            let at = rest.char_indices().nth(BATCH_CHARS).map(|(i, _)| i).unwrap_or(rest.len());
+            let at = rest.char_indices().nth(batch_chars).map(|(i, _)| i).unwrap_or(rest.len());
             let cut = if at < rest.len() { rest[..at].rfind(char::is_whitespace).filter(|&i| i > 0).unwrap_or(at) } else { at };
             let piece = rest[..cut].trim();
-            if !group.is_empty() && group.chars().count() + piece.chars().count() > BATCH_CHARS { groups.push(std::mem::take(&mut group)); }
+            if !group.is_empty() && group.chars().count() + piece.chars().count() > batch_chars { groups.push(std::mem::take(&mut group)); }
             if !group.is_empty() { group.push_str("\n\n"); }
             group.push_str(piece);
             rest = rest[cut..].trim_start();
@@ -543,9 +608,56 @@ fn export_groups(paras: &[String]) -> Vec<String> {
     groups
 }
 
+/// Groups paragraphs for export: when rotating multiple voices, yields paragraph-sized steps
+/// (merging short headings <45 chars into the next paragraph) so voices alternate cleanly without splitting mid-sentence.
+fn export_step_groups(paras: &[String], rotate: bool) -> Vec<String> {
+    if !rotate {
+        return export_groups(paras);
+    }
+    let step_chars: usize = if tts::mobile_low_ram() { 450 } else { 650 };
+    let mut groups = Vec::new();
+    let mut carry = String::new();
+    for paragraph in paras {
+        let trimmed = paragraph.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let combined = if carry.is_empty() {
+            trimmed.to_string()
+        } else {
+            format!("{carry}\n\n{trimmed}")
+        };
+        carry.clear();
+        if combined.chars().count() < 45 {
+            carry = combined;
+            continue;
+        }
+        let mut rest = combined.as_str();
+        while !rest.is_empty() {
+            let at = rest.char_indices().nth(step_chars).map(|(i, _)| i).unwrap_or(rest.len());
+            let cut = if at < rest.len() { rest[..at].rfind(char::is_whitespace).filter(|&i| i > 0).unwrap_or(at) } else { at };
+            let piece = rest[..cut].trim();
+            if !piece.is_empty() {
+                groups.push(piece.to_string());
+            }
+            rest = rest[cut..].trim_start();
+        }
+    }
+    if !carry.is_empty() {
+        if let Some(last) = groups.last_mut() {
+            last.push_str("\n\n");
+            last.push_str(&carry);
+        } else {
+            groups.push(carry);
+        }
+    }
+    groups
+}
+
 fn run_job(job: Arc<Job>, r: Mp3Req) {
     JOBS_RUNNING.fetch_add(1, Ordering::SeqCst);
     let _listen = ListenAgain;
+    job.fast.store(r.fast, Ordering::Relaxed);
     tts::LISTEN.store(!r.fast && !cfg!(shell), Ordering::Relaxed);
     tts::LISTEN_LIGHT.store(true, Ordering::Relaxed);
     tts::set_max_tries(if r.fast { 1 } else { 2 });
@@ -560,6 +672,31 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
     let res = (|| -> Result<(), String> {
         let cancel = || job.cancelled.load(Ordering::SeqCst);
         *job.total_chars.lock().unwrap() = (r.last - r.first + 1).saturating_mul(1000).max(1);
+        let primary_voice = speech().resolve_voice_and_speed(&r.voice, r.speed)?;
+        let mut voice_specs: Vec<(String, PathBuf, f64)> = Vec::new();
+        for vid in &r.voices {
+            if vid == "mine" && !my_voice().is_file() {
+                continue;
+            }
+            if let Ok(spec) = speech().resolve_voice_and_speed(vid, r.speed) {
+                if !voice_specs.iter().any(|existing| existing.0 == spec.0) {
+                    voice_specs.push(spec);
+                }
+            }
+        }
+        if voice_specs.len() < 2 {
+            voice_specs.clear();
+            voice_specs.push(primary_voice);
+        }
+        let rotate_voices = voice_specs.len() > 1;
+        let eng = speech().engine()?;
+        {
+            let settings = load_settings();
+            let pairs = lexicon_pairs(&settings);
+            eng.g2p.set_lexicon(&pairs);
+            eng.natural.store(settings.get("naturalTone").and_then(|v| v.as_bool()).unwrap_or(true), Ordering::Relaxed);
+            tts::set_comma_pause(settings.get("commaPause").and_then(|v| v.as_str()).unwrap_or("short"));
+        }
         let mut out = std::io::BufWriter::new(std::fs::File::create(&path).map_err(|e| e.to_string())?);
         use std::io::{Seek, SeekFrom, Write};
         let mut enc: Option<crate::mp3::Mp3> = None;
@@ -569,75 +706,178 @@ fn run_job(job: Arc<Job>, r: Mp3Req) {
             out.write_all(&[0u8; 44]).map_err(|e| e.to_string())?;
         }
         let mut interrupted = false;
+        enum PlannedStep {
+            Batch { sentences: Vec<(f64, Vec<(String, f64)>, crate::prosody::Kind)>, done_chars: usize, voice_idx: usize },
+            PageDone(usize),
+        }
         enum ExportStep {
             Audio { pcm: Vec<f32>, rate: usize, done_chars: usize },
             PageDone(usize),
         }
         let r_ref = &r;
+        let eng_ref = &eng;
+        let voice_specs_ref = &voice_specs;
+        let voice_count = voice_specs_ref.len();
+        let job_ref = &job;
         let cancel_ref = &cancel;
+        let (plan_tx, plan_rx) = std::sync::mpsc::sync_channel::<(usize, PlannedStep)>(3);
+        let plan_rx = std::sync::Mutex::new(plan_rx);
+        let (tx, rx) = std::sync::mpsc::channel::<(usize, ExportStep)>();
+        let window = (std::sync::Mutex::new(0usize), std::sync::Condvar::new());
+        let abort = std::sync::atomic::AtomicBool::new(false);
+        let plan_rx_ref = &plan_rx;
+        let window_ref = &window;
+        let abort_ref = &abort;
         std::thread::scope(|s| -> Result<(), String> {
-            let (tx, rx) = std::sync::mpsc::sync_channel::<ExportStep>(1);
-            let prod = s.spawn(move || -> Result<bool, String> {
+            // 3-stage pipeline: Stage 1 (G2P planner) -> Stage 2 (2 overlapping TTS batch workers) -> Stage 3 (ordered MP3/WAV writer).
+            // Overlapping two batches in Stage 2 eliminates worker idle time on batch-tail sentences while bounding in-flight memory.
+            let planner = s.spawn(move || -> Result<bool, String> {
+                let mut seq = 0usize;
+                let mut batch_idx = 0usize;
                 for n in r_ref.first..=r_ref.last {
-                    if cancel_ref() { return Ok(true); }
+                    if cancel_ref() || abort_ref.load(Ordering::Relaxed) { return Ok(true); }
                     let mut paras: Vec<String> = r_ref.doc.page_text(n, r_ref.opts).into_iter().filter(|p| p != crate::doc::PICTURE_PAGE).collect();
-                    if r_ref.end_word && n == r_ref.last && !paras.is_empty() { paras.push(END_WORD.into()); }
-                    let groups = export_groups(&paras);
-                    let group_count = groups.len().max(1);
-                    for (index, text) in groups.into_iter().enumerate() {
-                        tts::wait_for_power(cancel_ref);
-                        if cancel_ref() { return Ok(true); }
-                        let (mut pcm, rate) = match speech().synthesize(&text, &r_ref.voice, r_ref.speed, false, cancel_ref) {
-                            Ok(audio) => audio,
-                            Err(_) if cancel_ref() => return Ok(true),
-                            Err(error) => return Err(error),
-                        };
-                        if cancel_ref() { return Ok(true); }
-                        pcm.extend(std::iter::repeat_n(0f32, (rate as f64 * 0.45) as usize));
-                        let done_chars = (n - r_ref.first) * 1000 + (index + 1) * 1000 / group_count;
-                        if tx.send(ExportStep::Audio { pcm, rate, done_chars }).is_err() {
-                            return Ok(true);
+                    let append_end_word = r_ref.end_word && n == r_ref.last && !paras.is_empty();
+                    if append_end_word && !rotate_voices {
+                        paras.push(END_WORD.into());
+                    }
+                    let mut groups = export_step_groups(&paras, rotate_voices);
+                    if append_end_word && rotate_voices {
+                        if let Some(last_g) = groups.last_mut() {
+                            last_g.push_str("\n\n");
+                            last_g.push_str(END_WORD);
+                        } else {
+                            groups.push(END_WORD.into());
                         }
                     }
-                    if tx.send(ExportStep::PageDone((n - r_ref.first + 1) * 1000)).is_err() {
+                    let group_count = groups.len().max(1);
+                    for (index, text) in groups.into_iter().enumerate() {
+                        if cancel_ref() || abort_ref.load(Ordering::Relaxed) { return Ok(true); }
+                        let cleaned = tts::speech_clean(&text);
+                        let sentences = if strip(&cleaned).is_empty() { Vec::new() } else { eng_ref.plan_text_kinds(&cleaned) };
+                        let done_chars = (n - r_ref.first) * 1000 + (index + 1) * 1000 / group_count;
+                        if !sentences.is_empty() {
+                            let voice_idx = batch_idx % voice_count;
+                            batch_idx += 1;
+                            if plan_tx.send((seq, PlannedStep::Batch { sentences, done_chars, voice_idx })).is_err() {
+                                return Ok(true);
+                            }
+                            seq += 1;
+                        }
+                    }
+                    if plan_tx.send((seq, PlannedStep::PageDone((n - r_ref.first + 1) * 1000))).is_err() {
                         return Ok(true);
                     }
+                    seq += 1;
                 }
                 Ok(false)
             });
-            let mut write_res: Result<(), String> = Ok(());
-            while let Ok(step) = rx.recv() {
-                if cancel() { interrupted = true; break; }
-                match step {
-                    ExportStep::PageDone(done) => {
-                        *job.done_chars.lock().unwrap() = done;
-                    }
-                    ExportStep::Audio { pcm, rate, done_chars } => {
-                        let step_res = (|| -> Result<(), String> {
-                            if !wav && enc.is_none() { enc = Some(crate::mp3::Mp3::new(rate as u32, r.bitrate)?); }
-                            if wav {
-                                wav_rate = rate as u32;
-                                let bytes: Vec<u8> = audio::to_pcm16(&pcm).iter().flat_map(|x| x.to_le_bytes()).collect();
-                                wav_bytes_written = wav_bytes_written.checked_add(u32::try_from(bytes.len()).map_err(|_| "فایل WAV خیلی بزرگ است.")?).filter(|&n| n <= u32::MAX - 36).ok_or("فایل WAV خیلی بزرگ است.")?;
-                                out.write_all(&bytes).map_err(|e| e.to_string())?;
-                            } else {
-                                out.write_all(&enc.as_mut().unwrap().encode(&audio::to_pcm16(&pcm))).map_err(|e| e.to_string())?;
+            let prod_workers = if tts::mobile_low_ram() { 1 } else { 2 };
+            let prods: Vec<_> = (0..prod_workers).map(|_| {
+                let tx = tx.clone();
+                s.spawn(move || -> Result<bool, String> {
+                    loop {
+                        let next = plan_rx_ref.lock().unwrap().recv();
+                        let Ok((seq, pstep)) = next else { break };
+                        {
+                            let mut head = window_ref.0.lock().unwrap();
+                            while seq > *head + 2 {
+                                if cancel_ref() || abort_ref.load(Ordering::Relaxed) { return Ok(true); }
+                                let (g, _) = window_ref.1.wait_timeout(head, Duration::from_millis(60)).unwrap_or_else(|e| e.into_inner());
+                                head = g;
                             }
-                            *job.seconds.lock().unwrap() += pcm.len() as f64 / rate as f64;
-                            *job.done_chars.lock().unwrap() = done_chars;
-                            Ok(())
-                        })();
-                        if let Err(e) = step_res {
-                            write_res = Err(e);
-                            break;
+                        }
+                        if cancel_ref() || abort_ref.load(Ordering::Relaxed) { return Ok(true); }
+                        let step = match pstep {
+                            PlannedStep::PageDone(done) => ExportStep::PageDone(done),
+                            PlannedStep::Batch { sentences, done_chars, voice_idx } => {
+                                tts::wait_for_power(cancel_ref);
+                                if cancel_ref() || abort_ref.load(Ordering::Relaxed) { return Ok(true); }
+                                let fast_now = job_ref.fast.load(Ordering::Relaxed);
+                                let (vid, vwav, vspeed) = &voice_specs_ref[voice_idx % voice_specs_ref.len()];
+                                let (mut pcm, rate) = match speech().synthesize_export_planned(eng_ref, &sentences, vid.as_str(), vwav.as_path(), *vspeed, fast_now, cancel_ref) {
+                                    Ok(audio) => audio,
+                                    Err(_) if cancel_ref() => {
+                                        abort_ref.store(true, Ordering::Relaxed);
+                                        window_ref.1.notify_all();
+                                        return Ok(true);
+                                    }
+                                    Err(error) => {
+                                        abort_ref.store(true, Ordering::Relaxed);
+                                        window_ref.1.notify_all();
+                                        return Err(error);
+                                    }
+                                };
+                                if cancel_ref() || abort_ref.load(Ordering::Relaxed) { return Ok(true); }
+                                if !pcm.is_empty() {
+                                    pcm.extend(std::iter::repeat_n(0f32, ((rate as f64 * 0.45) / *vspeed) as usize));
+                                    ExportStep::Audio { pcm, rate, done_chars }
+                                } else {
+                                    ExportStep::PageDone(done_chars)
+                                }
+                            }
+                        };
+                        if tx.send((seq, step)).is_err() {
+                            return Ok(true);
+                        }
+                    }
+                    Ok(false)
+                })
+            }).collect();
+            drop(tx);
+            let mut write_res: Result<(), String> = Ok(());
+            let mut pending = std::collections::BTreeMap::<usize, ExportStep>::new();
+            let mut expected = 0usize;
+            while let Ok((seq, step)) = rx.recv() {
+                if cancel() { interrupted = true; break; }
+                pending.insert(seq, step);
+                while let Some(step) = pending.remove(&expected) {
+                    expected += 1;
+                    {
+                        *window.0.lock().unwrap() = expected;
+                        window.1.notify_all();
+                    }
+                    if cancel() { interrupted = true; break; }
+                    match step {
+                        ExportStep::PageDone(done) => {
+                            *job.done_chars.lock().unwrap() = done;
+                        }
+                        ExportStep::Audio { pcm, rate, done_chars } => {
+                            let step_res = (|| -> Result<(), String> {
+                                if !wav && enc.is_none() { enc = Some(crate::mp3::Mp3::new(rate as u32, r.bitrate)?); }
+                                if wav {
+                                    wav_rate = rate as u32;
+                                    let bytes: Vec<u8> = audio::to_pcm16(&pcm).iter().flat_map(|x| x.to_le_bytes()).collect();
+                                    wav_bytes_written = wav_bytes_written.checked_add(u32::try_from(bytes.len()).map_err(|_| "فایل WAV خیلی بزرگ است.")?).filter(|&n| n <= u32::MAX - 36).ok_or("فایل WAV خیلی بزرگ است.")?;
+                                    out.write_all(&bytes).map_err(|e| e.to_string())?;
+                                } else {
+                                    out.write_all(&enc.as_mut().unwrap().encode(&audio::to_pcm16(&pcm))).map_err(|e| e.to_string())?;
+                                }
+                                *job.seconds.lock().unwrap() += pcm.len() as f64 / rate as f64;
+                                *job.done_chars.lock().unwrap() = done_chars;
+                                Ok(())
+                            })();
+                            if let Err(e) = step_res {
+                                write_res = Err(e);
+                                break;
+                            }
                         }
                     }
                 }
+                if interrupted || write_res.is_err() { break; }
+            }
+            if interrupted || write_res.is_err() {
+                abort.store(true, Ordering::Relaxed);
+                window.1.notify_all();
             }
             drop(rx);
-            let prod_interrupted = prod.join().unwrap()?;
+            let mut prod_interrupted = false;
+            for p in prods {
+                if p.join().unwrap()? { prod_interrupted = true; }
+            }
+            let plan_interrupted = planner.join().unwrap()?;
             write_res?;
-            if prod_interrupted { interrupted = true; }
+            if prod_interrupted || plan_interrupted { interrupted = true; }
             Ok(())
         })?;
         let partial = interrupted || cancel();
@@ -1083,6 +1323,20 @@ impl App {
         };
         match route {
             "init_get" => {
+                static WARM: std::sync::Once = std::sync::Once::new();
+                if !tts::mobile_low_ram() {
+                    WARM.call_once(|| {
+                        let _ = std::thread::Builder::new().name("tts-warm".into()).spawn(|| {
+                            if let Ok(eng) = speech().engine() {
+                                let s = load_settings();
+                                let v = s.get("voice").and_then(|v| v.as_str()).unwrap_or("");
+                                if let Ok((_, wav, _)) = speech().resolve_voice_and_speed(v, 1.0) {
+                                    eng.warm_voice(&wav);
+                                }
+                            }
+                        });
+                    });
+                }
                 let voices: Vec<Value> = all_voices().into_iter().map(|(id, name, gender, group)| json!({"id": id, "name": name, "gender": gender, "group": group})).collect();
                 let mut v = json!({"settings": load_settings(), "voices": voices, "canListen": crate::asr::ready(), "canWrite": crate::stt::available()});
                 v["library"] = json!(library_dir().is_some());
@@ -1108,6 +1362,9 @@ impl App {
             }
             "lock_now_post" => {
                 self.lock.lock_now();
+                if let Some(eng) = speech().engine.lock().unwrap().as_ref() {
+                    eng.g2p.clear_caches();
+                }
                 Ok(reply_json(&lock_status_json(&self.lock.status(crate::lock::now()))))
             }
             "unlock_post" => {
@@ -1161,6 +1418,9 @@ impl App {
             }
             "forget_post" => {
                 *self.docs.lock().unwrap() = None;
+                if let Some(eng) = speech().engine.lock().unwrap().as_ref() {
+                    eng.g2p.clear_caches();
+                }
                 crate::stt::wipe();
                 for j in self.jobs.lock().unwrap().values() {
                     let _publication = j.publication.lock().unwrap();
@@ -1194,6 +1454,9 @@ impl App {
             }
             "close_post" => {
                 *self.docs.lock().unwrap() = None;
+                if let Some(eng) = speech().engine.lock().unwrap().as_ref() {
+                    eng.g2p.clear_caches();
+                }
                 Ok(reply_json(&json!({"ok": true})))
             }
             "open_post" => {
@@ -1531,6 +1794,9 @@ impl App {
             }
                 "mp3fast_post" => {
                 let fast = body_json()?.get("fast").and_then(|v| v.as_bool()).unwrap_or(false);
+                for j in self.jobs.lock().unwrap().values() {
+                    j.fast.store(fast, Ordering::Relaxed);
+                }
                 if JOBS_RUNNING.load(Ordering::Relaxed) > 0 {
                     tts::LISTEN.store(!fast && !cfg!(shell), Ordering::Relaxed);
                     tts::set_max_tries(if fast { 1 } else { 2 });
@@ -1554,6 +1820,10 @@ impl App {
                 let flag = |k: &str| req.get(k).and_then(|v| v.as_bool()).unwrap_or_else(|| s.get(k).and_then(|v| v.as_bool()).unwrap_or(false));
                 let voice = req.get("voice").and_then(|v| v.as_str()).filter(|v| !v.is_empty()).map(|v| v.to_string())
                     .unwrap_or_else(|| s["voice"].as_str().unwrap_or("").to_string());
+                let voices_req: Vec<String> = req.get("voices")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).take(12).collect())
+                    .unwrap_or_default();
                 let speed = num("speed", s["speed"].as_f64().unwrap_or(1.0));
                 let bitrate = (num("bitrate", s["bitrate"].as_f64().unwrap_or(64.0)) as i64).clamp(32, 320) as u32;
                 let opts = Opts { reversed: flag("reversed"), persian_yeh: flag("persianYeh"), translate: flag("translate") };
@@ -1573,7 +1843,7 @@ impl App {
                 let info = job.info();
                 let fast = req.get("fast").and_then(|v| v.as_bool()).unwrap_or(false);
                 let end_word = req.get("endWord").and_then(|v| v.as_bool()).unwrap_or(last == d.n_pages && !d.is_typed.load(Ordering::Relaxed));
-                let r = Mp3Req { doc: d, first, last, voice, speed, bitrate, opts, format, fast, end_word };
+                let r = Mp3Req { doc: d, first, last, voice, voices: voices_req, speed, bitrate, opts, format, fast, end_word };
                 std::thread::spawn(move || run_job(job, r));
                 Ok(reply_json(&info))
             }
@@ -1614,9 +1884,10 @@ impl App {
             }
             "lengths_get" => {
                 let d = self.doc(q)?;
+                let scans_only = q.get("scans").is_some_and(|v| v == "1");
                 let opts = Opts { translate: false, ..self.opts(q) };
                 let letters: Vec<i64> = (1..=d.n_pages)
-                    .map(|n| if d.needs_picture(n) { -1 } else { d.page_text(n, opts).iter().map(|p| p.chars().filter(|c| c.is_alphanumeric()).count() as i64).sum() })
+                    .map(|n| if d.needs_picture(n) { -1 } else if scans_only { 1 } else { d.page_text(n, opts).iter().map(|p| p.chars().filter(|c| c.is_alphanumeric()).count() as i64).sum() })
                     .collect();
                 Ok(reply_json(&json!({"letters": letters})))
             }
@@ -1651,6 +1922,16 @@ impl App {
                 crate::platform::reveal(&p);
                 Ok(reply_json(&json!({"ok": true})))
             }
+            "lexicon_export_post" => {
+                let s = load_settings();
+                let lex = s.get("lexicon").cloned().unwrap_or_else(|| json!({}));
+                let payload = serde_json::to_vec_pretty(&json!({"lexicon": lex})).map_err(|e| ApiError::Internal(e.to_string()))?;
+                std::fs::create_dir_all(save_dir()).map_err(|e| ApiError::Internal(e.to_string()))?;
+                let p = save_dir().join("khana-lexicon.json");
+                std::fs::write(&p, &payload).map_err(|e| ApiError::Internal(e.to_string()))?;
+                crate::platform::reveal(&p);
+                Ok(reply_json(&json!({"ok": true})))
+            }
             "reveal_post" => {
                 let j = self.jobs.lock().unwrap().get(q.get("id").map(|s| s.as_str()).unwrap_or("")).cloned();
                 let saved = j.and_then(|j| j.saved.lock().unwrap().clone()).filter(|p| cfg!(target_os = "android") || p.exists());
@@ -1673,12 +1954,34 @@ impl App {
 
     pub fn shutdown(&self) {
         crate::vault::clear_key();
+        if let Some(eng) = speech().engine.lock().unwrap().as_ref() { eng.g2p.clear_caches(); }
         for j in self.jobs.lock().unwrap().values() {
             let _publication = j.publication.lock().unwrap();
             j.discard_partial.store(true, Ordering::SeqCst);
             j.cancelled.store(true, Ordering::SeqCst);
             j.cleanup();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::export_step_groups;
+
+    #[test]
+    fn export_rotation_splits_paragraphs_and_merges_short_headings() {
+        let paras = vec![
+            "فصل اول".to_string(),
+            "امروز صبح زود به کتابخانه رفتم تا کتاب تازه‌ای درباره تاریخ معاصر ایران بخوانم و یادداشت بردارم.".to_string(),
+            "خوشبختانه دوست من نسخه دیگری از همان کتاب را همراه داشت و با هم فصل اول را خواندیم.".to_string(),
+        ];
+        let rotated = export_step_groups(&paras, true);
+        assert_eq!(rotated.len(), 2);
+        assert!(rotated[0].starts_with("فصل اول\n\nامروز"));
+        assert!(rotated[1].starts_with("خوشبختانه"));
+
+        let single = export_step_groups(&paras, false);
+        assert_eq!(single.len(), 1);
     }
 }
 

@@ -959,6 +959,8 @@ pub fn open_document_layout(name: &str, mut pages: Vec<(Vec<LayoutItem>, f64, f6
         paras.push(p);
         boxes.push(b);
     }
+    let empty_body: Vec<bool> = paras.iter().map(|p| p.is_empty()).collect();
+    let scan_images: Vec<bool> = images.into_iter().zip(empty_body).map(|(im, empty)| im && empty).collect();
     drop_imprint_pages(&mut paras);
     drop_back_matter(&mut paras);
     for (p, b) in paras.iter().zip(boxes.iter_mut()) {
@@ -966,10 +968,41 @@ pub fn open_document_layout(name: &str, mut pages: Vec<(Vec<LayoutItem>, f64, f6
             b.clear();
         }
     }
-    let (paras, boxes) = join_across_pages_with_boxes(paras, boxes);
     let (paras, fix) = fix_font_symbols(paras);
+    let ocr_ready = engines.ocr.is_some();
+    let skip_join: Vec<bool> = if ocr_ready {
+        let mut known: Vec<(usize, f64)> = Vec::new();
+        for (n, page) in paras.iter().enumerate() {
+            let rep: Vec<String> = page.iter().map(|p| repair_default(p)).collect();
+            if let Some(k) = known_ratio(&rep) {
+                known.push((n, k));
+            }
+        }
+        let all_low = if !known.is_empty() {
+            let mut vals: Vec<f64> = known.iter().map(|x| x.1).collect();
+            vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            vals[known.len() / 2] < 0.82
+        } else {
+            false
+        };
+        let mut skip = vec![false; paras.len()];
+        for n in 0..paras.len() {
+            if (paras[n].is_empty() && scan_images[n]) || latin_gibberish(&paras[n]) {
+                skip[n] = true;
+            }
+        }
+        for (n, k) in known {
+            if all_low || k < 0.4 {
+                skip[n] = true;
+            }
+        }
+        skip
+    } else {
+        vec![false; paras.len()]
+    };
+    let (paras, boxes) = join_across_pages_guarded(paras, boxes, &skip_join);
     let para_boxes: Vec<(f64, f64, Vec<Vec<[f64; 5]>>)> = dims.into_iter().zip(boxes).map(|((w, h), b)| (w, h, b)).collect();
-    let mut doc = Document::new(name, paras, fix, marks, engines, Some(images));
+    let mut doc = Document::new(name, paras, fix, marks, engines, Some(scan_images));
     if let Some(d) = Arc::get_mut(&mut doc) {
         d.para_boxes = para_boxes;
     }

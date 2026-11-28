@@ -636,11 +636,14 @@ pub fn drop_addresses(pages: &mut [Vec<String>]) {
 }
 
 pub fn is_figure_caption(p: &str) -> bool {
-    search(r"^\s*(?:Figures?|Fig\.|Plates?|Illustration|Photo(?:graph)?|Image|شکل|تصویر|نگاره|عکس)\s*[\d۰-۹IVX]", p)
+    search(r"^\s*(?:Figures?|Fig\.|Plates?|Illustration|Photo(?:graph)?|Image|شکل|تصویر|نگاره|نمودار|عکس)\s*[\d۰-۹IVX:]", p)
 }
 
 pub fn is_caption(p: &str) -> bool {
-    search(r"^\s*(?:(?:Figures?|Fig\.|Plates?|Table|Map|Illustration|Photo(?:graph)?|Image|شکل|تصویر|نگاره|جدول|عکس)\s*[\d۰-۹IVX]|(?:Sources?|Credits?|Courtesy|Photo(?:graph)?|منبع|عکس)\s*:)", p)
+    search(
+        r"^\s*(?:(?:Figures?|Fig\.|Plates?|Table|Map|Illustration|Photo(?:graph)?|Image|شکل|تصویر|نگاره|جدول|نمودار|پوستر|عکس)\s*[\d۰-۹IVX:]|(?:Sources?|Credits?|Courtesy|Photo(?:graph)?|منبع|ماخذ|مأخذ|عکاس|عکس|تصویر|طرح(?:\s+از)?|برگرفته از)\s*:)",
+        p,
+    )
 }
 
 fn sentence_end(p: &str) -> Option<usize> {
@@ -680,33 +683,60 @@ pub fn join_across_pages(pages: Vec<Vec<String>>) -> Vec<Vec<String>> {
 }
 
 pub fn join_across_pages_with_boxes(
+    pages: Vec<Vec<String>>,
+    boxes: Vec<Vec<Vec<[f64; 5]>>>,
+) -> (Vec<Vec<String>>, Vec<Vec<Vec<[f64; 5]>>>) {
+    join_across_pages_guarded(pages, boxes, &[])
+}
+
+pub fn join_across_pages_guarded(
     mut pages: Vec<Vec<String>>,
     mut boxes: Vec<Vec<Vec<[f64; 5]>>>,
+    skip_page: &[bool],
 ) -> (Vec<Vec<String>>, Vec<Vec<Vec<[f64; 5]>>>) {
     let has_boxes = boxes.len() == pages.len();
+    let skipped = |idx: usize| skip_page.get(idx).copied().unwrap_or(false);
     let mut carry: Option<(usize, usize, usize)> = None;
     for n in 0..pages.len().saturating_sub(1) {
+        if skipped(n) {
+            carry = None;
+            continue;
+        }
         let target = match caption_block(&pages[n], true) {
             Some(i) => Some((n, i)),
             None => carry.filter(|c| c.0 == n).map(|c| (c.1, c.2)),
         };
         carry = None;
         let Some((t, i)) = target else { continue };
-        let Some((m, j)) = (n + 1..pages.len().min(n + 3)).find_map(|m| caption_block(&pages[m], false).map(|j| (m, j))) else { continue };
-        if m == n + 2 && !pages[n + 1].iter().any(|p| is_caption(p)) {
+        if skipped(t) {
+            continue;
+        }
+        let Some((m, j)) = (n + 1..pages.len().min(n + 3)).find_map(|m| {
+            if skipped(m) { None } else { caption_block(&pages[m], false).map(|j| (m, j)) }
+        }) else { continue };
+        if m == n + 2 && (skipped(n + 1) || !pages[n + 1].iter().any(|p| is_caption(p))) {
             continue;
         }
         let open = !search(r"[.!?؟:؛»)\]…]\s*$", &pages[t][i]) || search(r"(?:^|[\s(])(?:(?:[A-Z][a-z]?\.){1,3}|Dr\.|Mr\.|Mrs\.|Prof\.|St\.)\s*$", &pages[t][i]);
+        // Single-line or short unpunctuated blocks at the bottom of page `t` are image labels, headings,
+        // or photo captions — never pull the next page's prose onto them!
+        let tail_words = pages[t][i].split_whitespace().count();
+        let tail_lines = if has_boxes { boxes.get(t).and_then(|b| b.get(i)).map_or(0, |v| v.len()) } else { 2 };
+        let short_tail_label = has_boxes
+            && (tail_words < 6 || (tail_lines <= 1 && tail_words <= 16 && !search(r"[.!?؟…؛،,:]", &pages[t][i])));
         let only_farsi = |p: &str| rtl(p) && !p.chars().any(|c| c.is_ascii_alphabetic());
         let same_script = !((!rtl(&pages[t][i]) && only_farsi(&pages[m][j])) || (only_farsi(&pages[t][i]) && !rtl(&pages[m][j])));
-        let stops = |p: &str| notes_heading(p) || contents_heading(p);
+        let stops = |p: &str| notes_heading(p) || contents_heading(p) || is_caption(p);
+        let next_words = pages[m][j].split_whitespace().count();
+        let next_has_sent_punct = search(r"[.!?؟…؛]", &pages[m][j]);
         let title_page = {
             let tail: Vec<&str> = pages[t][i].split_whitespace().rev().take(2).collect::<Vec<_>>().into_iter().rev().collect();
             let head: Vec<&str> = pages[m][j].split_whitespace().take(tail.len()).collect();
-            let heading = pages[m][j].split_whitespace().count() <= 5 && !pages[m][j].chars().any(|c| ".!?؟…،,;؛:»”)".contains(c));
+            let heading = (next_words <= 5 && !pages[m][j].chars().any(|c| ".!?؟…،,;؛:»”)".contains(c)))
+                || (has_boxes && !next_has_sent_punct && next_words <= 14);
             (tail.len() == 2 && tail == head) || heading
         };
-        if open && !title_page && same_script && !stops(&pages[t][i]) && !stops(&pages[m][j]) {
+        if open && !short_tail_label && !title_page && same_script && !stops(&pages[t][i]) && !stops(&pages[m][j]) {
             let cut = sentence_end(&pages[m][j]);
             let first = match cut {
                 Some(e) => {
@@ -1580,7 +1610,8 @@ pub fn layout_lines(items: &[LayoutItem], page_h: f64) -> Vec<LLine> {
         }
     }
     let mut split: Vec<Vec<&LayoutItem>> = Vec::new();
-    for mut g in groups {
+    let mut work_groups = groups;
+    while let Some(mut g) = work_groups.pop() {
         g.sort_by(|a, b| a.x0.partial_cmp(&b.x0).unwrap_or(std::cmp::Ordering::Equal));
         let mut cut = None;
         let n = g.len();
@@ -1599,14 +1630,20 @@ pub fn layout_lines(items: &[LayoutItem], page_h: f64) -> Vec<LLine> {
         }
         for k in 1..n {
             let reach = lmax_x1[k];
+            let gap = g[k].x0 - reach;
             let size = g[k].size.min(g[k - 1].size);
             let mid_l = lsum_mid[k] / (2.0 * k as f64);
             let mid_r = (lsum_mid[n] - lsum_mid[k]) / (2.0 * (n - k) as f64);
             let (big_l, big_r) = (lbig[k], rbig[k]);
             let other_size = (big_l - big_r).abs() > 0.04 * big_l.max(big_r);
+            let distinct_style = (mid_l - mid_r).abs() > 0.25 * size || (big_l - big_r).abs() > 0.08 * big_l.max(big_r);
             let wide_l = lmax_x1[k] - lmin_x0[k] > 6.0 * size;
             let wide_r = rmax_x1[k] - rmin_x0[k] > 6.0 * size;
-            if g[k].x0 - reach > 0.5 * size && ((mid_l - mid_r).abs() > 0.25 * size || other_size) && wide_l && wide_r {
+            let col_split = gap > 0.5 * size && ((mid_l - mid_r).abs() > 0.25 * size || other_size) && wide_l && wide_r;
+            let baseline_col_split = gap > 1.75 * size && wide_l && wide_r;
+            let aside_label_split = gap > 2.4 * size && distinct_style && (wide_l || wide_r);
+            let wide_gap_split = gap > 3.5 * size;
+            if col_split || baseline_col_split || aside_label_split || wide_gap_split {
                 cut = Some(k);
                 break;
             }
@@ -1614,15 +1651,30 @@ pub fn layout_lines(items: &[LayoutItem], page_h: f64) -> Vec<LLine> {
         match cut {
             Some(k) => {
                 let r = g.split_off(k);
+                work_groups.push(r);
                 split.push(g);
-                split.push(r);
             }
             None => split.push(g),
         }
     }
+    let rtl_page = split.iter().flat_map(|g| g.iter()).filter(|i| rtl(&i.s)).count() * 2
+        > split.iter().map(|g| g.len()).sum::<usize>();
     split.sort_by(|a, b| {
         let t = |g: &Vec<&LayoutItem>| g.iter().map(|x| x.top).fold(f64::MAX, f64::min);
-        t(a).partial_cmp(&t(b)).unwrap_or(std::cmp::Ordering::Equal)
+        let x0 = |g: &Vec<&LayoutItem>| g.iter().map(|i| i.x0).fold(f64::MAX, f64::min);
+        let x1 = |g: &Vec<&LayoutItem>| g.iter().map(|i| i.x1).fold(f64::MIN, f64::max);
+        let sz = |g: &Vec<&LayoutItem>| g.iter().map(|i| i.size).fold(0.0f64, f64::max);
+        let (ta, tb) = (t(a), t(b));
+        if (ta - tb).abs() <= 0.4 * sz(a).min(sz(b)) {
+            if rtl_page {
+                x1(b).partial_cmp(&x1(a)).unwrap_or(std::cmp::Ordering::Equal)
+            } else {
+                x0(a).partial_cmp(&x0(b)).unwrap_or(std::cmp::Ordering::Equal)
+            }
+        } else {
+            ta.partial_cmp(&tb).unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| x0(a).partial_cmp(&x0(b)).unwrap_or(std::cmp::Ordering::Equal))
+        }
     });
     let groups = split;
     let mut lines: Vec<LLine> = Vec::new();
@@ -1719,6 +1771,46 @@ pub fn layout_lines(items: &[LayoutItem], page_h: f64) -> Vec<LLine> {
     order_side_columns(lines)
 }
 
+fn order_column_run(mut run: Vec<LLine>, rtl_page: bool, out: &mut Vec<LLine>) {
+    if run.len() < 3 {
+        out.append(&mut run);
+        return;
+    }
+    let mut sizes: Vec<f64> = run.iter().map(|l| l.size).collect();
+    sizes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let med_size = sizes[sizes.len() / 2].max(1.0);
+    let mut best: Option<(f64, f64)> = None;
+    for l in run.iter() {
+        let g = l.x1;
+        if run.iter().all(|m| m.x1 <= g + 1.0 || m.x0 >= g - 1.0) {
+            let (a, b) = (run.iter().filter(|m| m.x1 <= g + 1.0).count(), run.iter().filter(|m| m.x0 >= g - 1.0).count());
+            if a + b != run.len() || a == 0 || b == 0 {
+                continue;
+            }
+            let max_l = run.iter().filter(|m| m.x1 <= g + 1.0).map(|m| m.x1).fold(f64::MIN, f64::max);
+            let min_r = run.iter().filter(|m| m.x0 >= g - 1.0).map(|m| m.x0).fold(f64::MAX, f64::min);
+            let gutter = min_r - max_l;
+            let ok = (a >= 2 && b >= 2) || (run.len() >= 4 && gutter >= 1.5 * med_size);
+            if ok && best.map_or(true, |(_, bg)| gutter > bg) {
+                best = Some((g, gutter));
+            }
+        }
+    }
+    match best {
+        Some((g, _)) => {
+            let (l_col, r_col): (Vec<LLine>, Vec<LLine>) = run.drain(..).partition(|m| m.x1 <= g + 1.0);
+            if rtl_page {
+                order_column_run(r_col, rtl_page, out);
+                order_column_run(l_col, rtl_page, out);
+            } else {
+                order_column_run(l_col, rtl_page, out);
+                order_column_run(r_col, rtl_page, out);
+            }
+        }
+        None => out.append(&mut run),
+    }
+}
+
 fn order_side_columns(lines: Vec<LLine>) -> Vec<LLine> {
     let (left, right) = (lines.iter().map(|l| l.x0).fold(f64::MAX, f64::min), lines.iter().map(|l| l.x1).fold(f64::MIN, f64::max));
     let width = right - left;
@@ -1729,40 +1821,15 @@ fn order_side_columns(lines: Vec<LLine>) -> Vec<LLine> {
     let narrow = |l: &LLine| l.x1 - l.x0 < 0.6 * width;
     let mut out: Vec<LLine> = Vec::new();
     let mut run: Vec<LLine> = Vec::new();
-    let flush = |run: &mut Vec<LLine>, out: &mut Vec<LLine>| {
-        let mut best: Option<f64> = None;
-        for l in run.iter() {
-            let g = l.x1;
-            if run.iter().all(|m| m.x1 <= g + 1.0 || m.x0 >= g - 1.0) {
-                let (a, b) = (run.iter().filter(|m| m.x1 <= g + 1.0).count(), run.iter().filter(|m| m.x0 >= g - 1.0).count());
-                if a >= 2 && b >= 2 && a + b == run.len() {
-                    best = Some(g);
-                }
-            }
-        }
-        match best {
-            Some(g) => {
-                let (mut l_col, mut r_col): (Vec<LLine>, Vec<LLine>) = run.drain(..).partition(|m| m.x1 <= g + 1.0);
-                if rtl_page {
-                    out.append(&mut r_col);
-                    out.append(&mut l_col);
-                } else {
-                    out.append(&mut l_col);
-                    out.append(&mut r_col);
-                }
-            }
-            None => out.append(run),
-        }
-    };
     for l in lines {
         if narrow(&l) {
             run.push(l);
         } else {
-            flush(&mut run, &mut out);
+            order_column_run(std::mem::take(&mut run), rtl_page, &mut out);
             out.push(l);
         }
     }
-    flush(&mut run, &mut out);
+    order_column_run(run, rtl_page, &mut out);
     out
 }
 
@@ -1988,13 +2055,24 @@ pub fn paragraphs_with_boxes(lines: &[LLine]) -> (Vec<String>, Vec<Vec<[f64; 5]>
         let same_para = !heading(&l.text) && !prev.is_some_and(|p| heading(&p.text)) && prev.is_some_and(|p| {
             let gap = l.top - p.bot;
             let h = (p.bot - p.top).max(l.bot - l.top);
+            let x_overlap = p.x1.min(l.x1) - p.x0.max(l.x0);
+            let same_col = x_overlap > 0.15 * (p.x1 - p.x0).min(l.x1 - l.x0).max(1.0);
             let same_edges = (p.x0 - l.x0).abs() < 2.0 && (p.x1 - l.x1).abs() < 2.0 && (p.x1 - p.x0) >= 0.45 * full;
-            let close = gap < 0.6 * h || (gap < close_gap_for(l.size) * h && ((p.x1 - p.x0) >= 0.75 * col_full(p) || same_edges) && rtl(&p.text) == rtl(&l.text));
+            let close = gap >= -0.35 * h && same_col && (gap < 0.6 * h || (gap < close_gap_for(l.size) * h && ((p.x1 - p.x0) >= 0.75 * col_full(p) || same_edges) && rtl(&p.text) == rtl(&l.text)));
             let same_size = (l.size - p.size).abs() <= 0.15 * p.size.max(l.size);
-            let ended = (p.x1 - p.x0) < 0.75 * full && !same_edges && search(r"[.!?؟:»)\]…]$", &p.text);
+            let col_w = col_full(p);
+            let pw = p.x1 - p.x0;
+            let lw = l.x1 - l.x0;
+            let start_shift = if rtl(&p.text) { (p.x1 - l.x1).abs() } else { (p.x0 - l.x0).abs() };
+            let end_shift = if rtl(&p.text) { (p.x0 - l.x0).abs() } else { (p.x1 - l.x1).abs() };
+            let opposite_edges = (p.x0 - l.x0) * (p.x1 - l.x1) < 0.0;
+            let centered_pair = (opposite_edges && start_shift > 0.45 * h && end_shift > 0.45 * h)
+                || (start_shift > 1.2 * h && end_shift > 1.2 * h);
+            let short_pair = pw < 0.65 * col_w && lw < 0.65 * col_w && !same_edges;
+            let ended = pw < 0.75 * col_w && !same_edges && search(r"[.!?؟:»)\]…]$", &p.text);
             let label = search(r"^\s*(?:Keywords|Key words|Abstract|Title|کلیدواژه(?:\x{200c}?ها)?|کلید واژه(?:\x{200c}?ها)?|واژگان کلیدی|چکیده)\s*:", &l.text);
             let turn = search(r#"[.!?؟…]\s*[»"”)\]]?\s*$"#, &p.text) && search(PARAGRAPH_OPENER, &l.text);
-            close && same_size && !ended && !label && !turn
+            close && same_size && !centered_pair && !short_pair && !ended && !label && !turn
         });
         let lb = [l.x0, l.top, l.x1, l.bot, if rtl(&l.text) { 1.0 } else { 0.0 }];
         match (same_para, paras.last_mut(), pboxes.last_mut()) {
@@ -2016,6 +2094,73 @@ pub fn paragraphs_with_boxes(lines: &[LLine]) -> (Vec<String>, Vec<Vec<[f64; 5]>
     }
     (paras, pboxes)
 }
+
+#[cfg(test)]
+mod pdf_layout_tests {
+    use super::*;
+
+    #[test]
+    fn baseline_aligned_persian_columns_stay_separate_and_ordered_rtl() {
+        let items = vec![
+            // Right column (read first in Persian)
+            LayoutItem { s: "این ستون راست صفحه‌ی اول است".into(), x0: 320.0, top: 100.0, x1: 540.0, bot: 114.0, size: 12.0, rtl: true },
+            LayoutItem { s: "و در خط دوم ادامه پیدا می‌کند.".into(), x0: 320.0, top: 120.0, x1: 540.0, bot: 134.0, size: 12.0, rtl: true },
+            // Left column (same font size & exact same baseline y!)
+            LayoutItem { s: "این متن ستون چپ همان صفحه است".into(), x0: 50.0, top: 100.0, x1: 270.0, bot: 114.0, size: 12.0, rtl: true },
+            LayoutItem { s: "که باید بعد از ستون راست خوانده شود.".into(), x0: 50.0, top: 120.0, x1: 270.0, bot: 134.0, size: 12.0, rtl: true },
+        ];
+        let paras = paragraphs_from_layout(&items, 800.0);
+        assert_eq!(paras, vec![
+            "این ستون راست صفحه‌ی اول است و در خط دوم ادامه پیدا می‌کند.",
+            "این متن ستون چپ همان صفحه است که باید بعد از ستون راست خوانده شود.",
+        ]);
+    }
+
+    #[test]
+    fn picture_label_beside_body_column_does_not_interrupt_sentence() {
+        let items = vec![
+            LayoutItem { s: "مردم در خیابان‌های شهر جمع شدند".into(), x0: 300.0, top: 100.0, x1: 540.0, bot: 114.0, size: 12.0, rtl: true },
+            LayoutItem { s: "و شعارهای آزادی سر دادند و تا".into(), x0: 300.0, top: 120.0, x1: 540.0, bot: 134.0, size: 12.0, rtl: true },
+            // Short smaller-font picture label on the left at the same vertical band
+            LayoutItem { s: "میدان آزادی ۱۳۵۷".into(), x0: 60.0, top: 121.0, x1: 140.0, bot: 131.0, size: 9.5, rtl: true },
+            LayoutItem { s: "غروب در میدان باقی ماندند.".into(), x0: 300.0, top: 140.0, x1: 540.0, bot: 154.0, size: 12.0, rtl: true },
+        ];
+        let paras = paragraphs_from_layout(&items, 800.0);
+        assert_eq!(paras[0], "مردم در خیابان‌های شهر جمع شدند و شعارهای آزادی سر دادند و تا غروب در میدان باقی ماندند.");
+        assert_eq!(paras[1], "میدان آزادی ۱۳۵۷");
+    }
+
+    #[test]
+    fn join_across_pages_does_not_mix_picture_captions_across_pages() {
+        let pages = vec![
+            vec!["در این بخش روند رویدادهای تاریخی را بررسی می‌کنیم و نشان می‌دهیم که چگونه".to_string()],
+            vec!["راهپیمایی بزرگ مردم در خیابان انقلاب تهران در پاییز پنجاه و هفت".to_string()],
+            vec!["این دگرگونی به سرعت در همه‌ی شهرها گسترش یافت. سپس مرحله‌ی تازه‌ای آغاز شد.".to_string()],
+        ];
+        let boxes = vec![
+            vec![vec![[60.0, 680.0, 520.0, 694.0, 1.0]]],
+            vec![vec![[120.0, 620.0, 460.0, 632.0, 1.0]]],
+            vec![vec![[60.0, 80.0, 520.0, 94.0, 1.0]]],
+        ];
+        let (joined, _) = join_across_pages_with_boxes(pages.clone(), boxes);
+        // Page 2's unpunctuated 12-word photo caption must stay on Page 2, never glued onto Page 1!
+        assert_eq!(joined[0], pages[0]);
+        assert_eq!(joined[1], pages[1]);
+    }
+
+    #[test]
+    fn cover_names_over_background_picture_stay_separate() {
+        let items = vec![
+            LayoutItem { s: "علی رضایی".into(), x0: 360.0, top: 200.0, x1: 440.0, bot: 214.0, size: 12.0, rtl: true },
+            LayoutItem { s: "مریم احمدی".into(), x0: 140.0, top: 200.0, x1: 220.0, bot: 214.0, size: 12.0, rtl: true },
+            LayoutItem { s: "سارا محمدی".into(), x0: 250.0, top: 222.0, x1: 340.0, bot: 236.0, size: 12.0, rtl: true },
+            LayoutItem { s: "حسین کریمی".into(), x0: 235.0, top: 244.0, x1: 355.0, bot: 258.0, size: 12.0, rtl: true },
+        ];
+        let paras = paragraphs_from_layout(&items, 800.0);
+        assert_eq!(paras, vec!["علی رضایی", "مریم احمدی", "سارا محمدی", "حسین کریمی"]);
+    }
+}
+
 
 
 

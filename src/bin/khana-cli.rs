@@ -9,7 +9,8 @@ fn main() {
     match args.get(1).map(|s| s.as_str()) {
         Some("dump") => dump(&args[2], &args[3..]),
         Some("plans") => plans(&args[2], &args[3]),
-        Some("say") => say(&args[2], &args[3], args.get(4).map(|s| s.as_str()).unwrap_or("male_news.wav")),
+        Some("say") => say(&args[2], &args[3], args.get(4).map(|s| s.as_str()).unwrap_or("donated_rahul.wav"), false),
+        Some("say-quick") => say(&args[2], &args[3], args.get(4).map(|s| s.as_str()).unwrap_or("donated_rahul.wav"), true),
         Some("hear") => hear(&args[2]),
         Some("api") => api_test(&args[2]),
         Some("finish") => {
@@ -131,13 +132,13 @@ fn plans(input: &str, output: &str) {
     std::fs::write(output, serde_json::to_string(&out).unwrap()).unwrap();
 }
 
-fn say(text: &str, out: &str, voice: &str) {
+fn say(text: &str, out: &str, voice: &str, quick: bool) {
     let models = khana::vocab::models_dir();
     let eng = khana::tts::Engine::new(&models.join("parsigo/model")).unwrap();
     eng.g2p.set_lexicon(&[]);
-    let wav = if models.join("voices").join(voice).is_file() { models.join("voices").join(voice) } else { models.join("parsigo/voices").join(voice) };
+    let wav = if models.join("voices").join(voice).is_file() { models.join("voices").join(voice) } else if std::path::Path::new(voice).is_file() { std::path::PathBuf::from(voice) } else { models.join("parsigo/voices").join(voice) };
     let t0 = std::time::Instant::now();
-    let a = eng.synthesize_text(&khana::tts::speech_clean(text), voice, &wav, 5, false, &|| false).unwrap();
+    let a = eng.synthesize_text(&khana::tts::speech_clean(text), voice, &wav, 5, quick, &|| false).unwrap();
     let secs = a.len() as f64 / 24000.0;
     eprintln!("{secs:.1} s of speech in {:.1} s ({:.2}x real time)", t0.elapsed().as_secs_f64(), secs / t0.elapsed().as_secs_f64());
     std::fs::write(out, khana::audio::wav_bytes(&a, 24000)).unwrap();
@@ -169,7 +170,7 @@ fn api_test(path: &str) {
     let r = app.handle("GET", "/api/render", &format!("doc={id}&n=1&w=800"), Some(&tok), &[], &web);
     println!("render {} {} bytes {}", r.status, r.body.len(), r.ctype);
     let text = p["paragraphs"][0].as_str().unwrap_or("سلام");
-    let body = serde_json::json!({"text": text.chars().take(120).collect::<String>(), "voice": "khabari", "speed": 1.0}).to_string();
+    let body = serde_json::json!({"text": text.chars().take(120).collect::<String>(), "voice": "seda1", "speed": 1.0}).to_string();
     let t0 = std::time::Instant::now();
     let r = app.handle("POST", "/api/tts", "", Some(&tok), body.as_bytes(), &web);
     println!("tts {} {} bytes in {:.1} s", r.status, r.body.len(), t0.elapsed().as_secs_f64());

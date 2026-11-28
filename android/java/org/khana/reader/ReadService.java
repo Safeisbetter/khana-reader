@@ -208,8 +208,8 @@ public final class ReadService extends Service {
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE);
         PendingIntent toggle = PendingIntent.getService(this, 10, new Intent(this, ReadService.class).setAction(paused ? "resume" : "pause"), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         PendingIntent stop = PendingIntent.getService(this, 11, new Intent(this, ReadService.class).setAction("stop"), PendingIntent.FLAG_IMMUTABLE);
-        Notification publicVersion = new Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_media_play).setContentTitle("خوانا").setContentText(paused ? "خواندن مکث شده" : "در حال خواندن").build();
-        return new Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_media_play).setContentTitle("خوانا")
+        Notification publicVersion = new Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_media_play).setContentTitle("کتاب‌خوان").setContentText(paused ? "خواندن مکث شده" : "در حال خواندن").build();
+        return new Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_media_play).setContentTitle("کتاب‌خوان")
             .setContentText(paused ? "خواندن مکث شده" : "در حال خواندن").setContentIntent(open).setOngoing(!paused)
             .setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(publicVersion)
             .addAction(new Notification.Action.Builder(Icon.createWithResource(this, paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause), paused ? "ادامه" : "مکث", toggle).build())
@@ -251,8 +251,9 @@ public final class ReadService extends Service {
         Future<Sound> future = r.workers.submit(() -> {
             if (r.cancelled) throw new InterruptedException();
             JSONObject body = new JSONObject().put("text", text).put("voice", r.request.getString("voice")).put("speed", r.request.getDouble("speed")).put("gen", r.gen).put("order", order);
-            // Fast-path whenever starting up OR when buffered playback runway drops below 22s — prevents mid-page pauses on all devices.
-            if (quick || bufferedSeconds(r) < 22.0) body.put("quick", true);
+            // Scale the refill runway with playback speed so faster reading starts synthesis sooner.
+            double speed = r.request.optDouble("speed", 1.0);
+            if (quick || bufferedSeconds(r) < 22.0 * Math.max(1.0, speed)) body.put("quick", true);
             byte[] request = Native.utf8(body.toString());
             Native.Reply reply;
             try { reply = call("POST", "/api/tts", "", request); } finally { Arrays.fill(request, (byte) 0); }
@@ -318,6 +319,7 @@ public final class ReadService extends Service {
             for (int page = first; page <= pages && !r.cancelled; page++) {
                 int fedPara = page == first ? firstPara : 0;
                 boolean pageDone = false;
+                int scanWait = 0;
                 while (!pageDone && !r.cancelled) {
                     if (beginning) {
                         r.phase = "loading_page";
@@ -325,7 +327,15 @@ public final class ReadService extends Service {
                     }
                     String req = options + "&n=" + page + (translating ? "&partial=1" : "");
                     JSONObject result = json("/api/page", req);
-                    if (result.optBoolean("needsPicture")) throw new Exception("Scanned page was not prepared");
+                    if (result.optBoolean("needsPicture")) {
+                        if (++scanWait > 120) throw new Exception("Scanned page was not prepared");
+                        if (beginning || bufferedSeconds(r) < 1.0) {
+                            r.phase = "loading_page";
+                            r.waitReason = "در حال تشخیص متن صفحه‌ی اسکن‌شده…";
+                        }
+                        Thread.sleep(250);
+                        continue;
+                    }
                     JSONArray paras = result.getJSONArray("paragraphs");
                     pageDone = !translating || result.optBoolean("done", true);
                     int totalParas = result.optInt("total", paras.length());
@@ -351,17 +361,17 @@ public final class ReadService extends Service {
                         for (SpeechPieces.Piece whole : SpeechPieces.split(text)) {
                             if (page == first && p == firstPara && whole.end <= offset) continue;
                             SpeechPieces.Piece target = (exact && page == first && p == firstPara && whole.start < offset) ? new SpeechPieces.Piece(text, offset, whole.end) : whole;
-                            List<SpeechPieces.Piece> parts = SpeechPieces.clauses(text, target, beginning);
+                            List<SpeechPieces.Piece> parts = SpeechPieces.clauses(text, target, beginning, pieceIndex < 4);
                             for (int k = 0; k < parts.size(); k++) {
                                 SpeechPieces.Piece piece = parts.get(k);
                                 double gap = naturalPause(beginning, paragraphStart, title, afterTitle, k > 0, prevText, pauseScale);
                                 if (beginning) {
                                     r.phase = "synthesizing";
                                     r.waitProgress = -1;
-                                    r.waitReason = "در حال آماده‌سازی صدا…".equals(r.startReason) ? "در حال ساختن صدای جمله‌ی اول…" : r.startReason;
+                                    r.waitReason = "در حال آماده‌سازی صدا…".equals(r.startReason) ? "آماده‌سازی صدا…" : r.startReason;
                                 }
-                                // Fast ramp-up for the first 3 clauses builds a smooth buffer cushion immediately
-                                submit(r, piece.text, page, p, piece, gap, pieceIndex < 3);
+                                // Fast ramp-up for the first 4 clauses builds a smooth buffer cushion immediately
+                                submit(r, piece.text, page, p, piece, gap, pieceIndex < 4);
                                 pieceIndex++;
                                 prevText = piece.text;
                                 beginning = false; paragraphStart = false; afterTitle = false;
@@ -388,7 +398,7 @@ public final class ReadService extends Service {
         try {
             // (the reading before this one is finishing its sentence: this one's voice starts when it ends)
             Run before = r.previous;
-            if (before != null && before.player != null) before.player.join(20000);
+            if (before != null && before.player != null) before.player.join(4500);
             r.previous = null;
             int min = AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
             // 3.0s hardware ring buffer with low start threshold so first clauses and short phrases play immediately
@@ -429,7 +439,7 @@ public final class ReadService extends Service {
                     } catch (TimeoutException te) {
                         if (first) {
                             r.phase = "synthesizing";
-                            r.waitReason = "در حال آماده‌سازی صدا…".equals(r.startReason) ? "در حال ساختن صدای جمله‌ی اول…" : r.startReason;
+                            r.waitReason = "در حال آماده‌سازی صدا…".equals(r.startReason) ? "آماده‌سازی صدا…" : r.startReason;
                         } else if (!r.paused) {
                             long headNow = Integer.toUnsignedLong(r.track.getPlaybackHeadPosition());
                             if (frames <= headNow + RATE / 2) {
@@ -453,12 +463,12 @@ public final class ReadService extends Service {
                 if (r.cancelled) break;
                 if (sound == null) continue;
                 // Smooth pre-buffer cushion before starting playback:
-                // - "extra" mode (for older/slower phones & tablets): pre-buffer ~4 clauses (~16s) with live progress bar
+                // - "extra" mode: short 2s wait only if clause #1 is brief (<1.8s)
                 // - "normal" mode: fast start, plus a short 650ms wait if clause #1 is very short (<2.2s)
                 if (first && !sound.endOfBook) {
                     boolean extraBuf = "extra".equals(r.request.optString("smoothBuffer", "normal")) && !r.request.optBoolean("isTyped", false);
-                    if (extraBuf) {
-                        long deadline = SystemClock.elapsedRealtime() + 18000L;
+                    if (extraBuf && sound.duration < 1.8) {
+                        long deadline = SystemClock.elapsedRealtime() + 2000L;
                         while (!r.cancelled && SystemClock.elapsedRealtime() < deadline) {
                             int ready = 1;
                             double readySecs = sound.duration;
@@ -475,11 +485,11 @@ public final class ReadService extends Service {
                                     } catch (Exception ignored) { }
                                 }
                             }
-                            if (hasEnd || ready >= 4 || readySecs >= 16.0) break;
+                            if (hasEnd || ready >= 2 || readySecs >= 2.5) break;
                             r.phase = "synthesizing";
-                            r.waitProgress = Math.min(95, (ready * 100) / 4);
-                            r.waitReason = "در حال آماده‌سازی برای خواندنِ بی‌وقفه… (" + ready + " از ۴ جمله)";
-                            Thread.sleep(150);
+                            r.waitProgress = Math.min(95, (ready * 100) / 2);
+                            r.waitReason = "در حال آماده‌سازی صدا…";
+                            Thread.sleep(80);
                         }
                     } else if (sound.duration < 2.2) {
                         Future<Sound> second = r.queue.peek();

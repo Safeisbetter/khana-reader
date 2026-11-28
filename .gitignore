@@ -1,6 +1,7 @@
 # Folders are written with a leading / and no trailing / on purpose: a folder that is only a link to elsewhere is a file to git, and
 # a pattern ending in / would not match it. Secrets: never publish these. Anyone holding them could sign fake updates of the Android app.
 /android/keystore
+/keystore
 *.jks
 *.keystore
 password.txt
@@ -9,6 +10,7 @@ password.txt
 # Too large for a code repository; the apps carry them, and the credits say where they come from
 /models
 /vendor/lib
+/vendor/crates
 /android/prebuilt
 /android/toolchain
 
@@ -16,6 +18,7 @@ password.txt
 /target
 /android/build
 /dist
+/release-upload-pending
 *.app
 *.apk
 *.dmg
@@ -29,9 +32,11 @@ joins.tsv
 NOTES.md
 HANDOFF_WORDS.md
 IOS_PLAN.md
+REBUILD.txt
 # Agent folders and memory files hold secrets like a .env file does (commands with passwords, tokens, local paths): never committed
 /.claude
 .claude/
+.idea/
 .cursor/
 .gemini/
 .specstory/
@@ -40,6 +45,8 @@ IOS_PLAN.md
 .windsurf/
 .codeium/
 .copilot/
+/android/shellcheck-v*
+/github-upload-*
 CLAUDE.md
 AGENTS.md
 GEMINI.md

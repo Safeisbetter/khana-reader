@@ -89,24 +89,26 @@ pub fn varispeed(x: &[f32], sample_rate: usize, rate: impl Fn(f64, f64) -> f64) 
     out
 }
 
-/// Applies independent pitch (`pitch_fn`) and speaking-tempo (`tempo_fn`) contours plus
-/// a gentle human breath/dynamics envelope (`gain_fn`).
+/// Applies independent pitch (`pitch_fn`) and speaking-tempo (`tempo_fn` scaled by `base_speed`)
+/// contours plus a gentle human breath/dynamics envelope (`gain_fn`) in a single TD-PSOLA pass.
 fn shape_contours(
     x: Vec<f32>,
     sample_rate: usize,
+    base_speed: f64,
     pitch_fn: impl Fn(f64, f64) -> f64,
     tempo_fn: impl Fn(f64, f64) -> f64,
     gain_fn: impl Fn(f64, f64) -> f32,
 ) -> Vec<f32> {
+    let base_speed = base_speed.clamp(0.5, 2.0);
     if x.len() < sample_rate / 4 {
-        return x;
+        return if (base_speed - 1.0).abs() >= 0.008 { crate::stretch::stretch(&x, base_speed, sample_rate) } else { x };
     }
-    // Step 1: Time-stretch by (tempo / pitch) without changing pitch.
+    // Step 1: Time-stretch by (tempo * base_speed / pitch) without changing pitch.
     // Step 2: Resample via varispeed by (pitch), shifting pitch to `pitch` while net tempo becomes
-    //         (tempo / pitch) * pitch = tempo!
+    //         (tempo * base_speed / pitch) * pitch = tempo * base_speed in one pass!
     let stretched = crate::stretch::stretch_curve(&x, sample_rate, |t, len| {
         let p = pitch_fn(t, len).clamp(0.82, 1.24);
-        let spd = tempo_fn(t, len).clamp(0.76, 1.15);
+        let spd = (tempo_fn(t, len).clamp(0.76, 1.15) * base_speed).clamp(0.45, 2.2);
         spd / p
     });
     let mut shaped = varispeed(&stretched, sample_rate, |t, len| {
@@ -124,8 +126,14 @@ fn shape_contours(
 
 /// Shapes a full sentence's intonation, phrase-final lengthening, and breath dynamics.
 pub fn shape(x: Vec<f32>, sample_rate: usize, kind: Kind) -> Vec<f32> {
+    shape_with_speed(x, sample_rate, kind, 1.0)
+}
+
+/// Shapes a full sentence's intonation and applies overall `speed` in a single time-scale pass.
+pub fn shape_with_speed(x: Vec<f32>, sample_rate: usize, kind: Kind, speed: f64) -> Vec<f32> {
+    let base_speed = (speed * pace(kind)).clamp(0.5, 2.0);
     if x.len() < sample_rate / 3 {
-        return x;
+        return if (base_speed - 1.0).abs() >= 0.008 { crate::stretch::stretch(&x, base_speed, sample_rate) } else { x };
     }
     match kind {
         Kind::YesNoQuestion => {
@@ -134,6 +142,7 @@ pub fn shape(x: Vec<f32>, sample_rate: usize, kind: Kind) -> Vec<f32> {
             shape_contours(
                 x,
                 sample_rate,
+                base_speed,
                 |t, len| {
                     let tail = 0.55f64.min(len * 0.48);
                     let w = smooth((t - (len - tail)) / tail);
@@ -157,6 +166,7 @@ pub fn shape(x: Vec<f32>, sample_rate: usize, kind: Kind) -> Vec<f32> {
             shape_contours(
                 x,
                 sample_rate,
+                base_speed,
                 |t, len| {
                     let focus = (-((t / len.max(0.2) - 0.25) / 0.22).powi(2)).exp();
                     let tail = 0.46f64.min(len * 0.42);
@@ -179,6 +189,7 @@ pub fn shape(x: Vec<f32>, sample_rate: usize, kind: Kind) -> Vec<f32> {
             shape_contours(
                 x,
                 sample_rate,
+                base_speed,
                 |t, len| {
                     let head = 1.0 - smooth(t / 0.48f64.min(len * 0.4));
                     let tail = 0.38f64.min(len * 0.35);
@@ -201,6 +212,7 @@ pub fn shape(x: Vec<f32>, sample_rate: usize, kind: Kind) -> Vec<f32> {
             shape_contours(
                 x,
                 sample_rate,
+                base_speed,
                 |t, len| {
                     let tail = 0.60f64.min(len * 0.50);
                     let w = smooth((t - (len - tail)) / tail);
@@ -224,6 +236,7 @@ pub fn shape(x: Vec<f32>, sample_rate: usize, kind: Kind) -> Vec<f32> {
             shape_contours(
                 x,
                 sample_rate,
+                base_speed,
                 |t, len| {
                     let tail = 0.32f64.min(len * 0.35);
                     let w = smooth((t - (len - tail)) / tail);
@@ -242,6 +255,7 @@ pub fn shape(x: Vec<f32>, sample_rate: usize, kind: Kind) -> Vec<f32> {
             shape_contours(
                 x,
                 sample_rate,
+                base_speed,
                 |t, len| {
                     let tail = 0.38f64.min(len * 0.35);
                     let w = smooth((t - (len - tail)) / tail);
@@ -265,6 +279,7 @@ pub fn shape(x: Vec<f32>, sample_rate: usize, kind: Kind) -> Vec<f32> {
             shape_contours(
                 x,
                 sample_rate,
+                base_speed,
                 |t, len| {
                     let tail = 0.52f64.min(len * 0.42);
                     let w = smooth((t - (len - tail)) / tail);
@@ -293,6 +308,7 @@ pub fn shape_clause(x: Vec<f32>, sample_rate: usize) -> Vec<f32> {
     shape_contours(
         x,
         sample_rate,
+        1.0,
         |t, len| {
             let tail = 0.24f64.min(len * 0.32);
             let w = smooth((t - (len - tail)) / tail);

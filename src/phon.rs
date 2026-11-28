@@ -7,7 +7,25 @@ const KASRA: char = '\u{0650}';
 const DAMMA: char = '\u{064f}';
 const SUKUN: char = '\u{0652}';
 const SHADDA: char = '\u{0651}';
-const TANWIN: char = '\u{064b}';
+const TANWIN_FATH: char = '\u{064b}';
+const TANWIN_DAMM: char = '\u{064c}';
+const TANWIN_KASR: char = '\u{064d}';
+const MADDA: char = '\u{0653}';
+const HAMZA_ABOVE: char = '\u{0654}';
+const DAGGER_ALEF: char = '\u{0670}';
+
+fn is_mark(c: char) -> bool {
+    matches!(c, FATHA | KASRA | DAMMA | SUKUN | SHADDA | TANWIN_FATH | TANWIN_DAMM | TANWIN_KASR | MADDA | HAMZA_ABOVE | DAGGER_ALEF)
+}
+
+fn tanwin_sound(c: char) -> Option<&'static str> {
+    match c {
+        TANWIN_FATH => Some("an"),
+        TANWIN_DAMM => Some("on"),
+        TANWIN_KASR => Some("en"),
+        _ => None,
+    }
+}
 
 fn vowel_mark(c: char) -> Option<&'static str> {
     match c {
@@ -47,7 +65,7 @@ pub fn pronounce_word(word: &str) -> String {
     let word = translate_map(&translate_map(&nfkc(word), YEH_KAF), HEH);
     let mut letters: Vec<(char, String)> = Vec::new();
     for ch in word.chars() {
-        if vowel_mark(ch).is_some() || ch == SUKUN || ch == SHADDA || ch == TANWIN {
+        if is_mark(ch) {
             if let Some(l) = letters.last_mut() {
                 l.1.push(ch);
             }
@@ -60,16 +78,25 @@ pub fn pronounce_word(word: &str) -> String {
     for i in 0..n {
         let (ch, ref marks) = letters[i];
         let vowel = marks.chars().find_map(vowel_mark).unwrap_or("");
+        let tanwin = marks.chars().find_map(tanwin_sound);
         let first = i == 0;
         let last = i == n - 1;
         let prev_marks = if i > 0 { letters[i - 1].1.as_str() } else { "" };
         let prev_has_vowel = prev_marks.chars().any(|m| vowel_mark(m).is_some()) || ends_any(&out, &["A", "i", "u"]);
         let shadda = marks.contains(SHADDA);
+        let madda = marks.contains(MADDA);
+        let hamza = marks.contains(HAMZA_ABOVE);
+        let dagger = marks.contains(DAGGER_ALEF);
         match ch {
             'آ' => out.push_str("?A"),
             'ا' => {
-                if marks.contains(TANWIN) {
-                    out.push_str("an");
+                if let Some(tw) = tanwin {
+                    out.push_str(tw);
+                } else if last && prev_marks.chars().any(|m| tanwin_sound(m).is_some()) {
+                    // Silent trailing alef after tanwin on the preceding consonant (e.g. فَورًا)
+                } else if madda || dagger {
+                    if first { out.push('?'); }
+                    out.push('A');
                 } else if first {
                     out.push('?');
                     out.push_str(if vowel.is_empty() { "a" } else { vowel });
@@ -79,7 +106,10 @@ pub fn pronounce_word(word: &str) -> String {
                 }
             }
             'و' => {
-                if first || !vowel.is_empty() || shadda {
+                if hamza && !first {
+                    out.push('?');
+                    out.push_str(vowel);
+                } else if first || !vowel.is_empty() || shadda {
                     out.push_str(if shadda { "vv" } else { "v" });
                     out.push_str(vowel);
                 } else if out.ends_with('a') && (marks.contains(SUKUN) || (!last && !"اآیو".contains(letters[i + 1].0))) {
@@ -93,7 +123,12 @@ pub fn pronounce_word(word: &str) -> String {
                 }
             }
             'ی' => {
-                if first || !vowel.is_empty() || shadda {
+                if dagger {
+                    out.push('A');
+                } else if hamza && !first {
+                    out.push('?');
+                    out.push_str(vowel);
+                } else if first || !vowel.is_empty() || shadda {
                     out.push_str(if shadda { "yy" } else { "y" });
                     out.push_str(vowel);
                 } else if out.ends_with('a') && marks.contains(SUKUN) {
@@ -106,7 +141,12 @@ pub fn pronounce_word(word: &str) -> String {
                 }
             }
             'ه' => {
-                if last && marks.is_empty() && !ends_any(&out, &["A", "i", "u"]) && !out.ends_with('h') {
+                if last && hamza && !ends_any(&out, &["A", "i", "u"]) && !out.ends_with('h') {
+                    if !out.ends_with('e') {
+                        out.push('e');
+                    }
+                    out.push_str("ye");
+                } else if last && marks.is_empty() && !ends_any(&out, &["A", "i", "u"]) && !out.ends_with('h') {
                     if !out.ends_with('e') {
                         out.push('e');
                     }
@@ -121,7 +161,13 @@ pub fn pronounce_word(word: &str) -> String {
                     if shadda {
                         out.push_str(c);
                     }
-                    out.push_str(vowel);
+                    if let Some(tw) = tanwin {
+                        out.push_str(tw);
+                    } else if dagger {
+                        out.push('A');
+                    } else {
+                        out.push_str(vowel);
+                    }
                 }
             }
         }
@@ -311,7 +357,7 @@ pub fn apply_user_marks(marked_word: &str, base_ph: &str) -> String {
     let word = translate_map(&translate_map(&nfkc(marked_word), YEH_KAF), HEH);
     let mut letters: Vec<(char, String)> = Vec::new();
     for ch in word.chars() {
-        if vowel_mark(ch).is_some() || ch == SUKUN || ch == SHADDA || ch == TANWIN {
+        if is_mark(ch) {
             if let Some(l) = letters.last_mut() {
                 l.1.push(ch);
             }
@@ -342,12 +388,16 @@ pub fn apply_user_marks(marked_word: &str, base_ph: &str) -> String {
     let is_v = |c: char| matches!(c, 'a' | 'e' | 'o' | 'i' | 'u' | 'A');
     let mut out = String::new();
     let mut p = 0usize;
+    let total_letters = letters.len();
     for (idx, (ch, marks)) in letters.iter().enumerate() {
         let want_v = marks.chars().find_map(vowel_mark);
         let want_sukun = marks.contains(SUKUN);
         let want_shadda = marks.contains(SHADDA);
-        let want_tanwin = marks.contains(TANWIN);
-        // Handle initial alef ('ا') with explicit vowel mark (e.g. اَشکال -> ?aSkAl, اِشکال -> ?eSkAl)
+        let want_tanwin = marks.chars().find_map(tanwin_sound);
+        let want_madda = marks.contains(MADDA);
+        let want_dagger = marks.contains(DAGGER_ALEF);
+        let want_hamza = marks.contains(HAMZA_ABOVE);
+        // Handle initial alef ('ا') with explicit vowel/madda mark (e.g. اَشکال -> ?aSkAl, اِشکال -> ?eSkAl, آ -> ?A)
         if idx == 0 && *ch == 'ا' {
             if p < ph_chars.len() && ph_chars[p] == '?' {
                 out.push('?');
@@ -356,23 +406,43 @@ pub fn apply_user_marks(marked_word: &str, base_ph: &str) -> String {
                 out.push('?');
             }
             if p < ph_chars.len() && is_v(ph_chars[p]) {
-                if let Some(v) = want_v {
+                if want_madda || want_dagger {
+                    out.push('A');
+                } else if let Some(v) = want_v {
                     out.push_str(v);
                 } else {
                     out.push(ph_chars[p]);
                 }
                 p += 1;
+            } else if want_madda || want_dagger {
+                out.push('A');
             } else if let Some(v) = want_v {
                 out.push_str(v);
             }
             continue;
         }
-        if *ch == 'ا' && want_tanwin {
-            // Skip any existing vowel/an in base_ph and emit "an"
+        if *ch == 'ا' && want_tanwin.is_some() {
             while p < ph_chars.len() && (is_v(ph_chars[p]) || ph_chars[p] == 'n') {
                 p += 1;
             }
-            out.push_str("an");
+            out.push_str(want_tanwin.unwrap());
+            continue;
+        }
+        if *ch == 'ی' && want_dagger && idx + 1 == total_letters {
+            while p < ph_chars.len() {
+                if is_v(ph_chars[p]) || ph_chars[p] == 'y' { p += 1; } else { break; }
+            }
+            out.push('A');
+            continue;
+        }
+        if *ch == 'ه' && want_hamza && idx + 1 == total_letters {
+            while p < ph_chars.len() {
+                p += 1;
+            }
+            if !out.ends_with('e') {
+                out.push('e');
+            }
+            out.push_str("ye");
             continue;
         }
         let Some(target_c) = consonant(*ch).or(match *ch { 'ه' => Some("h"), 'و' => Some("v"), 'ی' => Some("y"), _ => None }) else {
@@ -396,12 +466,16 @@ pub fn apply_user_marks(marked_word: &str, base_ph: &str) -> String {
                 } else if want_shadda {
                     out.push(tc);
                 }
-                if want_v.is_some() || want_sukun {
+                if want_tanwin.is_some() || want_dagger || want_v.is_some() || want_sukun {
                     // Replace/remove short vowel (a/e/o) right after this consonant
                     if p < ph_chars.len() && matches!(ph_chars[p], 'a' | 'e' | 'o') {
                         p += 1;
                     }
-                    if let Some(v) = want_v {
+                    if let Some(tw) = want_tanwin {
+                        out.push_str(tw);
+                    } else if want_dagger {
+                        out.push('A');
+                    } else if let Some(v) = want_v {
                         out.push_str(v);
                     }
                 }
@@ -413,4 +487,22 @@ pub fn apply_user_marks(marked_word: &str, base_ph: &str) -> String {
         p += 1;
     }
     if out.is_empty() { pronounce_word(marked_word) } else { out }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn supports_extended_persian_harekats() {
+        assert_eq!(pronounce_word("کامِلاً"), "kAmelan");
+        assert_eq!(pronounce_word("فَورًا"), "foran");
+        assert_eq!(pronounce_word("مُضافٌ"), "mozAfon");
+        assert_eq!(pronounce_word("شَکلٍ"), "Saklen");
+        assert_eq!(pronounce_word("آب"), "?Ab");
+        assert_eq!(pronounce_word("خانه‌ٔ"), "xAneye");
+        assert_eq!(pronounce_word("موسیٰ"), "musA");
+        assert_eq!(apply_user_marks("الٰهی", "?elahi"), "?elAhi");
+        assert_eq!(apply_user_marks("فوراً", "forA"), "foran");
+    }
 }

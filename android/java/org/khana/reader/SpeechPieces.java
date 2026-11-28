@@ -36,27 +36,34 @@ final class SpeechPieces {
         return out;
     }
 
-    /** Splits long sentences (>140 chars) at natural Persian clause punctuation so synthesis stays
-     *  fast and pipelines evenly without cutting mid-phrase (which causes skipped words). */
+    /** Splits long sentences (>140 chars, or >72 chars during fast startup) at natural Persian clause punctuation
+     *  so synthesis stays fast and pipelines evenly without cutting mid-phrase (which causes skipped words). */
     static List<Piece> clauses(String text, Piece p, boolean isFirst) {
+        return clauses(text, p, isFirst, isFirst);
+    }
+
+    static List<Piece> clauses(String text, Piece p, boolean isFirst, boolean fastStart) {
         if (isFirst) {
             List<Piece> h = head(text, p);
             if (h.size() > 1) {
                 List<Piece> out = new ArrayList<>();
                 out.add(h.get(0));
-                out.addAll(clauses(text, h.get(1), false));
+                out.addAll(clauses(text, h.get(1), false, fastStart));
                 return out;
             }
         }
+        int maxLen = fastStart ? 72 : 140;
+        int minSpan = fastStart ? 30 : 48;
+        int aheadMax = fastStart ? 96 : 185;
         List<Piece> out = new ArrayList<>();
-        if (p.end - p.start <= 140) {
+        if (p.end - p.start <= maxLen) {
             out.add(p);
             return out;
         }
         int cur = p.start;
-        while (p.end - cur > 140) {
-            int limit = Math.min(p.end - 22, cur + 140);
-            int minCut = cur + 48;
+        while (p.end - cur > maxLen) {
+            int limit = Math.min(p.end - 18, cur + maxLen);
+            int minCut = Math.min(limit, cur + minSpan);
             int cut = -1;
             // Prefer the last natural clause punctuation within [minCut, limit]
             for (int i = limit; i >= minCut; i--) {
@@ -65,9 +72,9 @@ final class SpeechPieces {
                     break;
                 }
             }
-            // If no punctuation before 140, look ahead up to 185 chars before forcing a word cut
+            // If no punctuation before maxLen, look ahead slightly before forcing a word cut
             if (cut < 0) {
-                int ahead = Math.min(p.end - 18, cur + 185);
+                int ahead = Math.min(p.end - 14, cur + aheadMax);
                 for (int i = limit + 1; i <= ahead; i++) {
                     if (CLAUSE_BREAKS.indexOf(text.charAt(i)) >= 0) {
                         cut = i + 1;
@@ -90,11 +97,11 @@ final class SpeechPieces {
         return out;
     }
 
-    /** The first piece of a reading, cut early when long so spoken audio starts in ~1.2-1.8s after pressing play. */
+    /** The first piece of a reading, cut early when long so spoken audio starts in ~1-2s after pressing play. */
     static List<Piece> head(String text, Piece p) {
         List<Piece> out = new ArrayList<>();
-        if (p.end - p.start > 45) {
-            int maxFirst = Math.min(p.end - 14, p.start + 68);
+        if (p.end - p.start > 42) {
+            int maxFirst = Math.min(p.end - 14, p.start + 58);
             for (int i = p.start + 12; i <= maxFirst; i++) {
                 if (CLAUSE_BREAKS.indexOf(text.charAt(i)) < 0) continue;
                 int cut = i + 1;
@@ -105,11 +112,11 @@ final class SpeechPieces {
                     return out;
                 }
             }
-            if (p.end - p.start > 78) {
-                int cut = Math.min(p.end - 18, p.start + 54);
-                while (cut > p.start + 22 && !Character.isWhitespace(text.charAt(cut))) cut--;
+            if (p.end - p.start > 68) {
+                int cut = Math.min(p.end - 18, p.start + 46);
+                while (cut > p.start + 20 && !Character.isWhitespace(text.charAt(cut))) cut--;
                 while (cut < p.end && Character.isWhitespace(text.charAt(cut))) cut++;
-                if (cut > p.start + 22 && cut < p.end && hasAlnum(text, p.start, cut) && hasAlnum(text, cut, p.end)) {
+                if (cut > p.start + 20 && cut < p.end && hasAlnum(text, p.start, cut) && hasAlnum(text, cut, p.end)) {
                     out.add(new Piece(text, p.start, cut));
                     out.add(new Piece(text, cut, p.end));
                     return out;

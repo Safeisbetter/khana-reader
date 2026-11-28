@@ -84,7 +84,7 @@
   if (copyBtn) copyBtn.onclick = () => {
     const text = S.paras.join("\n\n");
     if (!text) return toast("متنی برای کپی نیست.");
-    api("/api/clip", { method: "POST", body: text }).then(() => toast("متن صفحه کپی شد. خوانا پس از ۹۰ ثانیه تلاش می‌کند آن را پاک کند؛ در پس‌زمینه ممکن است متن باقی بماند."),
+    api("/api/clip", { method: "POST", body: text }).then(() => toast("متن صفحه کپی شد. کتاب‌خوان پس از ۹۰ ثانیه تلاش می‌کند آن را پاک کند؛ در پس‌زمینه ممکن است متن باقی بماند."),
       () => toast("کپی نشد؛ متن را انتخاب و کپی کنید."));
   };
   // The screen guard (MainActivity.applyScreenGuard): on unless the reader switches it off here.
@@ -99,11 +99,11 @@
     box.checked = !!(S.settings && S.settings.allowScreenshots);
     box.onchange = () => setSetting("allowScreenshots", box.checked);
     const txt = document.createElement("span");
-    txt.textContent = "اجازه‌ی عکس و فیلم گرفتن از صفحه‌ی خوانا";
+    txt.textContent = "اجازه‌ی عکس و فیلم گرفتن از صفحه‌ی کتاب‌خوان";
     lab.append(box, txt);
     const tip = document.createElement("p");
     tip.className = "editnote";
-    tip.textContent = "خاموش (پیش‌فرض، امن‌تر): هیچ برنامه‌ی دیگری نمی‌تواند از صفحه‌ی خوانا عکس یا فیلم بگیرد و در فهرست برنامه‌های اخیر هم متن دیده نمی‌شود. خودتان هم نمی‌توانید اسکرین‌شات بگیرید؛ برای آن، این را روشن کنید.";
+    tip.textContent = "خاموش (پیش‌فرض، امن‌تر): هیچ برنامه‌ی دیگری نمی‌تواند از صفحه‌ی کتاب‌خوان عکس یا فیلم بگیرد و در فهرست برنامه‌های اخیر هم متن دیده نمی‌شود. خودتان هم نمی‌توانید اسکرین‌شات بگیرید؛ برای آن، این را روشن کنید.";
     f.append(lab, tip);
     forget.parentNode.insertBefore(f, forget);
     // (the settings come after this page is built: the box follows them whenever they are applied)
@@ -121,7 +121,7 @@ if (window.KHANA_NO_MIC) {
   const box = document.querySelector(".myvoice");
   if (box) {
     const say = box.querySelector(".say"); if (say) say.hidden = true;
-    const hint = box.querySelector(".hint"); if (hint) hint.textContent = "خوانا می‌تواند با صدای خود شما بخواند. یک فایل صوتی کوتاه از صدای خودتان (۱۰ تا ۳۰ ثانیه، بدون سر و صدا) انتخاب کنید.";
+    const hint = box.querySelector(".hint"); if (hint) hint.textContent = "کتاب‌خوان می‌تواند با صدای خود شما بخواند. یک فایل صوتی کوتاه از صدای خودتان (۱۰ تا ۳۰ ثانیه، بدون سر و صدا) انتخاب کنید.";
   }
 }
 
@@ -268,17 +268,18 @@ if (window.KHANA_NO_MIC) {
     const initReason = opts.reason || 'در حال آماده‌سازی صدا…';
     if (window.setReadingWait) window.setReadingWait(initReason);
     try {
-      // The sandboxed PDF renderer needs a visible page to prepare scans. OCR them once before
-      // native reading starts; no pictures or book files are written to shared storage.
+      // The sandboxed PDF renderer needs a visible page to prepare scans. Prepare only the starting
+      // page before starting playback, then prefetch remaining scanned pages gently in the background.
+      let scanQueue = [];
       if (doc.engine === 'pdfjs') {
-        const lengths = await jget(`/api/lengths?doc=${doc.id}`);
+        const lengths = await jget(`/api/lengths?doc=${doc.id}&scans=1`);
         const last = settings.autoNext === false ? first : doc.pages;
-        for (let n = first; n <= last; n++) {
-          if (reader.run !== run || !S.doc || S.doc.id !== doc.id) return;
-          if (lengths.letters[n - 1] < 0) {
-            if (window.setReadingWait) window.setReadingWait(`در حال تشخیص متن صفحه‌ی اسکن‌شده… ${fa(n)} از ${fa(last)}`);
-            await pageReq(`/api/page?doc=${doc.id}&n=${n}&tr=false`, n, doc.id);
-          }
+        if (lengths.letters[first - 1] < 0) {
+          if (window.setReadingWait) window.setReadingWait(`در حال تشخیص متن صفحه‌ی ${fa(first)}…`);
+          await pageReq(`/api/page?doc=${doc.id}&n=${first}&tr=false`, first, doc.id);
+        }
+        for (let n = first + 1; n <= last; n++) {
+          if (lengths.letters[n - 1] < 0) scanQueue.push(n);
         }
       }
       const announceTitle = false;
@@ -289,6 +290,16 @@ if (window.KHANA_NO_MIC) {
       control = control.catch(() => {}).then(() => reader.run === run ? jpost('/api/read_start', request) : null);
       await control;
       if (reader.run === run) poll(run);
+      if (scanQueue.length && reader.run === run) {
+        (async () => {
+          await new Promise(r => setTimeout(r, 2500));
+          for (const n of scanQueue) {
+            if (reader.run !== run || !reader.active || !S.doc || S.doc.id !== doc.id) return;
+            try { await pageReq(`/api/page?doc=${doc.id}&n=${n}&tr=false`, n, doc.id); } catch (_) { }
+            await new Promise(r => setTimeout(r, 80));
+          }
+        })();
+      }
     } catch (e) { if (reader.run === run) { stopReading(false); toast(e.message); } }
   };
   async function pause(paused) {
@@ -313,7 +324,7 @@ if (window.KHANA_NO_MIC) {
       // A new voice or speed: the sentence being heard finishes smoothly while the next is made in parallel in the new voice.
       const finish = !paused && pos && pos.para >= 0 && pos.page === S.page && pos.end > pos.start;
       finishing = !!finish;
-      await readFrom(pos && pos.para >= 0 ? pos.para : 0, pos && pos.para >= 0 ? (finish ? pos.end : pos.start) : 0, { reason: reason || 'در حال تعویض صدا…' });
+      await readFrom(pos && pos.para >= 0 ? pos.para : 0, pos && pos.para >= 0 ? (finish ? pos.end : pos.start) : 0, { reason: reason || 'در حال تنظیم سرعت…' });
       if (paused && reader.active) await pause(true);
     };
     if (immediate) runRestart();

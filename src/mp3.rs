@@ -5,7 +5,7 @@ pub struct Mp3(Encoder);
 
 impl Mp3 {
     pub fn new(rate: u32, bitrate_kbps: u32) -> Result<Mp3, String> {
-        Encoder::new(rate, bitrate_kbps, 2).map(Mp3)
+        Encoder::new(rate, bitrate_kbps, 5).map(Mp3)
     }
 
     pub fn encode(&mut self, pcm: &[i16]) -> Vec<u8> {

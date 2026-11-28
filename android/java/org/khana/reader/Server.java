@@ -167,16 +167,33 @@ final class Server {
                 if ("POST".equals(method) && "/api/read_stop".equals(path)) {
                     ReadService.stop(ctx); return json(200, "{\"ok\":true}");
                 }
-                if (isLocked()) { ReadService.stop(ctx); return json(423, "{\"locked\":true}"); }
+                if (isLocked()) { ReadService.stop(ctx); AudioFileService.stop(ctx); return json(423, "{\"locked\":true}"); }
                 if ("GET".equals(method) && "/api/read_status".equals(path)) return json(200, ReadService.status());
                 if (!"POST".equals(method) || body == null || body.length > 4096) return json(400, "{}");
                 try {
                     org.json.JSONObject j = new org.json.JSONObject(Native.text(body));
-                    if ("/api/read_start".equals(path)) ReadService.start(ctx, j);
+                    if ("/api/read_start".equals(path)) { AudioFileService.stop(ctx); ReadService.start(ctx, j); }
                     else if ("/api/read_pause".equals(path)) ReadService.pause(j.optBoolean("paused", true));
                     else return json(404, "{}");
                     return json(200, "{\"ok\":true}");
                 } catch (Exception e) { return json(400, "{\"error\":\"خواندن شروع نشد. دوباره تلاش کنید.\"}"); }
+            }
+            if (path.startsWith("/api/lib_play_")) {
+                if (!tokenOk(tok)) return json(403, "{}");
+                if ("POST".equals(method) && "/api/lib_play_stop".equals(path)) {
+                    AudioFileService.stop(ctx); return json(200, "{\"ok\":true}");
+                }
+                if (isLocked()) { ReadService.stop(ctx); AudioFileService.stop(ctx); return json(423, "{\"locked\":true}"); }
+                if ("GET".equals(method) && "/api/lib_play_status".equals(path)) return json(200, AudioFileService.status());
+                if (!"POST".equals(method) || body == null || body.length > 2048) return json(400, "{}");
+                try {
+                    org.json.JSONObject j = new org.json.JSONObject(Native.text(body));
+                    if ("/api/lib_play_start".equals(path)) AudioFileService.start(ctx, j.optString("name", ""));
+                    else if ("/api/lib_play_pause".equals(path)) AudioFileService.pause(j.optBoolean("paused", true));
+                    else if ("/api/lib_play_seek".equals(path)) AudioFileService.seek(j.optInt("positionMs", 0));
+                    else return json(404, "{}");
+                    return json(200, "{\"ok\":true}");
+                } catch (Exception e) { return json(400, "{\"error\":\"پخش فایل شروع نشد.\"}"); }
             }
             // a voice sample other than WAV is decoded by Android first (the Mac uses afconvert); only for the page itself
             if ("POST".equals(method) && "/api/myvoice".equals(path) && body != null) {
@@ -229,6 +246,8 @@ final class Server {
                 return json(200, "{\"ok\":true}");
             }
             if ("POST".equals(method) && tokenOk(tok) && ("/api/open".equals(path) || "/api/open_layout".equals(path) || "/api/open_pages".equals(path) || "/api/close".equals(path) || "/api/lock_now".equals(path) || "/api/forget".equals(path) || "/api/lock_erase".equals(path))) ReadService.stop(ctx);
+            if ("POST".equals(method) && tokenOk(tok) && ("/api/lock_now".equals(path) || "/api/forget".equals(path) || "/api/lock_erase".equals(path))) AudioFileService.stop(ctx);
+            if ("POST".equals(method) && tokenOk(tok) && "/api/library_delete".equals(path)) AudioFileService.stopIfPlaying(ctx, u.getQueryParameter("name"));
             if ("POST".equals(method) && tokenOk(tok) && ("/api/close".equals(path) || "/api/lock_now".equals(path) || "/api/forget".equals(path) || "/api/lock_erase".equals(path))) clearClipboard(ctx);
             Native.Reply r = new Native.Reply(Native.handle(Native.utf8(method), Native.utf8(path), Native.utf8(query), Native.utf8(tok), body));
             if (body != null) Arrays.fill(body, (byte) 0); // (the document's bytes: the core has its own copy now)
@@ -246,7 +265,10 @@ final class Server {
             if (r.status == 200 && "POST".equals(method) && ("/api/mp3".equals(path) || "/api/pdf".equals(path))) {
                 JobService.start(ctx);
             }
-            if (path.startsWith("/api/") && r.status != 423 && !isLocked()) Exporter.drain(ctx);
+            if (path.startsWith("/api/") && r.status != 423) {
+                boolean runningJobPoll = "/api/job".equals(path) && Native.text(r.body).contains("\"status\":\"running\"");
+                if (!runningJobPoll) Exporter.drain(ctx);
+            }
             return response(r, isApp);
         } finally {
             if (body != null) Arrays.fill(body, (byte) 0);
